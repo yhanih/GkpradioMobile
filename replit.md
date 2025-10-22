@@ -37,7 +37,8 @@ This is a mobile-responsive web application for GKP Radio (Kingdom Principles Ra
 ## Recent Changes (Oct 22, 2025)
 - ✅ Set up project for Replit environment
 - ✅ Configured Vite to run on port 5000 with host 0.0.0.0
-- ✅ Created TypeScript configuration files
+- ✅ **CRITICAL FIX**: Added `allowedHosts: true` to Vite config for Replit proxy compatibility
+- ✅ Created TypeScript configuration files (tsconfig.json, tsconfig.node.json)
 - ✅ Set up Tailwind CSS v3 with proper configuration
 - ✅ Added PostCSS configuration
 - ✅ Created .gitignore for Node.js projects
@@ -62,6 +63,7 @@ This is a mobile-responsive web application for GKP Radio (Kingdom Principles Ra
 ## Configuration Notes
 - **Port**: 5000 (required for Replit)
 - **Host**: 0.0.0.0 (allows Replit proxy access)
+- **Allowed Hosts**: Set to `true` in vite.config.ts (critical for Replit proxy compatibility)
 - **Deployment**: Autoscale mode with Vite preview server
 - **Build Output**: `build/` directory
 
