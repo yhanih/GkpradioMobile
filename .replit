@@ -1,38 +1,21 @@
-modules = ["nodejs-20", "web"]
+modules = ["nodejs-20"]
 [agent]
 expertMode = true
 
 [nix]
 channel = "stable-25_05"
-packages = ["nix-output-monitor"]
 
 [workflows]
 runButton = "Project"
 
 [[workflows.workflow]]
 name = "Project"
-mode = "parallel"
+mode = "sequential"
 author = "agent"
-
-[[workflows.workflow.tasks]]
-task = "workflow.run"
-args = "Server"
 
 [[workflows.workflow.tasks]]
 task = "workflow.run"
 args = "Expo Dev Server"
-
-[[workflows.workflow]]
-name = "Server"
-author = "agent"
-
-[[workflows.workflow.tasks]]
-task = "shell.exec"
-args = "npm run dev"
-waitForPort = 5000
-
-[workflows.workflow.metadata]
-outputType = "webview"
 
 [[workflows.workflow]]
 name = "Expo Dev Server"
@@ -40,24 +23,22 @@ author = "agent"
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
-args = "cd mobile && npx expo start"
+args = "npx expo start"
 
 [workflows.workflow.metadata]
 outputType = "console"
-
-[[ports]]
-localPort = 5000
-externalPort = 80
 
 [[ports]]
 localPort = 8081
 externalPort = 8081
 
 [[ports]]
-localPort = 8082
-externalPort = 3000
+localPort = 19000
+externalPort = 19000
+
+[[ports]]
+localPort = 19001
+externalPort = 19001
 
 [deployment]
-deploymentTarget = "autoscale"
-run = ["npx", "vite", "preview", "--host", "0.0.0.0", "--port", "5000"]
-build = ["npm", "run", "build"]
+ignorePorts = false
