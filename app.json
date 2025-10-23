@@ -1,0 +1,51 @@
+{
+  "expo": {
+    "name": "GKP Radio",
+    "slug": "gkp-radio",
+    "version": "1.0.0",
+    "description": "God Kingdom Principles Radio - Broadcasting Truth, Building Community, Transforming Lives",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "owner": "gkp-radio",
+    "scheme": "gkpradio",
+    "primaryColor": "#047857",
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#ffffff"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.gkpradio.mobile",
+      "buildNumber": "1.0.0",
+      "infoPlist": {
+        "NSCameraUsageDescription": "GKP Radio needs access to your camera to share moments from our community.",
+        "NSMicrophoneUsageDescription": "GKP Radio needs access to your microphone for audio features.",
+        "NSPhotoLibraryUsageDescription": "GKP Radio needs access to your photo library to share images."
+      }
+    },
+    "android": {
+      "package": "com.gkpradio.mobile",
+      "versionCode": 1,
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#047857"
+      },
+      "edgeToEdgeEnabled": true,
+      "predictiveBackGestureEnabled": false,
+      "permissions": [
+        "INTERNET",
+        "ACCESS_NETWORK_STATE",
+        "CAMERA",
+        "RECORD_AUDIO",
+        "READ_EXTERNAL_STORAGE",
+        "WRITE_EXTERNAL_STORAGE"
+      ]
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    }
+  }
+}
