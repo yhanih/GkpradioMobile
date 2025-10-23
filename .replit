@@ -39,7 +39,7 @@ author = "agent"
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
-args = "cd mobile && npm start"
+args = "cd mobile && npx expo start"
 
 [workflows.workflow.metadata]
 outputType = "console"
