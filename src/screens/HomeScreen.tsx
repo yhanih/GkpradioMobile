@@ -13,9 +13,9 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 export function HomeScreen() {
   const stats = [
-    { label: 'Members', value: '2.5K', icon: 'people', color: ['#3b82f6', '#2563eb'] },
-    { label: 'Messages', value: '8.2K', icon: 'chatbubbles', color: ['#a855f7', '#9333ea'] },
-    { label: 'Prayers', value: '45K', icon: 'heart', color: ['#047857', '#059669'] },
+    { label: 'Members', value: '2.5K', icon: 'people', color: ['#3b82f6', '#2563eb'] as const },
+    { label: 'Messages', value: '8.2K', icon: 'chatbubbles', color: ['#a855f7', '#9333ea'] as const },
+    { label: 'Prayers', value: '45K', icon: 'heart', color: ['#047857', '#059669'] as const },
   ];
 
   const featuredContent = [
