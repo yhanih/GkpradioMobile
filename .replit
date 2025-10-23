@@ -17,6 +17,10 @@ author = "agent"
 task = "workflow.run"
 args = "Server"
 
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "Expo Dev Server"
+
 [[workflows.workflow]]
 name = "Server"
 author = "agent"
@@ -29,13 +33,24 @@ waitForPort = 5000
 [workflows.workflow.metadata]
 outputType = "webview"
 
+[[workflows.workflow]]
+name = "Expo Dev Server"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "cd mobile && npm start"
+
+[workflows.workflow.metadata]
+outputType = "console"
+
 [[ports]]
 localPort = 5000
 externalPort = 80
 
 [[ports]]
-localPort = 37515
-externalPort = 3000
+localPort = 8081
+externalPort = 8081
 
 [deployment]
 deploymentTarget = "autoscale"
