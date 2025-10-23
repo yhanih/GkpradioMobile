@@ -1,17 +1,22 @@
-import React from 'react';
-import { View, Text, ScrollView, StyleSheet, Pressable } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, ScrollView, StyleSheet, Pressable, ActivityIndicator, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
+import { fetchNowPlaying, NowPlayingData } from '../lib/azuracast';
 
 export function LiveScreen() {
+  const [nowPlaying, setNowPlaying] = useState<NowPlayingData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+
   const schedule = [
     {
       day: 'Mon–Fri',
       show: 'My Spouse, My Heart',
       hosts: 'Jeff & Suzie Spencer',
       time: '8:00 PM – 9:00 PM',
-      isLive: true,
+      isLive: false,
     },
     {
       day: 'Saturday',
@@ -29,9 +34,55 @@ export function LiveScreen() {
     },
   ];
 
+  useEffect(() => {
+    loadNowPlaying();
+    
+    const interval = setInterval(loadNowPlaying, 15000);
+    
+    return () => clearInterval(interval);
+  }, []);
+
+  const loadNowPlaying = async () => {
+    try {
+      const data = await fetchNowPlaying(1);
+      setNowPlaying(data);
+    } catch (error) {
+      console.error('Error loading now playing:', error);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  };
+
+  const onRefresh = () => {
+    setRefreshing(true);
+    loadNowPlaying();
+  };
+
+  const currentShow = nowPlaying?.now_playing?.playlist || nowPlaying?.station?.name || 'Live Radio';
+  const currentSong = nowPlaying?.now_playing?.song;
+  const listenerCount = nowPlaying?.listeners?.current || 0;
+
+  if (loading) {
+    return (
+      <SafeAreaView style={styles.container} edges={['top']}>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#047857" />
+          <Text style={styles.loadingText}>Loading live stream data...</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
+      <ScrollView 
+        style={styles.scrollView} 
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#047857" />
+        }
+      >
         {/* Live Now Banner */}
         <LinearGradient
           colors={['#ef4444', '#dc2626']}
@@ -44,8 +95,12 @@ export function LiveScreen() {
               <View style={styles.liveIndicator} />
               <Text style={styles.liveText}>LIVE NOW</Text>
             </View>
-            <Text style={styles.currentShow}>My Spouse, My Heart</Text>
-            <Text style={styles.currentHosts}>with Jeff & Suzie Spencer</Text>
+            <Text style={styles.currentShow}>
+              {currentSong?.title || currentShow}
+            </Text>
+            <Text style={styles.currentHosts}>
+              {currentSong?.artist || nowPlaying?.station?.description || 'Broadcasting 24/7'}
+            </Text>
             
             <Pressable style={styles.listenButton}>
               <Ionicons name="play" size={20} color="#ef4444" />
@@ -58,7 +113,7 @@ export function LiveScreen() {
         <View style={styles.stats}>
           <View style={styles.statCard}>
             <Ionicons name="people" size={24} color="#047857" />
-            <Text style={styles.statValue}>289</Text>
+            <Text style={styles.statValue}>{listenerCount}</Text>
             <Text style={styles.statLabel}>Listening Now</Text>
           </View>
           <View style={styles.statCard}>
@@ -122,6 +177,17 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#fff',
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  loadingText: {
+    marginTop: 16,
+    fontSize: 14,
+    color: '#71717a',
   },
   scrollView: {
     flex: 1,

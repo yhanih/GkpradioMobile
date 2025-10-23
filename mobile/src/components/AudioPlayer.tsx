@@ -1,20 +1,17 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, Pressable, StyleSheet, Alert } from 'react-native';
+import React, { useState, useEffect, useRef } from 'react';
+import { View, Text, Pressable, StyleSheet, Alert, Image } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Audio } from 'expo-av';
-import Constants from 'expo-constants';
-
-// Get stream URL from environment variables
-const STREAM_URL = Constants.expoConfig?.extra?.streamUrl || 
-                   process.env.EXPO_PUBLIC_STREAM_URL || 
-                   'https://stream.zeno.fm/your-stream-id-here'; // Fallback placeholder
+import { fetchNowPlaying, NowPlayingData } from '../lib/azuracast';
 
 export function AudioPlayer() {
-  const [sound, setSound] = useState<Audio.Sound | null>(null);
+  const soundRef = useRef<Audio.Sound | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [isLiked, setIsLiked] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [nowPlaying, setNowPlaying] = useState<NowPlayingData | null>(null);
+  const [streamUrl, setStreamUrl] = useState<string>('');
 
   useEffect(() => {
     // Configure audio mode for playback
@@ -31,33 +28,55 @@ export function AudioPlayer() {
     };
 
     configureAudio();
+    fetchNowPlayingData();
+
+    // Poll for now-playing data every 10 seconds
+    const interval = setInterval(fetchNowPlayingData, 10000);
 
     // Cleanup on unmount
     return () => {
-      if (sound) {
-        sound.unloadAsync();
+      clearInterval(interval);
+      if (soundRef.current) {
+        soundRef.current.unloadAsync().catch(console.error);
       }
     };
   }, []);
 
+  const fetchNowPlayingData = async () => {
+    try {
+      const data = await fetchNowPlaying(1);
+      setNowPlaying(data);
+      if (data.station && data.station.listen_url) {
+        setStreamUrl(data.station.listen_url);
+      }
+    } catch (error) {
+      console.error('Error fetching now playing:', error);
+    }
+  };
+
   const loadAndPlaySound = async () => {
     try {
+      if (!streamUrl) {
+        Alert.alert('Error', 'Stream URL not available. Please try again in a moment.');
+        return;
+      }
+
       setIsLoading(true);
 
       // Unload previous sound if exists
-      if (sound) {
-        await sound.unloadAsync();
-        setSound(null);
+      if (soundRef.current) {
+        await soundRef.current.unloadAsync();
+        soundRef.current = null;
       }
 
       // Load new sound
       const { sound: newSound } = await Audio.Sound.createAsync(
-        { uri: STREAM_URL },
+        { uri: streamUrl },
         { shouldPlay: true },
         onPlaybackStatusUpdate
       );
 
-      setSound(newSound);
+      soundRef.current = newSound;
       setIsPlaying(true);
     } catch (error) {
       console.error('Error loading sound:', error);
@@ -84,14 +103,14 @@ export function AudioPlayer() {
 
   const handlePlayPause = async () => {
     try {
-      if (!sound) {
+      if (!soundRef.current) {
         // Load and play for the first time
         await loadAndPlaySound();
       } else {
         if (isPlaying) {
-          await sound.pauseAsync();
+          await soundRef.current.pauseAsync();
         } else {
-          await sound.playAsync();
+          await soundRef.current.playAsync();
         }
       }
     } catch (error) {
@@ -102,9 +121,9 @@ export function AudioPlayer() {
 
   const handleSkipBack = async () => {
     // For live streams, this would typically restart the stream
-    if (sound) {
+    if (soundRef.current) {
       try {
-        await sound.setPositionAsync(0);
+        await soundRef.current.setPositionAsync(0);
       } catch (error) {
         console.log('Skip back not available for live stream');
       }
@@ -116,34 +135,45 @@ export function AudioPlayer() {
     console.log('Skip forward not available for live stream');
   };
 
+  const currentSong = nowPlaying?.now_playing?.song;
+  const hasAlbumArt = currentSong?.art && currentSong.art !== '';
+
   return (
     <View style={styles.container}>
       <View style={styles.content}>
         <View style={styles.trackInfo}>
           {/* Album Art */}
-          <LinearGradient
-            colors={['rgba(4, 120, 87, 0.2)', 'rgba(5, 150, 105, 0.2)']}
-            style={styles.albumArtContainer}
-          >
+          {hasAlbumArt ? (
+            <Image 
+              source={{ uri: currentSong.art }} 
+              style={styles.albumArtImage}
+              defaultSource={require('../../assets/icon.png')}
+            />
+          ) : (
             <LinearGradient
-              colors={['#047857', '#059669']}
-              style={styles.albumArt}
+              colors={['rgba(4, 120, 87, 0.2)', 'rgba(5, 150, 105, 0.2)']}
+              style={styles.albumArtContainer}
             >
-              <Ionicons 
-                name={isPlaying ? 'radio' : 'radio-outline'} 
-                size={20} 
-                color="#fff" 
-              />
+              <LinearGradient
+                colors={['#047857', '#059669']}
+                style={styles.albumArt}
+              >
+                <Ionicons 
+                  name={isPlaying ? 'radio' : 'radio-outline'} 
+                  size={20} 
+                  color="#fff" 
+                />
+              </LinearGradient>
             </LinearGradient>
-          </LinearGradient>
+          )}
 
           {/* Track Details */}
           <View style={styles.details}>
             <Text style={styles.trackTitle} numberOfLines={1}>
-              {isPlaying ? 'Live Radio Stream' : 'Kingdom Principles Radio'}
+              {currentSong?.title || (isPlaying ? 'Live Radio Stream' : nowPlaying?.station?.name || 'Kingdom Principles Radio')}
             </Text>
             <Text style={styles.trackArtist} numberOfLines={1}>
-              {isPlaying ? 'Broadcasting Live' : 'Tap to listen'}
+              {currentSong?.artist || (isPlaying ? 'Broadcasting Live' : 'Tap to listen')}
             </Text>
           </View>
         </View>
@@ -237,6 +267,11 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  albumArtImage: {
+    width: 48,
+    height: 48,
+    borderRadius: 8,
   },
   details: {
     flex: 1,
