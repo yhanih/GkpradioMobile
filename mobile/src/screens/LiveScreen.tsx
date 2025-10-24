@@ -159,7 +159,7 @@ export function LiveScreen() {
             Stream on your favorite platform
           </Text>
           <View style={styles.platformsGrid}>
-            {['logo-spotify', 'logo-apple', 'logo-soundcloud', 'logo-youtube'].map((platform, index) => (
+            {['musical-notes', 'logo-apple', 'cloud', 'logo-youtube'].map((platform, index) => (
               <Pressable key={index} style={styles.platformCard}>
                 <Ionicons name={platform as any} size={32} color="#047857" />
               </Pressable>
