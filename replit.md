@@ -56,6 +56,8 @@ Native iOS and Android application for GKP Radio (God Kingdom Principles Radio).
 3. Scan the QR code shown in the console
 4. App loads immediately for real-time testing
 
+**For detailed setup instructions from scratch**, see `EXPO_SETUP_GUIDE.md`
+
 ## Environment Configuration
 
 Required environment variables (set in Replit Secrets):
@@ -145,6 +147,13 @@ mobile/
 - 📋 Add content filtering and categories
 
 ## Recent Changes
+
+### Jan 24, 2025 - Documentation & Setup Guides
+- ✅ Created comprehensive design handoff package (4,844 lines)
+- ✅ Added complete Expo setup guide for Replit environment
+- ✅ Documented all design specs for mobile-to-web consistency
+- ✅ Included all screen components and patterns for web team
+- ✅ Created color reference, design guide, and implementation roadmap
 
 ### Jan 24, 2025 - Supabase Database Integration
 - ✅ Created comprehensive database schema with RLS policies
