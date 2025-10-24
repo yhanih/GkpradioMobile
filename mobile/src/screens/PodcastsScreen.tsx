@@ -184,11 +184,16 @@ const styles = StyleSheet.create({
   podcastCard: {
     flexDirection: 'row',
     backgroundColor: '#fff',
-    borderRadius: 12,
+    borderRadius: 16,
     marginBottom: 16,
     overflow: 'hidden',
     borderWidth: 1,
-    borderColor: '#e4e4e7',
+    borderColor: 'rgba(228, 228, 231, 0.5)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.06,
+    shadowRadius: 10,
+    elevation: 3,
   },
   podcastImage: {
     width: 120,

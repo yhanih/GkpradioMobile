@@ -206,11 +206,16 @@ const styles = StyleSheet.create({
   },
   videoCard: {
     backgroundColor: '#fff',
-    borderRadius: 12,
+    borderRadius: 16,
     marginBottom: 20,
     overflow: 'hidden',
     borderWidth: 1,
-    borderColor: '#e4e4e7',
+    borderColor: 'rgba(228, 228, 231, 0.5)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    elevation: 4,
   },
   thumbnailContainer: {
     position: 'relative',
