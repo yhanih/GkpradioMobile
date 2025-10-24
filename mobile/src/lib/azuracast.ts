@@ -57,7 +57,11 @@ export const fetchNowPlaying = async (stationId: number | string = 1): Promise<N
     const response = await azuracastAPI.get(`/api/nowplaying/${stationId}`);
     return response.data;
   } catch (error) {
-    console.error('Error fetching now playing:', error);
+    console.error('Error fetching now playing data:', error);
+    if (axios.isAxiosError(error)) {
+      const message = error.response?.data?.message || error.message;
+      throw new Error(`Failed to fetch now playing data: ${message}`);
+    }
     throw error;
   }
 };
@@ -68,6 +72,10 @@ export const fetchStations = async () => {
     return response.data;
   } catch (error) {
     console.error('Error fetching stations:', error);
+    if (axios.isAxiosError(error)) {
+      const message = error.response?.data?.message || error.message;
+      throw new Error(`Failed to fetch stations: ${message}`);
+    }
     throw error;
   }
 };

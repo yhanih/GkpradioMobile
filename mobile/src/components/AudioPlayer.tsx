@@ -82,11 +82,9 @@ export function AudioPlayer() {
   const onPlaybackStatusUpdate = (status: AVPlaybackStatus) => {
     if (status.isLoaded) {
       setIsPlaying(status.isPlaying);
-      
-      if (status.error) {
-        console.error('Playback error:', status.error);
-        Alert.alert('Playback Error', 'An error occurred during playback.');
-      }
+    } else if ('error' in status && status.error) {
+      console.error('Playback error:', status.error);
+      Alert.alert('Playback Error', 'An error occurred during playback.');
     }
   };
 
