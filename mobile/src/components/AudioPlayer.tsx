@@ -2,11 +2,11 @@ import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, Pressable, StyleSheet, Alert, Image } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Audio } from 'expo-av';
+import { useAudioPlayer, AudioSource } from 'expo-audio';
 import { fetchNowPlaying, NowPlayingData } from '../lib/azuracast';
 
 export function AudioPlayer() {
-  const soundRef = useRef<Audio.Sound | null>(null);
+  const player = useAudioPlayer({ uri: '' } as AudioSource);
   const [isPlaying, setIsPlaying] = useState(false);
   const [isLiked, setIsLiked] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -14,20 +14,6 @@ export function AudioPlayer() {
   const [streamUrl, setStreamUrl] = useState<string>('');
 
   useEffect(() => {
-    // Configure audio mode for playback
-    const configureAudio = async () => {
-      try {
-        await Audio.setAudioModeAsync({
-          playsInSilentModeIOS: true,
-          staysActiveInBackground: true,
-          shouldDuckAndroid: true,
-        });
-      } catch (error) {
-        console.error('Error configuring audio:', error);
-      }
-    };
-
-    configureAudio();
     fetchNowPlayingData();
 
     // Poll for now-playing data every 10 seconds
@@ -36,9 +22,6 @@ export function AudioPlayer() {
     // Cleanup on unmount
     return () => {
       clearInterval(interval);
-      if (soundRef.current) {
-        soundRef.current.unloadAsync().catch(console.error);
-      }
     };
   }, []);
 
@@ -62,21 +45,8 @@ export function AudioPlayer() {
       }
 
       setIsLoading(true);
-
-      // Unload previous sound if exists
-      if (soundRef.current) {
-        await soundRef.current.unloadAsync();
-        soundRef.current = null;
-      }
-
-      // Load new sound
-      const { sound: newSound } = await Audio.Sound.createAsync(
-        { uri: streamUrl },
-        { shouldPlay: true },
-        onPlaybackStatusUpdate
-      );
-
-      soundRef.current = newSound;
+      player.replace({ uri: streamUrl });
+      player.play();
       setIsPlaying(true);
     } catch (error) {
       console.error('Error loading sound:', error);
@@ -90,27 +60,18 @@ export function AudioPlayer() {
     }
   };
 
-  const onPlaybackStatusUpdate = (status: any) => {
-    if (!status.isLoaded) {
-      if (status.error) {
-        console.error('Playback error:', status.error);
-        setIsPlaying(false);
-      }
-    } else {
-      setIsPlaying(status.isPlaying);
-    }
-  };
-
   const handlePlayPause = async () => {
     try {
-      if (!soundRef.current) {
+      if (!player.playing && !isPlaying) {
         // Load and play for the first time
         await loadAndPlaySound();
       } else {
         if (isPlaying) {
-          await soundRef.current.pauseAsync();
+          player.pause();
+          setIsPlaying(false);
         } else {
-          await soundRef.current.playAsync();
+          player.play();
+          setIsPlaying(true);
         }
       }
     } catch (error) {
@@ -120,14 +81,8 @@ export function AudioPlayer() {
   };
 
   const handleSkipBack = async () => {
-    // For live streams, this would typically restart the stream
-    if (soundRef.current) {
-      try {
-        await soundRef.current.setPositionAsync(0);
-      } catch (error) {
-        console.log('Skip back not available for live stream');
-      }
-    }
+    // For live streams, skip back doesn't apply
+    console.log('Skip back not available for live stream');
   };
 
   const handleSkipForward = async () => {
