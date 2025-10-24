@@ -2,11 +2,11 @@ import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, Pressable, StyleSheet, Alert, Image } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useAudioPlayer, AudioSource } from 'expo-audio';
+import { Audio, AVPlaybackStatus } from 'expo-av';
 import { fetchNowPlaying, NowPlayingData } from '../lib/azuracast';
 
 export function AudioPlayer() {
-  const player = useAudioPlayer({ uri: '' } as AudioSource);
+  const soundRef = useRef<Audio.Sound | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [isLiked, setIsLiked] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -22,6 +22,9 @@ export function AudioPlayer() {
     // Cleanup on unmount
     return () => {
       clearInterval(interval);
+      if (soundRef.current) {
+        soundRef.current.unloadAsync();
+      }
     };
   }, []);
 
@@ -45,8 +48,24 @@ export function AudioPlayer() {
       }
 
       setIsLoading(true);
-      player.replace({ uri: streamUrl });
-      player.play();
+      
+      await Audio.setAudioModeAsync({
+        playsInSilentModeIOS: true,
+        staysActiveInBackground: true,
+        shouldDuckAndroid: true,
+      });
+
+      if (soundRef.current) {
+        await soundRef.current.unloadAsync();
+      }
+
+      const { sound } = await Audio.Sound.createAsync(
+        { uri: streamUrl },
+        { shouldPlay: true },
+        onPlaybackStatusUpdate
+      );
+
+      soundRef.current = sound;
       setIsPlaying(true);
     } catch (error) {
       console.error('Error loading sound:', error);
@@ -60,18 +79,34 @@ export function AudioPlayer() {
     }
   };
 
+  const onPlaybackStatusUpdate = (status: AVPlaybackStatus) => {
+    if (status.isLoaded) {
+      setIsPlaying(status.isPlaying);
+      
+      if (status.error) {
+        console.error('Playback error:', status.error);
+        Alert.alert('Playback Error', 'An error occurred during playback.');
+      }
+    }
+  };
+
   const handlePlayPause = async () => {
     try {
-      if (!player.playing && !isPlaying) {
-        // Load and play for the first time
+      if (!soundRef.current) {
         await loadAndPlaySound();
       } else {
-        if (isPlaying) {
-          player.pause();
-          setIsPlaying(false);
+        const status = await soundRef.current.getStatusAsync();
+        
+        if (status.isLoaded) {
+          if (status.isPlaying) {
+            await soundRef.current.pauseAsync();
+            setIsPlaying(false);
+          } else {
+            await soundRef.current.playAsync();
+            setIsPlaying(true);
+          }
         } else {
-          player.play();
-          setIsPlaying(true);
+          await loadAndPlaySound();
         }
       }
     } catch (error) {
@@ -81,12 +116,10 @@ export function AudioPlayer() {
   };
 
   const handleSkipBack = async () => {
-    // For live streams, skip back doesn't apply
     console.log('Skip back not available for live stream');
   };
 
   const handleSkipForward = async () => {
-    // For live streams, skip forward doesn't apply
     console.log('Skip forward not available for live stream');
   };
 
@@ -97,7 +130,6 @@ export function AudioPlayer() {
     <View style={styles.container}>
       <View style={styles.content}>
         <View style={styles.trackInfo}>
-          {/* Album Art */}
           {hasAlbumArt ? (
             <Image 
               source={{ uri: currentSong.art }} 
@@ -122,7 +154,6 @@ export function AudioPlayer() {
             </LinearGradient>
           )}
 
-          {/* Track Details */}
           <View style={styles.details}>
             <Text style={styles.trackTitle} numberOfLines={1}>
               {currentSong?.title || (isPlaying ? 'Live Radio Stream' : nowPlaying?.station?.name || 'Kingdom Principles Radio')}
@@ -133,7 +164,6 @@ export function AudioPlayer() {
           </View>
         </View>
 
-        {/* Controls */}
         <View style={styles.controls}>
           <Pressable
             style={styles.controlButton}
