@@ -15,6 +15,7 @@ export function CommunityScreen() {
   const [testimonies, setTestimonies] = useState<Testimony[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [stats, setStats] = useState({ prayers: 0, testimonies: 0, users: 0 });
 
   useEffect(() => {
@@ -29,6 +30,9 @@ export function CommunityScreen() {
         supabase.from('testimonies').select('id', { count: 'exact', head: true }),
       ]);
 
+      if (prayersCount.error) throw prayersCount.error;
+      if (testimoniesCount.error) throw testimoniesCount.error;
+
       setStats({
         prayers: prayersCount.count || 0,
         testimonies: testimoniesCount.count || 0,
@@ -36,12 +40,14 @@ export function CommunityScreen() {
       });
     } catch (error) {
       console.error('Error fetching stats:', error);
+      setError('Unable to load statistics. Please try again.');
     }
   };
 
   const fetchData = async () => {
     try {
       setLoading(true);
+      setError(null);
 
       const [prayersData, testimoniesData] = await Promise.all([
         supabase
@@ -57,10 +63,14 @@ export function CommunityScreen() {
           .limit(20),
       ]);
 
+      if (prayersData.error) throw prayersData.error;
+      if (testimoniesData.error) throw testimoniesData.error;
+
       if (prayersData.data) setPrayers(prayersData.data);
       if (testimoniesData.data) setTestimonies(testimoniesData.data);
-    } catch (error) {
-      console.error('Error fetching community data:', error);
+    } catch (err) {
+      console.error('Error fetching community data:', err);
+      setError('Unable to load community content. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -188,7 +198,15 @@ export function CommunityScreen() {
         </View>
 
         <View style={styles.content}>
-          {loading ? (
+          {error ? (
+            <View style={styles.errorContainer}>
+              <Ionicons name="alert-circle-outline" size={48} color="#ef4444" />
+              <Text style={styles.errorText}>{error}</Text>
+              <Pressable style={styles.retryButton} onPress={() => { fetchData(); fetchStats(); }}>
+                <Text style={styles.retryButtonText}>Retry</Text>
+              </Pressable>
+            </View>
+          ) : loading ? (
             <View style={styles.loadingContainer}>
               <ActivityIndicator size="large" color="#047857" />
               <Text style={styles.loadingText}>Loading...</Text>
@@ -406,5 +424,28 @@ const styles = StyleSheet.create({
     color: '#71717a',
     textAlign: 'center',
     paddingHorizontal: 40,
+  },
+  errorContainer: {
+    paddingVertical: 60,
+    alignItems: 'center',
+  },
+  errorText: {
+    fontSize: 14,
+    color: '#ef4444',
+    marginTop: 16,
+    marginBottom: 20,
+    textAlign: 'center',
+    paddingHorizontal: 40,
+  },
+  retryButton: {
+    backgroundColor: '#047857',
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 8,
+  },
+  retryButtonText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '600',
   },
 });

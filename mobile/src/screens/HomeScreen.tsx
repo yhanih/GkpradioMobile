@@ -22,6 +22,7 @@ export function HomeScreen() {
   const [featuredContent, setFeaturedContent] = useState<(Podcast | Video | Testimony)[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     fetchData();
@@ -30,24 +31,41 @@ export function HomeScreen() {
   const fetchData = async () => {
     try {
       setLoading(true);
+      setError(null);
 
-      const [prayersCount, testimoniesCount, podcasts, videos] = await Promise.all([
+      const [prayersCount, testimoniesCount, podcastsCount, videosCount, featuredPodcasts, featuredVideos, featuredTestimonies] = await Promise.all([
         supabase.from('prayer_requests').select('id', { count: 'exact', head: true }),
         supabase.from('testimonies').select('id', { count: 'exact', head: true }),
+        supabase.from('podcasts').select('id', { count: 'exact', head: true }),
+        supabase.from('videos').select('id', { count: 'exact', head: true }),
         supabase.from('podcasts').select('*').eq('is_featured', true).limit(2),
         supabase.from('videos').select('*').eq('is_featured', true).limit(2),
+        supabase.from('testimonies').select('*').eq('is_featured', true).limit(2),
       ]);
+
+      if (prayersCount.error) throw prayersCount.error;
+      if (testimoniesCount.error) throw testimoniesCount.error;
+      if (podcastsCount.error) throw podcastsCount.error;
+      if (videosCount.error) throw videosCount.error;
+      if (featuredPodcasts.error) throw featuredPodcasts.error;
+      if (featuredVideos.error) throw featuredVideos.error;
+      if (featuredTestimonies.error) throw featuredTestimonies.error;
 
       setStats({
         prayers: prayersCount.count || 0,
         testimonies: testimoniesCount.count || 0,
-        content: (podcasts.data?.length || 0) + (videos.data?.length || 0),
+        content: (podcastsCount.count || 0) + (videosCount.count || 0),
       });
 
-      const combined = [...(podcasts.data || []), ...(videos.data || [])];
+      const combined = [
+        ...(featuredPodcasts.data || []),
+        ...(featuredVideos.data || []),
+        ...(featuredTestimonies.data || []),
+      ];
       setFeaturedContent(combined.slice(0, 3));
     } catch (error) {
       console.error('Error fetching home data:', error);
+      setError('Unable to load content. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -104,7 +122,15 @@ export function HomeScreen() {
 
         {/* Stats Card */}
         <View style={styles.statsCard}>
-          {loading ? (
+          {error ? (
+            <View style={styles.errorContainer}>
+              <Ionicons name="alert-circle-outline" size={32} color="#ef4444" />
+              <Text style={styles.errorText}>{error}</Text>
+              <Pressable style={styles.retryButton} onPress={fetchData}>
+                <Text style={styles.retryButtonText}>Retry</Text>
+              </Pressable>
+            </View>
+          ) : loading ? (
             <ActivityIndicator size="large" color="#047857" style={{ paddingVertical: 20 }} />
           ) : (
             <View style={styles.statsGrid}>
@@ -186,6 +212,7 @@ export function HomeScreen() {
             featuredContent.map((content) => {
               const isVideo = 'video_url' in content;
               const isPodcast = 'audio_url' in content;
+              const isTestimony = 'content' in content;
               const thumbnail = 'thumbnail_url' in content ? content.thumbnail_url : null;
 
               return (
@@ -211,13 +238,23 @@ export function HomeScreen() {
                         <Text style={styles.categoryText}>Video</Text>
                       </View>
                     )}
+                    {isTestimony && (
+                      <View style={styles.categoryBadge}>
+                        <Text style={styles.categoryText}>Testimony</Text>
+                      </View>
+                    )}
                   </View>
 
                   <View style={styles.contentInfo}>
                     <Text style={styles.contentTitle} numberOfLines={2}>
                       {content.title}
                     </Text>
-                    {'description' in content && content.description && (
+                    {isTestimony && 'content' in content && (
+                      <Text style={styles.contentSpeaker} numberOfLines={2}>
+                        {content.content}
+                      </Text>
+                    )}
+                    {!isTestimony && 'description' in content && content.description && (
                       <Text style={styles.contentSpeaker} numberOfLines={2}>
                         {content.description}
                       </Text>
@@ -511,5 +548,28 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#71717a',
     marginTop: 12,
+  },
+  errorContainer: {
+    paddingVertical: 40,
+    paddingHorizontal: 20,
+    alignItems: 'center',
+  },
+  errorText: {
+    fontSize: 14,
+    color: '#ef4444',
+    marginTop: 12,
+    marginBottom: 16,
+    textAlign: 'center',
+  },
+  retryButton: {
+    backgroundColor: '#047857',
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 8,
+  },
+  retryButtonText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '600',
   },
 });

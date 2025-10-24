@@ -10,6 +10,7 @@ export function VideoScreen() {
   const [videos, setVideos] = useState<Video[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     fetchVideos();
@@ -18,15 +19,17 @@ export function VideoScreen() {
   const fetchVideos = async () => {
     try {
       setLoading(true);
-      const { data, error } = await supabase
+      setError(null);
+      const { data, error: fetchError } = await supabase
         .from('videos')
         .select('*')
         .order('published_at', { ascending: false });
 
-      if (error) throw error;
+      if (fetchError) throw fetchError;
       if (data) setVideos(data);
-    } catch (error) {
-      console.error('Error fetching videos:', error);
+    } catch (err) {
+      console.error('Error fetching videos:', err);
+      setError('Unable to load videos. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -78,7 +81,15 @@ export function VideoScreen() {
         </View>
 
         <View style={styles.section}>
-          {loading ? (
+          {error ? (
+            <View style={styles.errorContainer}>
+              <Ionicons name="alert-circle-outline" size={48} color="#ef4444" />
+              <Text style={styles.errorText}>{error}</Text>
+              <Pressable style={styles.retryButton} onPress={fetchVideos}>
+                <Text style={styles.retryButtonText}>Retry</Text>
+              </Pressable>
+            </View>
+          ) : loading ? (
             <View style={styles.loadingContainer}>
               <ActivityIndicator size="large" color="#047857" />
               <Text style={styles.loadingText}>Loading videos...</Text>
@@ -273,6 +284,29 @@ const styles = StyleSheet.create({
   featuredText: {
     fontSize: 12,
     color: '#047857',
+    fontWeight: '600',
+  },
+  errorContainer: {
+    paddingVertical: 60,
+    alignItems: 'center',
+  },
+  errorText: {
+    fontSize: 14,
+    color: '#ef4444',
+    marginTop: 16,
+    marginBottom: 20,
+    textAlign: 'center',
+    paddingHorizontal: 40,
+  },
+  retryButton: {
+    backgroundColor: '#047857',
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 8,
+  },
+  retryButtonText: {
+    color: '#fff',
+    fontSize: 14,
     fontWeight: '600',
   },
 });

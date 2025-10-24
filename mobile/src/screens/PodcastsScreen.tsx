@@ -9,6 +9,7 @@ export function PodcastsScreen() {
   const [podcasts, setPodcasts] = useState<Podcast[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     fetchPodcasts();
@@ -17,15 +18,17 @@ export function PodcastsScreen() {
   const fetchPodcasts = async () => {
     try {
       setLoading(true);
-      const { data, error } = await supabase
+      setError(null);
+      const { data, error: fetchError } = await supabase
         .from('podcasts')
         .select('*')
         .order('published_at', { ascending: false });
 
-      if (error) throw error;
+      if (fetchError) throw fetchError;
       if (data) setPodcasts(data);
-    } catch (error) {
-      console.error('Error fetching podcasts:', error);
+    } catch (err) {
+      console.error('Error fetching podcasts:', err);
+      setError('Unable to load podcasts. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -60,7 +63,15 @@ export function PodcastsScreen() {
         </View>
 
         <View style={styles.section}>
-          {loading ? (
+          {error ? (
+            <View style={styles.errorContainer}>
+              <Ionicons name="alert-circle-outline" size={48} color="#ef4444" />
+              <Text style={styles.errorText}>{error}</Text>
+              <Pressable style={styles.retryButton} onPress={fetchPodcasts}>
+                <Text style={styles.retryButtonText}>Retry</Text>
+              </Pressable>
+            </View>
+          ) : loading ? (
             <View style={styles.loadingContainer}>
               <ActivityIndicator size="large" color="#047857" />
               <Text style={styles.loadingText}>Loading podcasts...</Text>
@@ -216,5 +227,28 @@ const styles = StyleSheet.create({
   metaText: {
     fontSize: 12,
     color: '#71717a',
+  },
+  errorContainer: {
+    paddingVertical: 60,
+    alignItems: 'center',
+  },
+  errorText: {
+    fontSize: 14,
+    color: '#ef4444',
+    marginTop: 16,
+    marginBottom: 20,
+    textAlign: 'center',
+    paddingHorizontal: 40,
+  },
+  retryButton: {
+    backgroundColor: '#047857',
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 8,
+  },
+  retryButtonText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '600',
   },
 });
