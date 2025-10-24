@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -6,44 +6,68 @@ import {
   Image,
   Pressable,
   StyleSheet,
+  ActivityIndicator,
+  RefreshControl,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { supabase } from '../lib/supabase';
+import { Podcast, Video, Testimony } from '../types/database.types';
+import { useAuth } from '../contexts/AuthContext';
 
 export function HomeScreen() {
-  const stats = [
-    { label: 'Members', value: '2.5K', icon: 'people', color: ['#3b82f6', '#2563eb'] },
-    { label: 'Messages', value: '8.2K', icon: 'chatbubbles', color: ['#a855f7', '#9333ea'] },
-    { label: 'Prayers', value: '45K', icon: 'heart', color: ['#047857', '#059669'] },
-  ];
+  const { user } = useAuth();
+  const [stats, setStats] = useState({ prayers: 0, testimonies: 0, content: 0 });
+  const [featuredContent, setFeaturedContent] = useState<(Podcast | Video | Testimony)[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
 
-  const featuredContent = [
-    {
-      id: 1,
-      title: 'Kingdom Principles: Understanding Your Purpose',
-      speaker: 'Pastor James Williams',
-      category: 'Teaching',
-      duration: '45 min',
-      image: 'https://images.unsplash.com/photo-1629143949694-606987575b07?w=600',
-      likes: 245,
-      comments: 32,
-    },
-    {
-      id: 2,
-      title: 'Financial Freedom Through Faith',
-      speaker: 'Dr. Sarah Johnson',
-      category: 'Finance',
-      duration: '38 min',
-      image: 'https://images.unsplash.com/photo-1612350275854-f96a246cfc2a?w=600',
-      likes: 189,
-      comments: 24,
-    },
-  ];
+  useEffect(() => {
+    fetchData();
+  }, []);
+
+  const fetchData = async () => {
+    try {
+      setLoading(true);
+
+      const [prayersCount, testimoniesCount, podcasts, videos] = await Promise.all([
+        supabase.from('prayer_requests').select('id', { count: 'exact', head: true }),
+        supabase.from('testimonies').select('id', { count: 'exact', head: true }),
+        supabase.from('podcasts').select('*').eq('is_featured', true).limit(2),
+        supabase.from('videos').select('*').eq('is_featured', true).limit(2),
+      ]);
+
+      setStats({
+        prayers: prayersCount.count || 0,
+        testimonies: testimoniesCount.count || 0,
+        content: (podcasts.data?.length || 0) + (videos.data?.length || 0),
+      });
+
+      const combined = [...(podcasts.data || []), ...(videos.data || [])];
+      setFeaturedContent(combined.slice(0, 3));
+    } catch (error) {
+      console.error('Error fetching home data:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await fetchData();
+    setRefreshing(false);
+  };
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        style={styles.scrollView}
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#047857" />
+        }
+      >
         {/* Hero Section */}
         <View style={styles.heroContainer}>
           <LinearGradient
@@ -80,22 +104,48 @@ export function HomeScreen() {
 
         {/* Stats Card */}
         <View style={styles.statsCard}>
-          <View style={styles.statsGrid}>
-            {stats.map((stat, index) => (
-              <View key={index} style={styles.statItem}>
+          {loading ? (
+            <ActivityIndicator size="large" color="#047857" style={{ paddingVertical: 20 }} />
+          ) : (
+            <View style={styles.statsGrid}>
+              <View style={styles.statItem}>
                 <LinearGradient
-                  colors={stat.color}
+                  colors={['#047857', '#059669']}
                   start={{ x: 0, y: 0 }}
                   end={{ x: 1, y: 1 }}
                   style={styles.statIcon}
                 >
-                  <Ionicons name={stat.icon as any} size={24} color="#fff" />
+                  <Ionicons name="heart" size={24} color="#fff" />
                 </LinearGradient>
-                <Text style={styles.statValue}>{stat.value}</Text>
-                <Text style={styles.statLabel}>{stat.label}</Text>
+                <Text style={styles.statValue}>{stats.prayers}</Text>
+                <Text style={styles.statLabel}>Prayers</Text>
               </View>
-            ))}
-          </View>
+              <View style={styles.statItem}>
+                <LinearGradient
+                  colors={['#a855f7', '#9333ea']}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={styles.statIcon}
+                >
+                  <Ionicons name="sparkles" size={24} color="#fff" />
+                </LinearGradient>
+                <Text style={styles.statValue}>{stats.testimonies}</Text>
+                <Text style={styles.statLabel}>Testimonies</Text>
+              </View>
+              <View style={styles.statItem}>
+                <LinearGradient
+                  colors={['#3b82f6', '#2563eb']}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={styles.statIcon}
+                >
+                  <Ionicons name="play-circle" size={24} color="#fff" />
+                </LinearGradient>
+                <Text style={styles.statValue}>{stats.content}</Text>
+                <Text style={styles.statLabel}>Content</Text>
+              </View>
+            </View>
+          )}
         </View>
 
         {/* Quick Actions */}
@@ -127,46 +177,56 @@ export function HomeScreen() {
             <Text style={styles.viewAll}>View All</Text>
           </View>
 
-          {featuredContent.map((content) => (
-            <Pressable key={content.id} style={styles.contentCard}>
-              <View style={styles.imageContainer}>
-                <Image source={{ uri: content.image }} style={styles.contentImage} />
-                <LinearGradient
-                  colors={['transparent', 'rgba(0,0,0,0.6)']}
-                  style={styles.imageGradient}
-                />
-                <View style={styles.categoryBadge}>
-                  <Text style={styles.categoryText}>{content.category}</Text>
-                </View>
-                <View style={styles.durationBadge}>
-                  <Text style={styles.durationText}>{content.duration}</Text>
-                </View>
-              </View>
+          {featuredContent.length === 0 ? (
+            <View style={styles.emptyState}>
+              <Ionicons name="albums-outline" size={48} color="#d4d4d8" />
+              <Text style={styles.emptyStateText}>No featured content yet</Text>
+            </View>
+          ) : (
+            featuredContent.map((content) => {
+              const isVideo = 'video_url' in content;
+              const isPodcast = 'audio_url' in content;
+              const thumbnail = 'thumbnail_url' in content ? content.thumbnail_url : null;
 
-              <View style={styles.contentInfo}>
-                <Text style={styles.contentTitle} numberOfLines={2}>
-                  {content.title}
-                </Text>
-                <Text style={styles.contentSpeaker}>{content.speaker}</Text>
-
-                <View style={styles.contentActions}>
-                  <View style={styles.contentStats}>
-                    <Pressable style={styles.actionButton}>
-                      <Ionicons name="heart-outline" size={16} color="#71717a" />
-                      <Text style={styles.actionText}>{content.likes}</Text>
-                    </Pressable>
-                    <Pressable style={styles.actionButton}>
-                      <Ionicons name="chatbubble-outline" size={16} color="#71717a" />
-                      <Text style={styles.actionText}>{content.comments}</Text>
-                    </Pressable>
+              return (
+                <Pressable key={content.id} style={styles.contentCard}>
+                  <View style={styles.imageContainer}>
+                    <Image
+                      source={{
+                        uri: thumbnail || 'https://images.unsplash.com/photo-1629143949694-606987575b07?w=600',
+                      }}
+                      style={styles.contentImage}
+                    />
+                    <LinearGradient
+                      colors={['transparent', 'rgba(0,0,0,0.6)']}
+                      style={styles.imageGradient}
+                    />
+                    {isPodcast && (
+                      <View style={styles.categoryBadge}>
+                        <Text style={styles.categoryText}>Podcast</Text>
+                      </View>
+                    )}
+                    {isVideo && (
+                      <View style={styles.categoryBadge}>
+                        <Text style={styles.categoryText}>Video</Text>
+                      </View>
+                    )}
                   </View>
-                  <Pressable>
-                    <Ionicons name="share-outline" size={18} color="#71717a" />
-                  </Pressable>
-                </View>
-              </View>
-            </Pressable>
-          ))}
+
+                  <View style={styles.contentInfo}>
+                    <Text style={styles.contentTitle} numberOfLines={2}>
+                      {content.title}
+                    </Text>
+                    {'description' in content && content.description && (
+                      <Text style={styles.contentSpeaker} numberOfLines={2}>
+                        {content.description}
+                      </Text>
+                    )}
+                  </View>
+                </Pressable>
+              );
+            })
+          )}
         </View>
 
         <View style={{ height: 120 }} />
@@ -442,5 +502,14 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '500',
     color: '#71717a',
+  },
+  emptyState: {
+    paddingVertical: 40,
+    alignItems: 'center',
+  },
+  emptyStateText: {
+    fontSize: 14,
+    color: '#71717a',
+    marginTop: 12,
   },
 });

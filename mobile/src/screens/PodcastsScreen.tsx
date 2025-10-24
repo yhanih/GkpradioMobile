@@ -1,42 +1,57 @@
-import React from 'react';
-import { View, Text, ScrollView, Image, StyleSheet, Pressable } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, ScrollView, Image, StyleSheet, Pressable, ActivityIndicator, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { supabase } from '../lib/supabase';
+import { Podcast } from '../types/database.types';
 
 export function PodcastsScreen() {
-  const podcasts = [
-    {
-      id: 1,
-      title: 'My Spouse, My Heart',
-      hosts: 'Jeff & Suzie Spencer',
-      description: 'Couples share their journey of love, trials, and triumph',
-      image: 'https://images.unsplash.com/photo-1516589178581-6cd7833ae3b2?w=400',
-      episodes: 45,
-      duration: '~45 min',
-    },
-    {
-      id: 2,
-      title: 'Kingdom Finances',
-      hosts: 'Dr. Sarah Johnson',
-      description: 'Biblical principles for financial freedom',
-      image: 'https://images.unsplash.com/photo-1579621970563-ebec7560ff3e?w=400',
-      episodes: 32,
-      duration: '~30 min',
-    },
-    {
-      id: 3,
-      title: 'Youth Uprising',
-      hosts: 'Pastor Mike Thompson',
-      description: 'Empowering the next generation',
-      image: 'https://images.unsplash.com/photo-1511632765486-a01980e01a18?w=400',
-      episodes: 28,
-      duration: '~25 min',
-    },
-  ];
+  const [podcasts, setPodcasts] = useState<Podcast[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+
+  useEffect(() => {
+    fetchPodcasts();
+  }, []);
+
+  const fetchPodcasts = async () => {
+    try {
+      setLoading(true);
+      const { data, error } = await supabase
+        .from('podcasts')
+        .select('*')
+        .order('published_at', { ascending: false });
+
+      if (error) throw error;
+      if (data) setPodcasts(data);
+    } catch (error) {
+      console.error('Error fetching podcasts:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await fetchPodcasts();
+    setRefreshing(false);
+  };
+
+  const formatDuration = (seconds: number | null) => {
+    if (!seconds) return '~30 min';
+    const mins = Math.floor(seconds / 60);
+    return `${mins} min`;
+  };
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        style={styles.scrollView}
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#047857" />
+        }
+      >
         <View style={styles.header}>
           <Text style={styles.title}>Podcasts</Text>
           <Text style={styles.subtitle}>
@@ -45,26 +60,56 @@ export function PodcastsScreen() {
         </View>
 
         <View style={styles.section}>
-          {podcasts.map((podcast) => (
-            <Pressable key={podcast.id} style={styles.podcastCard}>
-              <Image source={{ uri: podcast.image }} style={styles.podcastImage} />
-              <View style={styles.podcastInfo}>
-                <Text style={styles.podcastTitle}>{podcast.title}</Text>
-                <Text style={styles.podcastHosts}>{podcast.hosts}</Text>
-                <Text style={styles.podcastDescription}>{podcast.description}</Text>
-                <View style={styles.podcastMeta}>
-                  <View style={styles.metaItem}>
-                    <Ionicons name="mic" size={14} color="#71717a" />
-                    <Text style={styles.metaText}>{podcast.episodes} episodes</Text>
-                  </View>
-                  <View style={styles.metaItem}>
-                    <Ionicons name="time" size={14} color="#71717a" />
-                    <Text style={styles.metaText}>{podcast.duration}</Text>
+          {loading ? (
+            <View style={styles.loadingContainer}>
+              <ActivityIndicator size="large" color="#047857" />
+              <Text style={styles.loadingText}>Loading podcasts...</Text>
+            </View>
+          ) : podcasts.length === 0 ? (
+            <View style={styles.emptyState}>
+              <Ionicons name="mic-outline" size={48} color="#d4d4d8" />
+              <Text style={styles.emptyStateTitle}>No podcasts available</Text>
+              <Text style={styles.emptyStateText}>
+                Check back soon for new episodes
+              </Text>
+            </View>
+          ) : (
+            podcasts.map((podcast) => (
+              <Pressable key={podcast.id} style={styles.podcastCard}>
+                <Image
+                  source={{
+                    uri: podcast.thumbnail_url || 'https://images.unsplash.com/photo-1516589178581-6cd7833ae3b2?w=400',
+                  }}
+                  style={styles.podcastImage}
+                />
+                <View style={styles.podcastInfo}>
+                  <Text style={styles.podcastTitle} numberOfLines={2}>
+                    {podcast.title}
+                  </Text>
+                  {podcast.author && (
+                    <Text style={styles.podcastHosts}>{podcast.author}</Text>
+                  )}
+                  {podcast.description && (
+                    <Text style={styles.podcastDescription} numberOfLines={2}>
+                      {podcast.description}
+                    </Text>
+                  )}
+                  <View style={styles.podcastMeta}>
+                    {podcast.category && (
+                      <View style={styles.metaItem}>
+                        <Ionicons name="folder" size={14} color="#71717a" />
+                        <Text style={styles.metaText}>{podcast.category}</Text>
+                      </View>
+                    )}
+                    <View style={styles.metaItem}>
+                      <Ionicons name="time" size={14} color="#71717a" />
+                      <Text style={styles.metaText}>{formatDuration(podcast.duration)}</Text>
+                    </View>
                   </View>
                 </View>
-              </View>
-            </Pressable>
-          ))}
+              </Pressable>
+            ))
+          )}
         </View>
 
         <View style={{ height: 120 }} />
@@ -99,6 +144,32 @@ const styles = StyleSheet.create({
   section: {
     paddingHorizontal: 20,
   },
+  loadingContainer: {
+    paddingVertical: 60,
+    alignItems: 'center',
+  },
+  loadingText: {
+    marginTop: 16,
+    fontSize: 15,
+    color: '#71717a',
+  },
+  emptyState: {
+    paddingVertical: 60,
+    alignItems: 'center',
+  },
+  emptyStateTitle: {
+    fontSize: 17,
+    fontWeight: '600',
+    color: '#09090b',
+    marginTop: 16,
+    marginBottom: 8,
+  },
+  emptyStateText: {
+    fontSize: 14,
+    color: '#71717a',
+    textAlign: 'center',
+    paddingHorizontal: 40,
+  },
   podcastCard: {
     flexDirection: 'row',
     backgroundColor: '#fff',
@@ -125,15 +196,13 @@ const styles = StyleSheet.create({
   },
   podcastHosts: {
     fontSize: 13,
-    color: '#047857',
+    color: '#71717a',
     marginBottom: 6,
-    fontWeight: '500',
   },
   podcastDescription: {
-    fontSize: 12,
+    fontSize: 13,
     color: '#71717a',
     marginBottom: 8,
-    lineHeight: 18,
   },
   podcastMeta: {
     flexDirection: 'row',
@@ -145,7 +214,7 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   metaText: {
-    fontSize: 11,
+    fontSize: 12,
     color: '#71717a',
   },
 });

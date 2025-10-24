@@ -1,43 +1,75 @@
-import React from 'react';
-import { View, Text, ScrollView, Image, StyleSheet, Pressable } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, ScrollView, Image, StyleSheet, Pressable, ActivityIndicator, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
+import { supabase } from '../lib/supabase';
+import { Video } from '../types/database.types';
 
 export function VideoScreen() {
-  const videos = [
-    {
-      id: 1,
-      title: 'Sunday Service: Walking in Divine Purpose',
-      channel: 'GKP Radio',
-      views: '2.5K',
-      duration: '1:24:30',
-      image: 'https://images.unsplash.com/photo-1438032005730-c779502df39b?w=600',
-      timestamp: '2 days ago',
-    },
-    {
-      id: 2,
-      title: 'Marriage Workshop: Building on the Rock',
-      channel: 'Jeff & Suzie Spencer',
-      views: '1.8K',
-      duration: '45:20',
-      image: 'https://images.unsplash.com/photo-1519741497674-611481863552?w=600',
-      timestamp: '5 days ago',
-    },
-    {
-      id: 3,
-      title: 'Youth Conference: Generation Rising',
-      channel: 'GKP Youth',
-      views: '3.2K',
-      duration: '52:15',
-      image: 'https://images.unsplash.com/photo-1511632765486-a01980e01a18?w=600',
-      timestamp: '1 week ago',
-    },
-  ];
+  const [videos, setVideos] = useState<Video[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+
+  useEffect(() => {
+    fetchVideos();
+  }, []);
+
+  const fetchVideos = async () => {
+    try {
+      setLoading(true);
+      const { data, error } = await supabase
+        .from('videos')
+        .select('*')
+        .order('published_at', { ascending: false });
+
+      if (error) throw error;
+      if (data) setVideos(data);
+    } catch (error) {
+      console.error('Error fetching videos:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await fetchVideos();
+    setRefreshing(false);
+  };
+
+  const formatDuration = (seconds: number | null) => {
+    if (!seconds) return '0:00';
+    const hours = Math.floor(seconds / 3600);
+    const mins = Math.floor((seconds % 3600) / 60);
+    const secs = seconds % 60;
+    if (hours > 0) {
+      return `${hours}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+    }
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+  };
+
+  const formatTimeAgo = (dateString: string) => {
+    const date = new Date(dateString);
+    const now = new Date();
+    const diffInDays = Math.floor((now.getTime() - date.getTime()) / (1000 * 60 * 60 * 24));
+
+    if (diffInDays === 0) return 'Today';
+    if (diffInDays === 1) return 'Yesterday';
+    if (diffInDays < 7) return `${diffInDays} days ago`;
+    if (diffInDays < 30) return `${Math.floor(diffInDays / 7)} weeks ago`;
+    return `${Math.floor(diffInDays / 30)} months ago`;
+  };
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        style={styles.scrollView}
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#047857" />
+        }
+      >
         <View style={styles.header}>
           <Text style={styles.title}>Videos</Text>
           <Text style={styles.subtitle}>
@@ -46,35 +78,61 @@ export function VideoScreen() {
         </View>
 
         <View style={styles.section}>
-          {videos.map((video) => (
-            <Pressable key={video.id} style={styles.videoCard}>
-              <View style={styles.thumbnailContainer}>
-                <Image source={{ uri: video.image }} style={styles.thumbnail} />
-                <LinearGradient
-                  colors={['transparent', 'rgba(0,0,0,0.3)']}
-                  style={styles.thumbnailGradient}
-                />
-                <View style={styles.playButton}>
-                  <Ionicons name="play" size={32} color="#fff" />
+          {loading ? (
+            <View style={styles.loadingContainer}>
+              <ActivityIndicator size="large" color="#047857" />
+              <Text style={styles.loadingText}>Loading videos...</Text>
+            </View>
+          ) : videos.length === 0 ? (
+            <View style={styles.emptyState}>
+              <Ionicons name="videocam-outline" size={48} color="#d4d4d8" />
+              <Text style={styles.emptyStateTitle}>No videos available</Text>
+              <Text style={styles.emptyStateText}>
+                Check back soon for new content
+              </Text>
+            </View>
+          ) : (
+            videos.map((video) => (
+              <Pressable key={video.id} style={styles.videoCard}>
+                <View style={styles.thumbnailContainer}>
+                  <Image
+                    source={{
+                      uri: video.thumbnail_url || 'https://images.unsplash.com/photo-1438032005730-c779502df39b?w=600',
+                    }}
+                    style={styles.thumbnail}
+                  />
+                  <LinearGradient
+                    colors={['transparent', 'rgba(0,0,0,0.3)']}
+                    style={styles.thumbnailGradient}
+                  />
+                  <View style={styles.playButton}>
+                    <Ionicons name="play" size={32} color="#fff" />
+                  </View>
+                  <View style={styles.durationBadge}>
+                    <Text style={styles.durationText}>{formatDuration(video.duration)}</Text>
+                  </View>
                 </View>
-                <View style={styles.durationBadge}>
-                  <Text style={styles.durationText}>{video.duration}</Text>
-                </View>
-              </View>
 
-              <View style={styles.videoInfo}>
-                <Text style={styles.videoTitle} numberOfLines={2}>
-                  {video.title}
-                </Text>
-                <Text style={styles.channelName}>{video.channel}</Text>
-                <View style={styles.videoMeta}>
-                  <Text style={styles.metaText}>{video.views} views</Text>
-                  <Text style={styles.metaDot}>•</Text>
-                  <Text style={styles.metaText}>{video.timestamp}</Text>
+                <View style={styles.videoInfo}>
+                  <Text style={styles.videoTitle} numberOfLines={2}>
+                    {video.title}
+                  </Text>
+                  {video.category && (
+                    <Text style={styles.channelName}>{video.category}</Text>
+                  )}
+                  <View style={styles.videoMeta}>
+                    <Text style={styles.metaText}>{formatTimeAgo(video.published_at)}</Text>
+                    {video.is_featured && (
+                      <>
+                        <Text style={styles.metaDot}>•</Text>
+                        <Text style={styles.featuredText}>Featured</Text>
+                      </>
+                    )}
+                  </View>
                 </View>
-              </View>
-            </Pressable>
-          ))}
+              </Pressable>
+            ))
+          )}
         </View>
 
         <View style={{ height: 120 }} />
@@ -109,6 +167,32 @@ const styles = StyleSheet.create({
   section: {
     paddingHorizontal: 20,
   },
+  loadingContainer: {
+    paddingVertical: 60,
+    alignItems: 'center',
+  },
+  loadingText: {
+    marginTop: 16,
+    fontSize: 15,
+    color: '#71717a',
+  },
+  emptyState: {
+    paddingVertical: 60,
+    alignItems: 'center',
+  },
+  emptyStateTitle: {
+    fontSize: 17,
+    fontWeight: '600',
+    color: '#09090b',
+    marginTop: 16,
+    marginBottom: 8,
+  },
+  emptyStateText: {
+    fontSize: 14,
+    color: '#71717a',
+    textAlign: 'center',
+    paddingHorizontal: 40,
+  },
   videoCard: {
     backgroundColor: '#fff',
     borderRadius: 12,
@@ -127,20 +211,21 @@ const styles = StyleSheet.create({
   },
   thumbnailGradient: {
     position: 'absolute',
-    bottom: 0,
     left: 0,
     right: 0,
-    height: '30%',
+    bottom: 0,
+    height: '40%',
   },
   playButton: {
     position: 'absolute',
     top: '50%',
     left: '50%',
-    transform: [{ translateX: -24 }, { translateY: -24 }],
+    marginLeft: -24,
+    marginTop: -24,
     width: 48,
     height: 48,
     borderRadius: 24,
-    backgroundColor: 'rgba(0,0,0,0.7)',
+    backgroundColor: 'rgba(0,0,0,0.6)',
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -149,8 +234,8 @@ const styles = StyleSheet.create({
     bottom: 8,
     right: 8,
     backgroundColor: 'rgba(0,0,0,0.8)',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
     borderRadius: 4,
   },
   durationText: {
@@ -162,22 +247,19 @@ const styles = StyleSheet.create({
     padding: 12,
   },
   videoTitle: {
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: '600',
     color: '#09090b',
     marginBottom: 6,
-    lineHeight: 21,
   },
   channelName: {
     fontSize: 13,
-    color: '#047857',
+    color: '#71717a',
     marginBottom: 4,
-    fontWeight: '500',
   },
   videoMeta: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
   },
   metaText: {
     fontSize: 12,
@@ -186,5 +268,11 @@ const styles = StyleSheet.create({
   metaDot: {
     fontSize: 12,
     color: '#a1a1aa',
+    marginHorizontal: 6,
+  },
+  featuredText: {
+    fontSize: 12,
+    color: '#047857',
+    fontWeight: '600',
   },
 });
