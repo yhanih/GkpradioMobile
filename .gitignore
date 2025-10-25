@@ -5,3 +5,17 @@ server/public
 vite.config.ts.*
 *.tar.gz
 .env
+
+# Build artifacts
+android/app/src/main/assets/public/
+ios/App/App/public/
+deployment-package/
+deployment-packages/
+
+# Logs and temp files
+*.log
+.cache
+.temp
+*.swp
+*.swo
+*~
