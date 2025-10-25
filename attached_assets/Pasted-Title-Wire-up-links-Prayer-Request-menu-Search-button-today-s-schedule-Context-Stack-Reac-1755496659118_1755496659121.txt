@@ -1,0 +1,66 @@
+Title: Wire up links + Prayer Request menu + Search button (today’s schedule)
+
+Context
+- Stack: React 18 + Vite + TypeScript (frontend), Express.js + TypeScript (backend), PostgreSQL + Drizzle ORM.
+- Router: use the current app router (keep existing conventions).
+- Goal: Verify and fix link interactions. Make “Prayer Request” in Community main menu open the correct category view. Make the Search button open the search UI and actually query content.
+
+Tasks
+
+1) Link audit + fixes
+- Crawl app nav: header, footer, sidebar, mobile menu.
+- Replace any dead anchors with proper <Link>/<a> targets.
+- Ensure all targets render a valid page (no 404, no blank views).
+- Keep URLs consistent and readable.
+
+2) Community main menu → Prayer Request category
+- Add/confirm a top-level menu item: “Prayer Requests”.
+- Route: choose the existing pattern. Prefer one of:
+  - /community/prayer-requests
+  - /community?category=prayer-requests
+- The category page must:
+  - Filter posts to the “Prayer Requests” category.
+  - Show pagination and empty state.
+  - Preserve query params on navigation.
+- If the category doesn’t exist in seed data, add it via Drizzle migration/seed.
+- Deep link behavior:
+  - Clicking a specific prayer item opens its detail route.
+  - Back returns to the filtered list with scroll position restored.
+
+3) Search button → search contents
+- Make the Search button open a dedicated route: /search.
+- Auto-focus the search input on page load.
+- Query param: ?q=<term>.
+- Results sections (as available in codebase): posts, users, events. Show counts, lazy-load lists.
+- Press Enter submits; clear icon resets; Esc blurs/closes on modal variants.
+- Keyboard shortcut: Ctrl+K (Cmd+K on macOS) to focus the search input.
+- Accessibility: label the input; ARIA live region for results count.
+
+4) QA + tests
+- Add Playwright tests:
+  - Nav links resolve without 404.
+  - Community → Prayer Requests shows only that category.
+  - Search route reads/writes ?q and renders results.
+- Add a simple link-check script for internal routes (fail CI on 404).
+- Verify on mobile viewports and dark mode.
+
+5) Deliverables
+- Updated nav config/components.
+- Category route/page (or filter logic) for Prayer Requests.
+- /search route + UI + hooks.
+- Drizzle seed/migration if category missing.
+- Playwright tests + link-check script.
+- Short README note: routes, how to run tests.
+
+Acceptance criteria
+- All primary nav links work on desktop and mobile.
+- “Prayer Requests” menu item opens a category-scoped list with pagination and empty state.
+- /search loads, focuses input, accepts ?q, displays results sections, supports Ctrl/Cmd+K.
+- No internal 404s during link-check. Tests pass in CI.
+
+Run commands (adjust to repo):
+- Dev: npm run dev
+- E2E: npx playwright install && npm run test:e2e
+- Link check: npm run check:links
+
+Please open a PR named: “Links + Prayer Requests menu + Search route (daily fix)”, include screenshots of the three flows, and tick a checklist in the PR body.

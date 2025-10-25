@@ -1,0 +1,51 @@
+ERROR:  42703: column "author_id" does not exist
+QUERY:  
+    CREATE VIEW community_threads AS 
+    SELECT 
+      id,
+      title,
+      content,
+      category,
+      CASE 
+        WHEN EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'communitythreads' AND column_name = 'author_id') 
+        THEN author_id
+        ELSE "authorId" 
+      END as author_id,
+      tags,
+      CASE 
+        WHEN EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'communitythreads' AND column_name = 'view_count') 
+        THEN view_count
+        ELSE "viewCount" 
+      END as view_count,
+      CASE 
+        WHEN EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'communitythreads' AND column_name = 'reply_count') 
+        THEN reply_count
+        ELSE "replyCount" 
+      END as reply_count,
+      CASE 
+        WHEN EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'communitythreads' AND column_name = 'last_activity_at') 
+        THEN last_activity_at
+        ELSE "lastActivityAt" 
+      END as last_activity_at,
+      CASE 
+        WHEN EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'communitythreads' AND column_name = 'is_pinned') 
+        THEN is_pinned
+        ELSE "isPinned" 
+      END as is_pinned,
+      CASE 
+        WHEN EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'communitythreads' AND column_name = 'is_locked') 
+        THEN is_locked
+        ELSE "isLocked" 
+      END as is_locked,
+      CASE 
+        WHEN EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'communitythreads' AND column_name = 'created_at') 
+        THEN created_at
+        ELSE "createdAt" 
+      END as created_at,
+      CASE 
+        WHEN EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'communitythreads' AND column_name = 'updated_at') 
+        THEN updated_at
+        ELSE "updatedAt" 
+      END as updated_at
+    FROM communitythreads
+CONTEXT:  PL/pgSQL function inline_code_block line 25 at EXECUTE

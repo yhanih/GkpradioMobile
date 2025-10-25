@@ -1,0 +1,148 @@
+version: '3.8'
+
+services:
+  # Main GKP Radio Application
+  gkp-radio:
+    build: .
+    container_name: gkp-radio-app
+    restart: unless-stopped
+    ports:
+      - "5000:5000"   # Main web application
+      - "1935:1935"   # RTMP streaming
+      - "8000:8000"   # HLS/FLV HTTP streaming
+    environment:
+      - NODE_ENV=production
+      - DATABASE_URL=postgresql://gkp_user:${DB_PASSWORD:-gkp_secure_password}@postgres:5432/gkp_radio
+      # Streaming Configuration
+      - RTMP_BASE_URL=rtmp://${DOMAIN:-localhost}:1935
+      - RTMP_EDGE_URL=rtmp://gkp-radio:1935
+      - HLS_BASE_URL=http://${DOMAIN:-localhost}:8000
+      - MEDIAMTX_BASE_URL=http://mediamtx:8889
+      - MEDIAMTX_API_URL=http://mediamtx:9997
+      # AzuraCast Integration
+      - AZURACAST_BASE_URL=${AZURACAST_BASE_URL:-http://74.208.102.89:8080}
+      - AZURACAST_STATION_ID=${AZURACAST_STATION_ID:-1}
+      # Security
+      - JWT_SECRET=${JWT_SECRET:-change-this-super-secret-jwt-key-in-production}
+      # Optional features
+      - STRIPE_SECRET_KEY=${STRIPE_SECRET_KEY}
+      - PAYMENTS_WEBHOOK_SECRET=${PAYMENTS_WEBHOOK_SECRET}
+      - ANTI_SPAM_ENABLED=${ANTI_SPAM_ENABLED:-false}
+      - TURNSTILE_SECRET_KEY=${TURNSTILE_SECRET_KEY}
+    volumes:
+      - hls_data:/app/hls
+      - media_data:/app/media
+      - logs_data:/app/logs
+    depends_on:
+      - postgres
+      - mediamtx
+    networks:
+      - gkp-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/api/stream/status"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: gkp-radio-db
+    restart: unless-stopped
+    environment:
+      - POSTGRES_DB=gkp_radio
+      - POSTGRES_USER=gkp_user
+      - POSTGRES_PASSWORD=${DB_PASSWORD:-gkp_secure_password}
+      - POSTGRES_INITDB_ARGS=--encoding=UTF-8 --lc-collate=C --lc-ctype=C
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    networks:
+      - gkp-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U gkp_user -d gkp_radio"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # MediaMTX for WebRTC Ultra-Low Latency Streaming
+  mediamtx:
+    image: bluenviron/mediamtx:latest
+    container_name: gkp-radio-mediamtx
+    restart: unless-stopped
+    ports:
+      - "8889:8889"   # WebRTC
+      - "9997:9997"   # API
+      - "1936:1936"   # RTMP for MediaMTX
+    volumes:
+      - ./mediamtx.yml:/mediamtx.yml:ro
+      - mediamtx_data:/recordings
+    networks:
+      - gkp-network
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:9997/v3/config/global/get"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Redis for session storage and caching (optional)
+  redis:
+    image: redis:7-alpine
+    container_name: gkp-radio-redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    volumes:
+      - redis_data:/data
+    ports:
+      - "6379:6379"
+    networks:
+      - gkp-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  # Nginx Reverse Proxy (optional - for production SSL termination)
+  nginx:
+    image: nginx:alpine
+    container_name: gkp-radio-proxy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./docker/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./docker/nginx/ssl:/etc/nginx/ssl:ro
+      - nginx_logs:/var/log/nginx
+    depends_on:
+      - gkp-radio
+    networks:
+      - gkp-network
+    profiles:
+      - proxy
+
+volumes:
+  postgres_data:
+    driver: local
+  hls_data:
+    driver: local
+  media_data:
+    driver: local
+  mediamtx_data:
+    driver: local
+  redis_data:
+    driver: local
+  logs_data:
+    driver: local
+  nginx_logs:
+    driver: local
+
+networks:
+  gkp-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16

@@ -1,0 +1,119 @@
+Here's a professional UI/UX audit with specific copywriting recommendations for GKP Radio:
+
+### **Critical UI/UX Issues & Copywriting Flaws**
+1. **Inconsistent Terminology**  
+   - *Problem*: "Prayer Requests" becomes "Paper Requests" (Community Page) and "Frayer Requests" (Video Library).  
+   - *Fix*: **Standardize all instances to "Prayer Requests"** for brand consistency.
+
+2. **Offensive Typos**  
+   - *Problem*: "North Korea" under Community section (Video Library footer) appears to be a catastrophic autocorrect error.  
+   - *Fix*: **Replace with "Youth Values" or "Faith Journeys"** + implement QA process for copy.
+
+3. **Meaningless Stats**  
+   - *Problem*: Numbers without context (e.g., "2.430 | 1.19" under videos).  
+   - *Fix*: **Add clear labels**: "2.4K views | 119 comments | 3 days ago"
+
+4. **Broken Microcopy**  
+   - Examples:  
+     - "Received Me" → **"Join Live"** (Live Page buttons)  
+     - "mail talk" → **"Real Talk"** (Youth Hour description)  
+     - "worship meals" → **"worship melodies"** (Video description)
+
+5. **Unprofessional CTAs**  
+   - "Give your email" → **"Subscribe for Updates"**  
+   - "Received Me" → **"Notify Me"** or **"Remind Me"**
+
+6. **Incorrect Scripture References**  
+   - Matthew 16:30 & 18:30 don't exist.  
+   - **Correct to Matthew 18:20** universally.
+
+---
+
+### **Tone & Messaging Improvements**
+1. **Community Headline**  
+   Original: "Connect with believers worldwide..."  
+   **Stronger**: *"Find Your Faith Family: Share Stories, Request Prayers & Grow Together"*
+
+2. **Video Library Tagline**  
+   Original: "Watch powerful sermons..."  
+   **Engaging**: *"Fuel Your Faith: On-Demand Sermons, Healing Sessions & Youth Programs"*
+
+3. **Prayer Request UX**  
+   Original: "Please keep my mother in your prayers..."  
+   **Action-Oriented**: *"Join Us in Prayer: My mother undergoes surgery this week. Your prayers strengthen our family."*
+
+4. **Live Chat Headline**  
+   Original: "Join our global community..."  
+   **Urgent**: *"Worship Live Now: Global Prayer & Teaching in Progress"*
+
+---
+
+### **Brand Voice Guidelines**
+1. **Core Principles**  
+   - ✅ **Warmth**: Use "we/us" language (*"Our community will pray for you"*)  
+   - ✅ **Hope**: Emphasize positive outcomes (*"Discover healing through prayer"*)  
+   - ❌ **Avoid**: Robotic stats ("45K Prayers") → humanize (*"45,000 Prayers Lifted Up"*)
+
+2. **Section Renaming**  
+   | Current | Recommended | Reason |
+   |---|---|----|
+   | "Hailing" | **Healing Ministry** | Corrects typo + clarifies purpose |
+   | "Earth Stories" | **Faith Testimonies** | Avoids confusion with environmental content |
+   | "Pedestria" | **Podcasts** | Industry-standard terminology |
+
+3. **Button Copy Hierarchy**  
+   ```diff
+   - [Join]
+   + [Join Live Stream]
+   
+   - [Give your email]
+   + [Get Daily Encouragement]
+   ```
+
+---
+
+### **Visual-Copy Integration Fixes**
+1. **Live Schedule Section**  
+   - **Problem**: "600 AM + 250 AM" (nonsensical time formats)  
+   - **Fix**: **"6:00 AM EST | Replay at 2:50 PM EST"** + add timezone converter
+
+2. **Footer Overhaul**  
+   - **Problem**: Repeated/placeholder partner logos ("Former Legal")  
+   - **Fix**: **"Supported by Faithful Partners"** + real organization names
+
+3. **Testimonial Headlines**  
+   Original: "Testimony: God’s Provision..."  
+   **Visual-Driven**:  
+   > ✨ **"We Never Went Hungry: How God Provided When I Lost My Job"**  
+   > *Michael @ MaharikiUSA | 4 hours ago*
+
+---
+
+### **404 Page Opportunity**
+Current: Generic "Oops! Page not found"  
+**Pastoral Alternative**:  
+> "You're on an Uncharted Path  
+> While we fix this journey,  
+> **[Return Home](#)** or **[Request Prayer](#)**"  
+
+*Includes ministry opportunity rather than dead end.*
+
+---
+
+### **Implementation Roadmap**
+1. **Phase 1 (Critical)**:  
+   - Fix offensive/confusing terms ("North Korea")  
+   - Correct scripture references  
+   - Standardize navigation labels  
+
+2. **Phase 2 (UX Enhancement)**:  
+   - Add video metadata labels (views/comments)  
+   - Humanize stats ("2.5K+ Members" → "2,500+ Faith Family Members")  
+
+3. **Phase 3 (Tone Alignment)**:  
+   - Rewrite CTAs using warm action verbs ("Join", "Share", "Discover")  
+   - Implement testimonial storytelling framework  
+
+**Final Tip**: Add hover tooltips for insider language (e.g., "GKP" = "God's Kingdom Partners?"). Clarify through context.
+
+This copy overhaul positions GKP Radio as a trusted, compassionate community instead of a generic platform. Every word should reinforce spiritual safety and connection.

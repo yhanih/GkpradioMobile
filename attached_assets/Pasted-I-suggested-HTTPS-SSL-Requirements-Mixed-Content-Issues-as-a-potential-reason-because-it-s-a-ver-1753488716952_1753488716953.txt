@@ -1,0 +1,14 @@
+I suggested "HTTPS/SSL Requirements (Mixed Content Issues)" as a potential reason because it's a very common and often overlooked problem when embedding content from one source (your Owncast server) into a webpage from another source, especially if one is secure (HTTPS) and the other is not (HTTP).
+Here's a more detailed breakdown of why it's a significant factor:
+Browser Security: Modern web browsers (Chrome, Firefox, Edge, Safari, etc.) prioritize user security. When a user visits a website over HTTPS (which means the connection is encrypted and authenticated), the browser expects all content on that page to also be loaded securely via HTTPS.
+What is Mixed Content?
+If your main HTML page is loaded from https://yourwebsite.com, but the video stream (<source src="...">) is trying to load from http://your.owncast.domain/hls/stream.m3u8, that's "mixed content."
+It's a "mix" of secure (HTTPS) and insecure (HTTP) content on the same page.
+Why is it a Problem?
+Security Vulnerability: Even if your main page is secure, loading insecure content (like a video stream) over HTTP makes the entire page vulnerable. An attacker could potentially "eavesdrop" on the insecure connection, inject malicious code into the stream, or track user activity.
+User Trust: Browsers want to ensure users have a fully secure experience. If they detect mixed content, they often display warnings to the user (e.g., a broken padlock icon, "Not Secure" message) or, more severely, block the insecure content from loading entirely.
+Browser Behavior:
+Passive Mixed Content (like Video/Audio): For passive content (which doesn't interact with the page's functionality), browsers might try to automatically upgrade the HTTP request to HTTPS. If your Owncast server also serves the stream over HTTPS and it's simply a http:// typo, it might work. However, if the Owncast server only serves it over HTTP, the browser will likely block it or display a warning.
+Active Mixed Content (like Scripts/CSS): For active content (JavaScript, CSS, iframes), browsers are much stricter and will almost always block it outright because the security risk is higher (an attacker could take control of the page).
+How it Affects Your Stream: If your website is HTTPS and your Owncast stream URL is HTTP, the browser might silently block the video from loading. You won't see an obvious "video not playing" error on the page, but in your browser's developer console (F12), you'll likely find errors related to "Mixed Content," "Blocked loading mixed active content," or "Failed to load resource" with a security warning.
+In summary, if your embedding page is HTTPS, your Owncast stream must also be accessible via HTTPS to avoid mixed content issues and ensure reliable playback across all browsers. This usually means configuring SSL/TLS on your Owncast server or the proxy in front of it.

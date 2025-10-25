@@ -1,0 +1,226 @@
+You are a senior full-stack engineer working inside this repo. Goal: finalize a production-ready version of GKPRADIO. Keep the existing visual design. Fix UX, wiring, security, and performance so the site is easy to load on mobile and desktop.
+
+Constraints
+
+Do not introduce visual redesigns.
+
+No new heavy libraries unless required. Prefer zero-dep or tiny utilities.
+
+Keep bundle sizes small and page load fast.
+
+Prereqs. Verify and set these env vars. If any is missing, create it.
+
+TURNSTILE_SECRET_KEY and VITE_TURNSTILE_SITE_KEY. If the secret is missing, allow signup and login but log captcha_skipped=true on the server.
+
+DATABASE_URL
+
+JWT_SECRET or session secret
+
+EMAIL_FROM, SMTP_URL (or provider keys)
+
+AZURACAST_BASE_URL
+
+DEV_TEST_TOKEN for test hooks
+
+A) UX wiring and navigation
+
+Replace all remaining “app” text with the logo text “GKPRADIO” in the header and link it to /.
+
+Ensure every button and nav item routes to a working page or action. No dead ends. Wire these at minimum:
+
+Prayer Request (Reply)
+
+Pray for Others
+
+To My Wife
+
+To My Husband
+
+Words of Encouragement
+
+Physical & Mental Health
+
+Today’s Schedule
+
+Search
+
+Only the homepage keeps a hero section. Remove hero blocks and any negative white space at the top from all other pages. Keep spacing consistent with the design system.
+
+Search button must route to the search view and execute a real query. If a search page already exists, connect the button. If not, create a minimal results view that uses the existing data layer.
+
+B) “Sponsored by” section (desktop and mobile)
+
+Implement a single, reusable <Sponsors/> component:
+
+Responsive grid on desktop, horizontal scroll on mobile.
+
+Lazy load images with width/height attributes and loading="lazy".
+
+Each sponsor has name, logoUrl, href, aria-label.
+
+No duplicate “Sponsor: Slideshow” blocks. Remove any duplicates and dead markup.
+
+Style to match current UI tokens. No extra hero-like spacing.
+
+Add basic skeleton loading for logos so layout stays stable.
+
+C) Notifications
+Implement event-driven notifications for posts and replies. Scope:
+
+Triggers: Prayer Request (Reply), Pray for Others, To My Wife, To My Husband, Words of Encouragement, Physical & Mental Health.
+
+Delivery:
+
+In-app real time via WebSocket or SSE.
+
+Email fallback via SMTP for offline users.
+
+Preferences: per-user toggle per category.
+
+Queue: background job or minimal queue table to avoid blocking requests.
+
+D) Security hardening
+
+Turnstile on signup and login:
+
+Client: render Turnstile with VITE_TURNSTILE_SITE_KEY.
+
+Server: verify token with TURNSTILE_SECRET_KEY.
+
+If secret missing, proceed but log captcha_skipped=true with timestamp and IP hash.
+
+Passwords: hash with Argon2 or bcrypt at strong cost. Enforce minimum length and checks.
+
+Sessions or JWT:
+
+HTTP-only, Secure, SameSite=strict cookies.
+
+Short-lived access token and rotating refresh if JWT.
+
+Rate limits:
+
+Login, signup, password reset, notifications API.
+
+Per IP + per account windowed limits.
+
+Input validation and sanitization on all POST and query endpoints. Reject on schema fail.
+
+Content Security Policy, X-Frame-Options, HSTS, and other headers via Helmet.
+
+Database privacy:
+
+Ensure reads are scoped to the current user where expected.
+
+For messages, enforce owner checks and avoid leaking private threads.
+
+Logging:
+
+No PII in logs. Redact emails and tokens. Log only event type, status, and coarse metadata.
+
+E) Performance and “easy to load” budgets
+Target fast loads on 4G and low-end Android.
+
+Budgets:
+
+Initial JS for homepage ≤ 200 KB gzipped.
+
+Total image bytes on first paint ≤ 300 KB.
+
+LCP ≤ 2.5 s on emulated 4G. TTI ≤ 3.5 s.
+
+Actions:
+
+Code-split routes. Lazy load non-critical pages and admin tools.
+
+Tree-shake and remove unused icons and UI utilities.
+
+Compress and resize sponsor logos. Serve WebP/AVIF with <picture>.
+
+Preload hero font only on the homepage.
+
+Gzip and Brotli on server. Long-cache immutable assets with content hashes.
+
+Remove console debug and dev-only code from production builds.
+
+F) Link and UX integrity checks
+Create a “link integrity” script that crawls the app at build time:
+
+Flag any button or anchor that points to a 404 or missing route.
+
+Ensure all listed categories and pages in section A resolve and render.
+
+G) Automated tests
+
+Unit tests:
+
+Route map exports and renders without error.
+
+<Sponsors/> renders at least 1 sponsor and no duplicates.
+
+E2E with Playwright:
+
+Homepage loads, LCP element visible, header logo routes to /.
+
+Each button in section A navigates and asserts a page-specific element.
+
+Login flow with and without Turnstile secret. Expect captcha_skipped log in the latter case.
+
+Performance:
+
+Lighthouse CI or pageSpeed script. Assert budgets from section E.
+
+H) Build and report
+
+Run typecheck, lint, tests, E2E, and performance check.
+
+Produce a concise report:
+
+Wired routes list with status OK.
+
+Pages with hero removed and spacing normalized.
+
+Sponsors component verification on desktop and mobile.
+
+Security checklist items applied.
+
+Performance metrics vs budgets with any items over budget highlighted.
+
+Output artifact paths and final bundle sizes.
+
+I) Commands
+
+Ensure npm run scripts exist for: typecheck, lint, build, preview, test, test:e2e, links:check, perf.
+
+If missing, add them. Then run in this order:
+
+npm run typecheck
+
+npm run lint
+
+npm run build
+
+npm run links:check
+
+npm run test
+
+npm run test:e2e
+
+npm run perf
+
+Acceptance criteria
+
+No visual regressions. Only homepage has a hero. No top negative space on other pages.
+
+All buttons and nav items work and land on real pages.
+
+Sponsors section is clean, responsive, and free of duplicates.
+
+Login and messaging are protected, rate-limited, and validated.
+
+Turnstile integrated with server-side verification, with captcha_skipped fallback.
+
+Mobile Lighthouse Performance ≥ 90 and Accessibility ≥ 90 on homepage.
+
+Build report shows JS and image budgets met.
+
+When complete, print the report and the list of modified files.

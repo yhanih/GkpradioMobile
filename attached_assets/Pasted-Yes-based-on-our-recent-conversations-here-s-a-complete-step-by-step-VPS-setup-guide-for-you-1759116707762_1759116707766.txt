@@ -1,0 +1,294 @@
+Yes ✅ — based on our recent conversations, here’s a **complete, step-by-step VPS setup guide for your GKP Radio app**, fully reconstructed so you can hand it to your agent as the “source of truth” before pushing future updates.
+I’ve broken it down into structured sections for clarity:
+
+---
+
+## 🧭 **1. VPS Baseline Setup**
+
+### Server Environment
+
+* **OS**: Ubuntu (22.04 LTS or 24.04 LTS)
+* **User**: A non-root user named `deploy` with `sudo` privileges.
+* **Firewall**: UFW should allow at least:
+
+  * `22/tcp` (SSH)
+  * `80/tcp` (HTTP)
+  * `443/tcp` (HTTPS)
+  * `8080/tcp` (AzuraCast admin panel)
+  * `8000/tcp` (AzuraCast streaming)
+
+```bash
+sudo ufw allow OpenSSH
+sudo ufw allow 80
+sudo ufw allow 443
+sudo ufw allow 8080
+sudo ufw allow 8000
+sudo ufw enable
+```
+
+---
+
+## 🧰 **2. Directory Structure**
+
+Your app lives under:
+
+```
+/srv/gkpradio
+```
+
+Within this:
+
+```
+/srv/gkpradio/
+├── deploy/
+│   └── restart.sh        # restart script for systemd
+├── dist/                 # production build output
+├── .env                  # environment variables
+└── (cloned git repo)
+```
+
+---
+
+## 🌿 **3. Git & GitHub Actions CI/CD**
+
+### SSH Key & Repo Setup
+
+1. Generate an SSH key as the `deploy` user:
+
+   ```bash
+   ssh-keygen -t ed25519 -C "gkpradio-ci" -f ~/.ssh/id_ed25519
+   ```
+2. Add the **public key** (`~/.ssh/id_ed25519.pub`) to your **GitHub repo Deploy Keys** (with write access).
+3. Add the **private key** to GitHub repo **Secrets** as `SSH_PRIVATE_KEY`.
+
+### GitHub Secrets Required
+
+* `SSH_PRIVATE_KEY` → from above
+* `VPS_HOST` → e.g. `74.208.102.89`
+* `VPS_USER` → `deploy`
+* `VPS_PATH` → `/srv/gkpradio`
+
+### Deploy Workflow (`.github/workflows/deploy.yml`)
+
+A simplified version of your working CI/CD pipeline:
+
+```yaml
+name: Deploy to VPS
+
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    - name: Setup SSH
+      uses: webfactory/ssh-agent@v0.7.0
+      with:
+        ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+
+    - name: Deploy with rsync
+      run: |
+        rsync -avz --delete \
+        --exclude=".git" \
+        --exclude="node_modules" \
+        ./ ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}:${{ secrets.VPS_PATH }}
+
+    - name: Restart service
+      run: |
+        ssh ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} \
+        'sudo systemctl restart gkpradio'
+```
+
+---
+
+## 📄 **4. Environment Variables**
+
+The `.env` file on the VPS must include all critical secrets. Example:
+
+```
+DATABASE_URL=postgres://[user]:[password]@[host]:[port]/[db]
+SUPABASE_URL=https://xxxxx.supabase.co
+SUPABASE_SERVICE_ROLE_KEY=your-supabase-service-role-key
+JWT_SECRET=your-jwt-secret
+SESSION_SECRET=your-session-secret
+STRIPE_SECRET_KEY=sk_live_xxxx
+AZURACAST_API_KEY=your-azuracast-api-key
+AZURACAST_BASE_URL=http://74.208.102.89:8080
+AZURACAST_STATION_ID=1
+SITE_URL=https://godkingdomprinciplesradio.com
+PORT=3001
+```
+
+> **Important**
+>
+> * These must be present **before** the build & systemd service start.
+> * Don’t rely on PM2 dotenv, use `systemd` for reliable env loading.
+
+---
+
+## 🏗 **5. Build & Install**
+
+After each GitHub deploy (or manually during first setup):
+
+```bash
+cd /srv/gkpradio
+npm install --legacy-peer-deps
+npm run build
+```
+
+* Frontend builds to `dist/public/` (via Vite).
+* Backend bundles to `dist/index.js` (via esbuild).
+
+---
+
+## 🧭 **6. Systemd Service**
+
+File: `/etc/systemd/system/gkpradio.service`
+
+```ini
+[Unit]
+Description=GKP Radio App
+After=network.target
+
+[Service]
+WorkingDirectory=/srv/gkpradio
+ExecStart=/usr/bin/node /srv/gkpradio/dist/index.js
+Restart=always
+User=deploy
+EnvironmentFile=/srv/gkpradio/.env
+
+[Install]
+WantedBy=multi-user.target
+```
+
+Enable and start:
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable gkpradio
+sudo systemctl start gkpradio
+```
+
+Check logs:
+
+```bash
+sudo journalctl -u gkpradio -n 50 --no-pager
+```
+
+---
+
+## 🌐 **7. Nginx Reverse Proxy**
+
+File: `/etc/nginx/sites-available/gkpradio`
+
+```nginx
+server {
+    listen 80;
+    server_name godkingdomprinciplesradio.com www.godkingdomprinciplesradio.com;
+
+    location / {
+        proxy_pass http://127.0.0.1:3001;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection 'upgrade';
+        proxy_set_header Host $host;
+        proxy_cache_bypass $http_upgrade;
+    }
+
+    location /hls/ {
+        root /srv/gkpradio/dist/public;
+        add_header Cache-Control no-cache;
+    }
+}
+```
+
+Activate and reload:
+
+```bash
+sudo ln -s /etc/nginx/sites-available/gkpradio /etc/nginx/sites-enabled/
+sudo nginx -t
+sudo systemctl reload nginx
+```
+
+---
+
+## 📡 **8. Streaming Stack**
+
+### AzuraCast
+
+* Installed via Docker at:
+
+  * Admin Panel: `http://74.208.102.89:8080`
+  * Stream URL: `http://74.208.102.89:8000`
+* Connected to frontend via:
+
+  * `AZURACAST_API_KEY`
+  * `AZURACAST_BASE_URL`
+  * `AZURACAST_STATION_ID`
+
+### Owncast (Optional for Video)
+
+* Running at `http://74.208.102.89:8091` (based on previous setup)
+* Embedded in frontend for live video streams.
+
+---
+
+## 🚀 **9. Deployment Flow Summary**
+
+1. Developer commits changes → pushes to `main`.
+2. GitHub Actions triggers deployment:
+
+   * Rsyncs code to VPS.
+   * Runs `npm install` & `npm run build`.
+   * Restarts systemd service.
+3. Nginx proxies requests → Node app handles frontend/backend.
+4. AzuraCast & Owncast continue streaming.
+
+---
+
+## 📝 **10. Maintenance Commands**
+
+* **Restart app**
+  `sudo systemctl restart gkpradio`
+
+* **View logs**
+  `sudo journalctl -u gkpradio -n 100 --no-pager`
+
+* **Manual deploy (if needed)**
+
+  ```bash
+  cd /srv/gkpradio
+  git pull
+  npm install --legacy-peer-deps
+  npm run build
+  sudo systemctl restart gkpradio
+  ```
+
+---
+
+## 🧪 **11. What’s Working Now**
+
+✅ Node server running on port `3001`
+✅ Nginx reverse proxy serving domain
+✅ `.env` properly loaded through systemd
+✅ AzuraCast reachable at `8080`/`8000`
+✅ CI/CD pipeline mostly working (after SSH key fix)
+✅ VPS cleaned up (PocketBase removed, only Node + Nginx + AzuraCast)
+
+---
+
+## 🟡 **12. TODO / Future Dev Tips**
+
+* Make sure all secrets are synced between `.env` and GitHub Secrets.
+* Always **test the app locally** before pushing to `main`.
+* Add migrations (if using Supabase/Postgres) before restart in GitHub Actions.
+* Optional: Set up HTTPS via Certbot for production.
+
+---
+
+Would you like me to export this as a **Markdown file or PDF** so you can give it directly to your agent? (✅ recommended)

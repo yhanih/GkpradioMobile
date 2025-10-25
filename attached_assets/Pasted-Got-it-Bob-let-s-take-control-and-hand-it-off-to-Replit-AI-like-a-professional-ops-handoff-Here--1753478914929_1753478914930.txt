@@ -1,0 +1,128 @@
+Got it, Bob — let’s take control and hand it off to Replit AI like a professional ops handoff. Here's a **fully structured prompt** tailored for Replit's AI Coding Assistant that contains **everything it needs** to finish the job **and fix the Owncast + OBS streaming integration**. You just copy-paste this entire thing into Replit’s AI prompt box:
+
+---
+
+### ✅ COPY & PASTE INTO REPLIT AI CODING PROMPT:
+
+````markdown
+🚨 MISSION BRIEFING: Configure streaming from Windows OBS to Owncast running on my Ubuntu VPS 🚨
+
+👤 User: Bob  
+🗺️ Context: I am streaming from OBS Studio on my **Windows 10** laptop. I want my **Owncast stream** hosted on my VPS to embed live video into a **Replit-hosted frontend website**.
+
+---
+
+## 🖥️ VPS INFO
+- OS: Ubuntu 22.04 (x86_64)
+- IP Address: `74.208.102.89`
+- Owncast is located at: `/opt/owncast/owncast/`
+- Owncast binary: `/opt/owncast/owncast/owncast`
+- FFmpeg path: `/usr/bin/ffmpeg`
+- RTMP Port: `1935`
+- Web UI Port: `8080`
+
+Owncast was installed using the installer script (`https://owncast.online/install.sh`) and is already running via systemd:
+```bash
+sudo systemctl status owncast
+````
+
+Shows: ✅ active (running)
+
+Confirmed:
+
+```bash
+sudo lsof -i -P -n | grep LISTEN | grep 1935
+```
+
+\=> Shows it's listening on `1935`
+
+---
+
+## 🔒 STREAM KEY
+
+My stream key is: `gkpAdmin2025@`
+
+OBS Settings should point to:
+
+```
+Stream URL: rtmp://74.208.102.89:1935/live
+Stream Key: gkpAdmin2025@
+```
+
+---
+
+## ❌ PROBLEM
+
+Streaming from OBS on Windows fails:
+
+> "Failed to connect to server. Connection timed out."
+
+BUT when I check from the VPS:
+
+```
+sudo lsof -i -P -n | grep LISTEN | grep 1935
+```
+
+it confirms Owncast is listening on `*:1935`
+
+---
+
+## 🧠 WHAT YOU (REPLIT AI) SHOULD DO
+
+1. 🧱 **Check if port 1935 is publicly open**
+
+   * Use a tool like `netcat`, `nmap`, or suggest `ufw`/cloud provider config to make sure port 1935 is open from **external (public) access**, not just internal.
+
+2. 🔧 **Create or verify Owncast config.yaml**
+
+   * If `/opt/owncast/owncast/config.yaml` does NOT exist, create one and make sure it allows RTMP on 1935.
+   * Sample block to include:
+
+     ```yaml
+     rtmp:
+       enabled: true
+       port: 1935
+     web:
+       port: 8080
+     ffmpegPath: /usr/bin/ffmpeg
+     ```
+
+3. 🔁 **Restart Owncast**
+
+   ```bash
+   sudo systemctl restart owncast
+   ```
+
+4. 🧪 **Test external port from Replit side**
+
+   * Recommend user run:
+
+     ```powershell
+     Test-NetConnection 74.208.102.89 -Port 1935
+     ```
+
+     from Windows. If fails, suggest firewall or ISP blocking.
+
+5. 📦 **Provide final Replit HTML embed code**
+
+   * Give me a simple iframe block to embed the Owncast player into my website.
+
+---
+
+🎯 GOAL:
+Make it possible for OBS on my Windows laptop to stream to `rtmp://74.208.102.89:1935/live` using the key `gkpAdmin2025@`, and display the live video on my Replit-based frontend.
+
+Assume I have full root access to the VPS.
+
+DO NOT ask me questions. Just perform what is missing and tell me what exact step to do or script to run.
+
+Let’s go. 🎬
+
+```
+
+---
+
+This prompt is comprehensive, structured, and gives Replit AI zero excuses to get confused. You’ll hand off the baton cleanly.
+
+Let me know if you want a version that includes the **Replit frontend embed HTML** too.
+```

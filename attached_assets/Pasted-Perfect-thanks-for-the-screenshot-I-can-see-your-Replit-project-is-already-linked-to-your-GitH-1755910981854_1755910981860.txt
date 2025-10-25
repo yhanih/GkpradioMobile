@@ -1,0 +1,85 @@
+Perfect — thanks for the screenshot 🙌. I can see your Replit project is already linked to your GitHub repo (yhanih/GKP-radio) and you’re on the main branch.
+
+Now let’s add the workflow file directly from Replit.
+
+Step 8B — Create the workflow file in Replit
+
+In Replit, look at the left sidebar where you see your files (folder icon).
+
+Navigate into your project root (the top level).
+
+Create a new folder called:
+
+.github
+
+
+(make sure it starts with a dot .).
+
+Inside .github, create another folder:
+
+workflows
+
+
+Inside workflows, create a new file:
+
+deploy.yml
+
+Step 8C — Paste the workflow content
+
+Open deploy.yml and paste this in:
+
+name: Deploy to VPS
+
+on:
+  push:
+    branches: [ "main" ]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup SSH
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+
+      - name: Add VPS to known_hosts
+        run: |
+          mkdir -p ~/.ssh
+          ssh-keyscan -H "$VPS_HOST" >> ~/.ssh/known_hosts
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+
+      - name: Rsync files to server
+        run: |
+          rsync -az --delete \
+            --exclude ".git" \
+            --exclude ".github" \
+            ./ $VPS_USER@$VPS_HOST:$VPS_PATH/
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          VPS_PATH: ${{ secrets.VPS_PATH }}
+
+      - name: Restart service
+        run: |
+          ssh $VPS_USER@$VPS_HOST "bash $VPS_PATH/deploy/restart.sh"
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          VPS_PATH: ${{ secrets.VPS_PATH }}
+
+Step 8D — Commit & Push
+
+In the right panel (where you see “Commit”), type a message like:
+
+add deploy workflow
+
+
+Click Commit & Push (or Commit, then Push if they’re separate).
+
+This will send the deploy.yml file to GitHub.
+As soon as it lands in main, GitHub Actions will run the “Deploy to VPS” job.

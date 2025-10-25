@@ -1,0 +1,9 @@
+{
+	"appId": "com.gkpradio.app",
+	"appName": "GKP Radio",
+	"webDir": "dist/public",
+	"server": {
+		"androidScheme": "https"
+	},
+	"plugins": {}
+}

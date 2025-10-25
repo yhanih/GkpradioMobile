@@ -1,0 +1,75 @@
+          name: Deploy to VPS
+
+          on:
+            push:
+              branches: [ main ]
+
+          jobs:
+            build-and-deploy:
+              runs-on: ubuntu-latest
+
+              steps:
+                # Step 1: Checkout the repository
+                - name: Checkout code
+                  uses: actions/checkout@v4
+
+                # Step 2: Setup Node.js
+                - name: Setup Node.js
+                  uses: actions/setup-node@v4
+                  with:
+                    node-version: '20'
+                    cache: 'npm'
+
+                # Step 3: Install dependencies
+                - name: Install dependencies
+                  run: npm install
+
+                # Step 4: Build the application (inject all frontend secrets)
+                - name: Build application
+                  run: npm run build
+                  env:
+                    VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+                    VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+                    VITE_AZURACAST_BASE_URL: ${{ secrets.VITE_AZURACAST_BASE_URL }}
+                    VITE_AZURACAST_STATION_ID: ${{ secrets.VITE_AZURACAST_STATION_ID }}
+                    VITE_STRIPE_PUBLIC_KEY: ${{ secrets.VITE_STRIPE_PUBLIC_KEY }}
+                    VITE_VPS_HOST: ${{ secrets.VITE_VPS_HOST }}
+                    VITE_HLS_BASE_URL: ${{ secrets.VITE_HLS_BASE_URL }}
+                    VITE_ANTI_SPAM_ENABLED: ${{ secrets.VITE_ANTI_SPAM_ENABLED }}
+                    VITE_TURNSTILE_SITE_KEY: ${{ secrets.VITE_TURNSTILE_SITE_KEY }}
+
+                # Step 5: Setup SSH key
+                - name: Setup SSH Key
+                  run: |
+                    mkdir -p ~/.ssh
+                    echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/deploy_key
+                    chmod 600 ~/.ssh/deploy_key
+                    ssh-keyscan -H ${{ secrets.VPS_HOST }} >> ~/.ssh/known_hosts
+
+                # Step 6: Deploy to VPS using rsync
+                - name: Deploy to VPS
+                  run: |
+                    rsync -avz --delete \
+                      -e "ssh -i ~/.ssh/deploy_key" \
+                      ./dist/ \
+                      ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}:/srv/gkpradio/dist/
+
+                # Step 7: Restart systemd service
+                - name: Restart GKP Radio service
+                  run: |
+                    ssh -i ~/.ssh/deploy_key \
+                      ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} \
+                      "sudo systemctl restart gkpradio"
+
+                # Step 8: Verify service status
+                - name: Check service status
+                  run: |
+                    ssh -i ~/.ssh/deploy_key \
+                      ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} \
+                      "sudo systemctl status gkpradio --no-pager" || true
+
+                # Step 9: Clean up SSH key
+                - name: Clean up
+                  if: always()
+                  run: |
+                    rm -f ~/.ssh/deploy_key

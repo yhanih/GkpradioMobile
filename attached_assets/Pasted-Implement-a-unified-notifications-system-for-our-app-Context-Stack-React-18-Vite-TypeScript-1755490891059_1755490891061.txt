@@ -1,0 +1,91 @@
+Implement a unified notifications system for our app.
+
+Context
+- Stack: React 18 + Vite + TypeScript (frontend), Express.js + TypeScript (backend), PostgreSQL + Drizzle ORM, Node 18+.
+- Repo already contains posts, comments, prayer requests, direct messages, and calendar/event features.
+- Use Replit Secrets for config where needed.
+
+Goals
+1) Add notification types (expandable):
+   - Prayer Request (Reply): notify the request owner when someone replies.
+   - Pray for Others: notify a user when someone clicks “I prayed” or joins their prayer chain.
+   - To My Wife / To My Husband: notify the spouse user when tagged or messaged with these routes/categories.
+   - Words of Encouragement: notify thread followers and the original poster when new encouragement is posted.
+   - Physical & Mental Health: notify followers of this category when a new post or update appears.
+   - Calendar/Event: reminders for events the user created, RSVP’d “Yes/Interested” to, or follows by tag; notify on time changes, cancellations, and going-live for streams.
+   - Mentions (@username), direct messages, follows/subscribes, new content in a followed topic.
+   - System: role changes, moderation actions on my content, content approved/rejected.
+
+2) Inventory + detection
+   - Scan the codebase to discover existing entities and actions that imply notify-worthy events: create/update/delete on prayer_requests, comments/replies, messages, posts, reactions, RSVPs, livestream start, schedule changes.
+   - Add event emitters/hooks at these points without breaking current behavior.
+
+3) Data model (Drizzle migrations)
+   - notifications(id, user_id, type, ref_type, ref_id, title, body, metadata JSONB, read_at, created_at).
+   - notification_preferences(id, user_id, type, in_app bool, email bool, push bool, digest enum[none,daily,weekly], quiet_hours JSONB).
+   - notification_channels(id, user_id, email string?, push_token string?, webpush_keys JSONB?).
+   - notification_queue(id, user_id, type, payload JSONB, scheduled_for timestamptz, attempts int default 0, status enum[pending,processing,done,failed]).
+   - user_topic_subscriptions(id, user_id, topic_key, created_at).
+   - calendar_reminders(id, user_id, event_id, offset_minutes, method enum[in_app,email,push]).
+   - Add necessary FKs and indexes (user_id, created_at, type, status).
+
+4) Delivery channels
+   - In-app feed: real-time via WebSocket/SSE; fallback to poll. Unread badge on bell icon, infinite list, filters by type.
+   - Email: simple transactional emails using an adapter interface (stub now; load SMTP creds from secrets). Templated subjects/bodies.
+   - Push: add Web Push skeleton (subscribe/unsubscribe endpoints, store subscription). Provide a feature flag to disable in production if keys missing.
+
+5) API surface (Express + TypeScript)
+   - GET /api/notifications?cursor=…&type=…&unreadOnly=true
+   - POST /api/notifications/:id/read
+   - POST /api/notifications/read-all
+   - GET/PUT /api/notification-preferences
+   - POST /api/subscribe-topic, POST /api/unsubscribe-topic
+   - POST /api/webpush/subscribe, POST /api/webpush/unsubscribe
+   - POST /api/calendar/:eventId/reminders (create/update reminder rules)
+   - All endpoints require auth; enforce per-user access.
+
+6) Event pipeline
+   - Create a small domain emitter (emitNotificationEvent({type, actorId, targetUserIds[], ref})) that writes to notification_queue and creates immediate in-app rows in notifications when appropriate.
+   - Background worker (node script or BullMQ-lite without Redis: use DB queue table + advisory locks) that drains notification_queue, fanout per user + channel, respects preferences, schedules digests, retries with backoff, marks failed after N attempts.
+   - Idempotency: de-dupe by (type, user_id, ref_type, ref_id, short time window).
+
+7) Calendar + reminders
+   - For each event a user owns or RSVP’d to, auto-create default reminders: 24h and 15m before start.
+   - Handle updates: if event time changes, reschedule reminders.
+   - Special case: livestream start triggers “going live” notifications at start_time and when stream health flips to “live”.
+
+8) Frontend (React + TS)
+   - Bell icon with unread dot and count. Keyboard accessible.
+   - Notifications panel page with tabs: All, Mentions, Prayer, Messages, Calendar, System.
+   - Per-item actions: mark as read, open target, mute thread/topic.
+   - Preferences page: toggle per type and per channel. Digest cadence. Quiet hours.
+   - Settings link in the panel footer.
+
+9) Rules, safety, and UX
+   - Rate limit fanout per user. Batch related events within a small window (e.g., “3 people replied to your prayer request”).
+   - Respect quiet hours for email/push. Allow in-app to always show.
+   - Do not notify me about my own actions unless meaningful (e.g., scheduled event starting).
+
+10) Configuration
+   - Read SMTP creds from Replit Secrets if provided; if missing, log “email_disabled”.
+   - Read VAPID keys from secrets if provided; if missing, log “webpush_disabled”.
+   - Provide seed scripts to create sample notifications and a demo event.
+
+11) Tests + docs
+   - Unit tests for preference logic, queue drain, idempotency, and calendar rescheduling.
+   - Minimal integration test hitting the API.
+   - README section: how to run worker, how to configure SMTP/VAPID, how to add a new notification type.
+
+Acceptance criteria
+- In-app notifications work end to end for all listed types.
+- Preferences correctly block or allow per channel.
+- Queue reliably delivers, retries, and de-dupes.
+- Calendar reminders fire at correct offsets and reschedule on change.
+- Email and push are optional but code paths are implemented with feature flags.
+- PR includes migrations, backend, frontend UI, worker script, tests, and README updates.
+
+Deliverables
+- DB migrations (Drizzle).
+- Backend routes, event emitter, queue worker.
+- Frontend bell UI, notifications page, preferences page.
+- Seed and test scripts.

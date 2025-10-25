@@ -1,0 +1,62 @@
+Thanks for the clarification — you're right to be precise: we want to **fix the user info issue without breaking the UI layout or design flow**.
+
+Here’s a refined message you can send to the Replit agent (or use as an internal dev note), keeping the focus on preserving UI integrity:
+
+---
+
+**📌 Task: Properly Display Dynamic User Info Without Breaking the UI**
+
+Hey team,
+
+Currently, posts are showing `"Unknown user"` or `"Loading user data..."` in the UI. This is **not acceptable** for a community platform like ours, especially when we're supposed to highlight who posted what, and from where.
+
+### ✅ What needs to happen:
+
+1. For each post (original or reply), we need to **dynamically render the user’s chosen name and location** — like:
+
+   ```
+   test-909@Louisville, USA
+   ```
+
+2. This info already exists from when the user signs up or fills their profile. No need to track or guess anything.
+
+3. If no info is given, then fallback to:
+
+   ```
+   Anonymous@Unknown
+   ```
+
+### ❌ What we want to avoid:
+
+* Don’t break or overflow the UI layout.
+* Avoid janky loads like “Loading user data…” in the final render.
+* Don’t use placeholder constants — must be **live and reactive to user data**.
+* Absolutely **no IP-based guessing or tracking.** Users choose what shows.
+
+---
+
+### ✅ UI Preservation Notes:
+
+* Font size, padding, and alignment should be exactly like the existing "Unknown User" line to keep the card structure stable.
+* Keep the same spacing/margin as currently shown in `.post-author` class (or whatever is used).
+* If async user data loading is still required, make sure the component has a loading state that **reserves space**, so there's no layout shift.
+
+---
+
+### Suggested UI Component Logic (Pseudo-code):
+
+```jsx
+<PostAuthor>
+  {user?.username && user?.location ? (
+    `${user.username}@${user.location}`
+  ) : (
+    'Anonymous@Unknown'
+  )}
+</PostAuthor>
+```
+
+Let me know if I should help write the actual React or HTML code for this — but the priority is: **no UI breakage, real user info shown, fully dynamic.**
+
+---
+
+Would you like me to also write a fallback UI skeleton loader so that there's no flashing on load?

@@ -1,0 +1,450 @@
+1-Using this image as your inspiration 
+2-Create a modern, faith-based digital community platform called “GKP Radio” — a home for spiritual audio content, interactive community engagement, and real-time conversation.
+
+It’s not just a radio station — it’s a digital town square built around the Word.
+
+---
+
+🎯 GOALS:
+- Stream live radio with persistent audio player
+- Feature new podcast episodes with cross-platform listening options
+- Build a dynamic, discussion-first “Faith Community Hub”
+- Let users post testimonies, comment, and reply to threads
+- Allow users to create simple profiles displayed as `Name@CityCountry`
+- Organize videos and episodes into shareable, searchable categories
+- Connect every piece of content to a conversation
+- Optimize for mobile-first experience
+
+---
+
+🧱 SITE STRUCTURE:
+
+1. **Hero Section**
+   - Large featured banner with current episode
+   - “Now Playing” dynamic title and artist display
+   - Primary CTA: `▶ Start Listening`
+   - Carousel when not live: top episodes, featured hosts, or ministries
+
+2. **Sticky Audio Player**
+   - Always visible
+   - Show: play/pause, title, artist name, show logo
+   - Floating at bottom on mobile
+
+3. **Podcast / Episode Grid**
+   - Clean card layout
+   - Metadata: episode title, description, duration, tags
+   - Filters: “Newest”, “Most Popular”, “Topic”
+
+4. **Community Hub**
+   - Rebrand from “Ministry Fields” → “Faith Stories” or “Community Wall”
+   - Forum layout: thread title, replies, last activity
+   - Users click “Join the Conversation” → prompt to create profile
+   - Badges, likes, reactions enabled
+   - Thread preview shows recent posts on homepage
+
+5. **Video Section**
+   - Card grid layout: thumbnail, category, title, views
+   - Ability to share to: YouTube, Facebook, X (Twitter)
+   - Filters: Worship, Youth, Healing, Teachings
+
+6. **Connect Page (formerly Contact)**
+   - “Meet the Team” bios and photos
+   - Simple form: name, email, message, dropdown for topic
+   - Replace map with scripture quote or faith-centered call to action
+
+7. **Navigation + Footer**
+   - Top Nav: Home | Podcasts | Community | Videos | Connect | Donate
+   - Footer: Social links, Privacy Policy, “Sponsored By” logo section
+
+---
+
+🎨 DESIGN SYSTEM:
+
+- **Fonts:**
+  - Headings: Expressive serif (e.g., Playfair Display or Libre Baskerville)
+  - Body: Modern sans-serif (e.g., Inter, Lato, Poppins)
+- **Colors:**
+  - Primary: Deep Navy or Charcoal (#1A1E3F)
+  - Accent: Faith Green (#3DCB89) or Spiritual Gold (#FBB03B)
+  - Background: Soft white or dark mode-ready
+- **Buttons:**
+  - CTA: Filled with icon + label
+  - Secondary: Ghost style with border
+- **Cards:**
+  - Rounded, minimal shadows, hover animation
+- **Icons:**
+  - Simple, spiritual-infused (e.g., flame, cross, heart, microphone)
+
+---
+
+💬 MICROCOPY:
+- “Join the Conversation”
+- “Listen Now”
+- “Post Your Prayer”
+- “Watch & Reflect”
+- “Explore More Topics”
+- Profile input: `Steeven@LouisvilleUSA`
+
+---
+
+🚀 TECH & FUNCTIONALITY:
+- Responsive for all screen sizes
+- CMS-integrated for podcast, video, thread content
+- User accounts with comments + profile badge
+- Reactions, likes, and reply threads
+- Donation integration (tiers optional)
+- Optional gamification (points, badges)
+
+---
+
+✨ Build a website that balances serenity and engagement. Every interaction should feel like a personal invitation to worship, reflect, and contribute. Prioritize warmth, legibility, responsiveness, and a deeply human digital experience.
+
+3-Absolutely. You’re asking for a **Product Requirements Document (PRD)-level prompt**—something an AI (like Lovable) or a no-code developer could follow *precisely*, with **zero ambiguity**.
+
+Here is your **AI-Ready PRD-Style Prompt** that breaks down **every requirement, behavior, component, and layout** in explicit detail. This is not just an idea brief; this is a step-by-step construction manual, AI-readable from top to bottom.
+
+---
+
+# 📄 GKP RADIO WEBSITE — PRD-LEVEL AI PROMPT
+
+**Objective:** Build a fully responsive, community-focused, faith-based web platform titled **“GKP Radio”**, which integrates audio broadcasting, podcasts, video content, and a rich social discussion system.
+
+This website is not just a radio station—it is a **faith-centered digital community hub** with integrated media and personalized engagement features.
+
+---
+
+## I. 🌍 WEBSITE STRUCTURE OVERVIEW
+
+The website will consist of **6 core pages**:
+
+1. **Homepage**
+2. **Episodes/Podcast Library**
+3. **Community Hub (Discussion Board)**
+4. **Video Library**
+5. **Connect Page (Contact + Team)**
+6. **User Profile Page (Auto-generated)**
+
+---
+
+## II. 🧭 GLOBAL WEBSITE FEATURES
+
+These apply across every page.
+
+### 1. Navigation Bar (Sticky Top)
+
+* Logo left-aligned: "GKP Radio"
+* Right-aligned links:
+
+  * Home
+  * Podcasts
+  * Community
+  * Videos
+  * Connect
+  * Donate (highlighted CTA)
+* Sticky behavior: visible while scrolling
+
+### 2. Persistent Audio Player (Bottom-Fixed)
+
+* Always visible mini-player
+* Elements:
+
+  * Track/podcast title
+  * Artist/host name
+  * Play/Pause toggle
+  * Progress bar
+  * Share button (opens social share modal)
+* On mobile: docked at bottom with compact layout
+
+### 3. Color Palette & Fonts
+
+* Background: #F8FAFB (light) or #1C1F2C (dark mode)
+* Accent: #3DCB89 (faith green) or #FBB03B (gold for CTAs)
+* Text: #1A1E3F or #EDEDED
+* Fonts:
+
+  * Headings: Libre Baskerville or Playfair Display
+  * Body: Inter or Lato
+
+### 4. Icons
+
+* Use minimalist icon set (feather or line style)
+* Include: play, pause, comment, share, heart, fire (trending), cross (faith), smiley (reactions)
+
+### 5. Responsiveness
+
+* Fully mobile-first design
+* Flexbox/grid for layout
+* Buttons and icons must have 44px minimum touch area
+
+---
+
+## III. 🏠 HOMEPAGE
+
+**Goal:** Guide users toward listening or engaging with the community
+
+### Sections (In Order):
+
+#### 1. Hero Section (Digital Stage)
+
+* Large full-width banner
+* Elements:
+
+  * Episode/podcast image (hero thumbnail)
+  * Title (e.g. “NEW EPISODE: The Power of Prayer”)
+  * CTA: `▶ Start Listening`
+  * Show host (e.g., “with Pastor David”)
+  * If live: Show “LIVE NOW” badge + song title and artist
+
+#### 2. Platform Listening Options
+
+* Icons with links:
+
+  * Spotify
+  * Apple Podcasts
+  * SoundCloud
+* Label: “Listen On Your Favorite Platform”
+* Hover effect: scale + highlight icon
+
+#### 3. Upcoming Shows (Schedule)
+
+* Horizontal scroll or grid
+* Each card:
+
+  * Show Title
+  * Host Name
+  * Time (e.g., “Coming Up: 6PM EST”)
+  * Genre label (e.g., Worship, Talk)
+
+#### 4. Community Snapshot (Preview)
+
+* Title: “Faith Stories from Our Community”
+* Grid of 3-4 latest threads:
+
+  * Thread title
+  * Comment count
+  * Tags (e.g., Prayer, Testimony)
+  * “Join Conversation” CTA → links to community hub
+
+#### 5. Featured Videos Preview
+
+* Grid of 3 video cards:
+
+  * Thumbnail
+  * Category label (e.g., Youth, Worship, Testimony)
+  * Title + Duration
+  * “Watch More” CTA
+
+#### 6. Footer
+
+* Social Links: Facebook, Twitter/X, YouTube, Instagram
+* Sitemap Links: Home, Community, Videos, Contact
+* Legal: Privacy Policy, Terms of Use
+* Sponsor section (small “Supported by” logos or image slider)
+
+---
+
+## IV. 🎧 PODCAST LIBRARY PAGE
+
+**Route:** /podcasts
+
+* Grid layout: 2–4 columns
+
+* Each card:
+
+  * Episode thumbnail
+  * Title
+  * Host name
+  * Duration
+  * Tags: Topic (e.g., Family, Mental Health, Gospel)
+  * “▶ Play” button
+  * “Discuss this episode” link
+
+* Top filters:
+
+  * Categories dropdown
+  * Sort by: Newest | Popular | Most Discussed
+
+* Pagination or infinite scroll
+
+---
+
+## V. 🧑‍🤝‍🧑 COMMUNITY HUB PAGE
+
+**Route:** /community
+
+**Goal:** Allow users to post, reply, and discuss topics.
+
+### Sections:
+
+#### 1. Topic Categories
+
+* Grid or list of categories:
+
+  * Prayer Requests 🙏
+  * Praise Reports 🎉
+  * Testimonies 💬
+  * Life & Faith 🕊
+  * Youth Voices 🎧
+  * Hobbies & Healing 🎨
+
+#### 2. Discussion Threads
+
+* Layout: Forum-style
+* Each thread card:
+
+  * Title
+  * Created by: `Name@CityCountry`
+  * Replies count
+  * Last updated: X mins ago
+  * Tag (e.g., “Testimony”)
+
+#### 3. CTA (If Not Logged In)
+
+* “Join the Conversation”
+* Login modal or redirect to profile/signup
+
+#### 4. Gamification (Optional Phase 2)
+
+* Show badges: “Top Poster”, “Prayer Warrior”
+* Like/Reactions: ❤️ 🔥 🙏 🎯
+
+---
+
+## VI. 🎥 VIDEO LIBRARY PAGE
+
+**Route:** /videos
+
+### Video Cards
+
+* Thumbnail image
+* Title
+* Category label
+* Upload date
+* Duration
+* Views count
+* “Share” icon
+
+### Filters
+
+* Category (dropdown)
+* Most Watched, Newest
+
+---
+
+## VII. 📞 CONNECT PAGE
+
+**Route:** /connect
+
+### Sections:
+
+#### 1. Meet the Team
+
+* Grid of team members:
+
+  * Photo
+  * Name
+  * Role
+  * Short bio (max 160 characters)
+
+#### 2. Contact Form
+
+* Fields:
+
+  * Name
+  * Email
+  * Message
+  * Dropdown Topic: \[Prayer Request, Sponsorship, General Inquiry]
+
+#### 3. Optional CTA Boxes
+
+* “Submit a Prayer Request”
+* “Sponsor a Program”
+* “Join Our Team”
+
+---
+
+## VIII. 👤 USER PROFILES
+
+### Required to:
+
+* Post in community
+* Comment under episodes or videos
+
+### Profile Format:
+
+* Display name: `Firstname@CityCountry` (e.g., “Steeven\@PortAuPrinceHaiti”)
+* Optional bio (max 200 characters)
+* Optional avatar
+* Show:
+
+  * Recent posts
+  * Badges
+  * Joined date
+
+---
+
+## IX. 💰 MONETIZATION (PHASE 2)
+
+### Donate Button (Always Visible)
+
+* Link to `/donate` or external giving platform
+* CTA: “Support the Mission”
+
+### Sponsorship Model
+
+* Sponsors can:
+
+  * Get listed in footer with logo
+  * Be featured next to content with “Supported By”
+
+### Tiered Donation Example (Optional):
+
+* Bronze: \$5/month → thank you email
+* Silver: \$25/month → listed on wall of thanks
+* Gold: \$100/month → shoutout on stream
+
+---
+
+## X. 🔐 USER AUTHENTICATION
+
+* Required for:
+
+  * Posting comments
+  * Joining community
+  * Creating profile
+
+### Auth Flow:
+
+* Sign Up: Name, Email, Password, City, Country
+* Show `Name@CityCountry` everywhere
+* Login + Logout controls in header
+
+---
+
+## ✅ DEPLOYMENT CHECKLIST FOR LOVABLE AI
+
+* [ ] Create global header/nav with sticky behavior
+* [ ] Implement persistent audio player site-wide
+* [ ] Use card component system for episodes, threads, and videos
+* [ ] Implement CMS collections for:
+
+  * Episodes
+  * Threads
+  * Videos
+  * Users
+* [ ] Add dynamic filters for each content type
+* [ ] Add user profile system with badges
+* [ ] Mobile-first breakpoints + touch optimization
+* [ ] Add dark mode toggle (optional)
+
+---
+
+This PRD-style prompt can be copied into **Lovable** section-by-section or all at once. The AI builder will understand what’s required visually and functionally—this is the blueprint.
+
+If you'd like, I can also:
+
+* Format this as a downloadable .md or PDF doc
+* Break it into copy/paste Lovable “page prompts”
+* Create a Figma prototype from this PRD
+
+Would you like me to package this next?
