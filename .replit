@@ -1,4 +1,4 @@
-modules = ["nodejs-20", "bash", "web"]
+modules = ["bash", "nodejs-20", "web"]
 run = "npm run dev"
 hidden = [".config", ".git", "generated-icon.png", "node_modules", "dist"]
 
@@ -46,6 +46,15 @@ outputType = "console"
 [[workflows.workflow.tasks]]
 task = "shell.exec"
 args = "cd mobile && npx expo start --tunnel --clear"
+
+[[workflows.workflow]]
+name = "Codex"
+mode = "sequential"
+author = 48802837
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "npm install openai"
 
 [agent]
 integrations = [
