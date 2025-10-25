@@ -5,3 +5,29 @@ server/public
 vite.config.ts.*
 *.tar.gz
 .env
+
+# Build artifacts
+android/app/src/main/assets/public/
+ios/App/App/public/
+deployment-package/
+deployment-packages/
+
+# Temporary files
+attached_assets/
+*.png
+*.jpg
+*.jpeg
+!client/public/**/*.png
+!client/public/**/*.jpg
+!client/public/**/*.jpeg
+!mobile/assets/**/*.png
+!mobile/assets/**/*.jpg
+!mobile/assets/**/*.jpeg
+
+# Logs and temp files
+*.log
+.cache
+.temp
+*.swp
+*.swo
+*~
