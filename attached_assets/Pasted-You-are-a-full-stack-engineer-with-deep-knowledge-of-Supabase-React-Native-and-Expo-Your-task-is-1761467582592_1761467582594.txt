@@ -1,0 +1,71 @@
+You are a full-stack engineer with deep knowledge of Supabase, React Native, and Expo. 
+Your task is to completely debug and fix the GKP Radio mobile app so it becomes fully functional and ready for App Store and Play Store submission.
+
+# === GOALS ===
+1. Fix all runtime data fetching errors across tabs (Home, Community, Podcasts, Videos, Profile).
+2. Ensure all Supabase queries, schemas, and API responses match what the frontend expects.
+3. Run a complete build verification for iOS and Android using Expo EAS.
+4. Finalize the app.json / app.config.js / package.json metadata for store submission.
+5. Produce a clean, working build that loads real data without “Unable to load content” errors.
+
+# === DIAGNOSIS ===
+- Current symptoms: All tabs fail with messages like “Unable to load content. Please try again.” 
+- Console logs show `Error fetching data: {"code":"42703"}` → PostgreSQL undefined column errors.
+- This indicates a mismatch between Supabase table schemas and client queries.
+
+# === EXECUTION PLAN ===
+1. **Analyze environment configuration**
+   - Verify .env or app.config.js has:
+     - SUPABASE_URL
+     - SUPABASE_ANON_KEY
+     - API_BASE_URL (if using custom Express backend)
+     - STRIPE_PUBLIC_KEY (optional)
+   - Print them (masked) to confirm connection.
+
+2. **Auto-repair Supabase schema**
+   - Fetch current schema via Supabase client or migration files.
+   - Compare with frontend expectations (tables: `profiles`, `home_sections`, `community_posts`, `videos`, `podcasts`).
+   - Auto-generate SQL `CREATE TABLE IF NOT EXISTS` statements to restore missing columns.
+   - Apply migrations automatically via Supabase SQL API.
+
+3. **Validate API endpoints**
+   - For each section, test fetching:
+     - `/home` → should return hero data, featured sermons, live stream status.
+     - `/community` → posts, testimonies, prayers.
+     - `/podcasts` → list with title, author, audio_url.
+     - `/videos` → list with title, thumbnail, video_url.
+     - `/profile` → current user profile via Supabase Auth.
+
+4. **Fix all Supabase queries**
+   - For each fetch call that fails, replace missing column references with actual ones from schema.
+   - Ensure all async functions use `await` and proper `.select()` columns.
+   - Catch and log real error messages (console + toast).
+
+5. **Test UI flows**
+   - Ensure loading spinners appear instead of blank screens.
+   - Verify retry buttons re-trigger fetch functions.
+   - Test login/logout and persistent user session.
+
+6. **Prepare for release**
+   - Run `npx expo-doctor` to fix SDK issues.
+   - Run `npx expo prebuild` if using native modules.
+   - Create clean metadata:
+     - app.json → name, slug, version, orientation, scheme, icon, splash, ios.bundleIdentifier, android.package
+   - Run:
+     - `eas build -p ios --profile preview`
+     - `eas build -p android --profile preview`
+
+7. **Output report**
+   - Summarize all fixed issues, created tables, and test results.
+   - Confirm “✅ All screens successfully fetching live data.”
+   - If build successful, output: “Ready for Store Upload.”
+
+# === EXTRA REQUIREMENTS ===
+- Use Supabase JavaScript client v2.
+- Use TypeScript strict mode for type validation.
+- Ensure all code is compatible with Expo SDK 51+.
+- Do NOT break authentication flow or existing playback UI.
+- Keep all UI/UX styling intact (Tailwind or shadcn/ui).
+
+Now begin the full process automatically. 
+Diagnose the cause, fix all Supabase schema + API mismatches, verify every screen loads real content, then output a detailed final report of all changes and next steps for submission.
