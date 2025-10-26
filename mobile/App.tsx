@@ -10,6 +10,7 @@ import { CommunityScreen } from './src/screens/CommunityScreen';
 import { PodcastsScreen } from './src/screens/PodcastsScreen';
 import { VideoScreen } from './src/screens/VideoScreen';
 import { LiveScreen } from './src/screens/LiveScreen';
+import { ProfileScreen } from './src/screens/ProfileScreen';
 import { AudioPlayer } from './src/components/AudioPlayer';
 import { AuthProvider, useAuth } from './src/contexts/AuthContext';
 import { LoginScreen } from './src/screens/auth/LoginScreen';
@@ -33,8 +34,8 @@ function MainNavigator() {
               iconName = 'mic';
             } else if (route.name === 'Video') {
               iconName = 'videocam';
-            } else if (route.name === 'Live') {
-              iconName = 'radio';
+            } else if (route.name === 'Profile') {
+              iconName = 'person';
             }
 
             return <Ionicons name={iconName} size={size} color={color} />;
@@ -65,7 +66,7 @@ function MainNavigator() {
         <Tab.Screen name="Community" component={CommunityScreen} />
         <Tab.Screen name="Podcasts" component={PodcastsScreen} />
         <Tab.Screen name="Video" component={VideoScreen} />
-        <Tab.Screen name="Live" component={LiveScreen} />
+        <Tab.Screen name="Profile" component={ProfileScreen} />
       </Tab.Navigator>
       
       <AudioPlayer />

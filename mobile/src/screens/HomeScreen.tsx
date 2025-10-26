@@ -23,10 +23,17 @@ export function HomeScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [userName, setUserName] = useState<string>('');
 
   useEffect(() => {
     fetchData();
   }, []);
+
+  useEffect(() => {
+    if (user) {
+      fetchUserProfile();
+    }
+  }, [user]);
 
   const fetchData = async () => {
     try {
@@ -71,9 +78,41 @@ export function HomeScreen() {
     }
   };
 
+  const fetchUserProfile = async () => {
+    try {
+      if (!user) return;
+      
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('full_name')
+        .eq('id', user.id)
+        .single();
+
+      if (error && error.code !== 'PGRST116') {
+        console.error('Error fetching user profile:', error);
+        return;
+      }
+
+      if (data?.full_name) {
+        setUserName(data.full_name.split(' ')[0]);
+      } else if (user.email) {
+        setUserName(user.email.split('@')[0]);
+      }
+    } catch (error) {
+      console.error('Error in fetchUserProfile:', error);
+    }
+  };
+
+  const getGreeting = () => {
+    const hour = new Date().getHours();
+    if (hour < 12) return 'Good morning';
+    if (hour < 17) return 'Good afternoon';
+    return 'Good evening';
+  };
+
   const onRefresh = async () => {
     setRefreshing(true);
-    await fetchData();
+    await Promise.all([fetchData(), fetchUserProfile()]);
     setRefreshing(false);
   };
 
@@ -101,7 +140,9 @@ export function HomeScreen() {
                     <Text style={styles.logoText}>GKP</Text>
                   </View>
                   <View>
-                    <Text style={styles.welcomeText}>Welcome back!</Text>
+                    <Text style={styles.welcomeText}>
+                      {getGreeting()}{userName ? `, ${userName}` : ''}!
+                    </Text>
                     <Text style={styles.radioName}>Kingdom Principles Radio</Text>
                   </View>
                 </View>
