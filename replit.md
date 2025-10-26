@@ -8,7 +8,7 @@ Native iOS and Android application for GKP Radio (God Kingdom Principles Radio).
 - **Tech Stack**: React Native 0.81, Expo SDK 54, TypeScript
 - **Backend**: Supabase (Authentication, Database, Real-time)
 - **Streaming**: AzuraCast for live radio and now-playing data
-- **UI Framework**: NativeWind (Tailwind CSS for React Native)
+- **UI Framework**: React Native StyleSheet API
 - **Navigation**: React Navigation 7
 - **Audio**: Expo AV
 - **Storage**: AsyncStorage for session persistence
@@ -56,7 +56,7 @@ Native iOS and Android application for GKP Radio (God Kingdom Principles Radio).
 3. Scan the QR code shown in the console
 4. App loads immediately for real-time testing
 
-**For detailed setup instructions from scratch**, see `EXPO_SETUP_GUIDE.md`
+**For detailed setup instructions from scratch**, see `mobile/SETUP.md`
 
 ## Environment Configuration
 
@@ -120,7 +120,7 @@ mobile/
 ├── App.tsx                # Main entry with navigation
 ├── app.json               # Expo configuration
 ├── eas.json               # Build configuration
-├── babel.config.js        # NativeWind v4 configuration
+├── babel.config.js        # Babel configuration
 └── package.json           # Dependencies
 ```
 
@@ -147,6 +147,15 @@ mobile/
 - 📋 Add content filtering and categories
 
 ## Recent Changes
+
+### Oct 26, 2025 - Code Optimization & Bug Fixes
+- ✅ Fixed critical Supabase configuration bug with proper error handling
+- ✅ Removed unused dependencies (nativewind, tailwindcss) to reduce bundle size
+- ✅ Removed duplicate design-handoff folder and obsolete web files
+- ✅ Removed duplicate assets, docs, and schema files from root
+- ✅ Cleaned up babel configuration
+- ✅ Exported `isSupabaseConfigured` flag for graceful error handling
+- ✅ Significantly reduced project size and complexity
 
 ### Jan 24, 2025 - Documentation & Setup Guides
 - ✅ Created comprehensive design handoff package (4,844 lines)
