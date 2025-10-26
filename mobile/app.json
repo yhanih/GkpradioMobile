@@ -20,11 +20,28 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.gkpradio.mobile",
       "buildNumber": "1.0.0",
+      "config": {
+        "usesNonExemptEncryption": false
+      },
       "infoPlist": {
         "NSCameraUsageDescription": "GKP Radio needs access to your camera to share moments from our community.",
         "NSMicrophoneUsageDescription": "GKP Radio needs access to your microphone for audio features.",
-        "NSPhotoLibraryUsageDescription": "GKP Radio needs access to your photo library to share images."
-      }
+        "NSPhotoLibraryUsageDescription": "GKP Radio needs access to your photo library to share images.",
+        "UIBackgroundModes": [
+          "audio"
+        ],
+        "NSAppTransportSecurity": {
+          "NSExceptionDomains": {
+            "74.208.102.89": {
+              "NSExceptionAllowsInsecureHTTPLoads": true,
+              "NSIncludesSubdomains": false
+            }
+          }
+        }
+      },
+      "associatedDomains": [
+        "applinks:gkpradio.com"
+      ]
     },
     "android": {
       "package": "com.gkpradio.mobile",
@@ -41,7 +58,24 @@
         "CAMERA",
         "RECORD_AUDIO",
         "READ_EXTERNAL_STORAGE",
-        "WRITE_EXTERNAL_STORAGE"
+        "WRITE_EXTERNAL_STORAGE",
+        "FOREGROUND_SERVICE"
+      ],
+      "intentFilters": [
+        {
+          "action": "VIEW",
+          "autoVerify": true,
+          "data": [
+            {
+              "scheme": "https",
+              "host": "gkpradio.com"
+            }
+          ],
+          "category": [
+            "BROWSABLE",
+            "DEFAULT"
+          ]
+        }
       ]
     },
     "web": {
@@ -51,6 +85,9 @@
       "supabaseUrl": "https://fychjnaxljwmgoptjsxn.supabase.co",
       "supabaseAnonKey": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZ5Y2hqbmF4bGp3bWdvcHRqc3huIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTg2ODA5ODQsImV4cCI6MjA3NDI1Njk4NH0.PU002pqmbeCo_plcjaCP678Xo5dischMR3a_OTOqp_E",
       "azuracastBaseUrl": "http://74.208.102.89:8080"
-    }
+    },
+    "plugins": [
+      "expo-font"
+    ]
   }
 }
