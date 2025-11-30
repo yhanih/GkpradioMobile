@@ -1,15 +1,17 @@
-import { Radio, Volume2, Heart, MessageCircle, Users, Calendar, Waves } from 'lucide-react';
+import { Radio, Volume2, Heart, MessageCircle, Users, Calendar, Waves, Settings } from 'lucide-react';
 import { Card } from './ui/card';
 import { Button } from './ui/button';
 import { Avatar, AvatarFallback } from './ui/avatar';
 import { Badge } from './ui/badge';
 import { useState, useEffect } from 'react';
 import { apiCall } from '../utils/api';
+import { useAudio } from '../utils/AudioContext';
 
 export function LiveScreen() {
   const [schedule, setSchedule] = useState<any[]>([]);
   const [liveChat, setLiveChat] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const { isPlaying, playLiveStream, pause, error } = useAudio();
 
   useEffect(() => {
     loadLiveData();
@@ -105,8 +107,18 @@ export function LiveScreen() {
               <Heart className="h-6 w-6" strokeWidth={2} />
             </Button>
             
-            <Button className="h-20 w-20 bg-white/15 hover:bg-white/25 rounded-full backdrop-blur-xl shadow-2xl transition-all hover:scale-105 border border-white/20">
-              <Volume2 className="h-9 w-9" strokeWidth={2.5} />
+            <Button 
+              onClick={() => isPlaying ? pause() : playLiveStream()}
+              className="h-20 w-20 bg-white/15 hover:bg-white/25 rounded-full backdrop-blur-xl shadow-2xl transition-all hover:scale-105 border border-white/20 relative"
+            >
+              {isPlaying ? (
+                <>
+                  <div className="absolute inset-0 bg-white/10 rounded-full animate-ping"></div>
+                  <Volume2 className="h-9 w-9 relative z-10" strokeWidth={2.5} />
+                </>
+              ) : (
+                <Volume2 className="h-9 w-9" strokeWidth={2.5} />
+              )}
             </Button>
             
             <Button
@@ -135,6 +147,22 @@ export function LiveScreen() {
       </div>
 
       <div className="px-5 py-7 space-y-6">
+        {/* Stream Configuration Notice */}
+        <div className="p-4 bg-blue-50/80 backdrop-blur-xl rounded-2xl border border-blue-200/40 shadow-sm">
+          <div className="flex items-start gap-3">
+            <div className="h-10 w-10 bg-blue-500/10 rounded-xl flex items-center justify-center flex-shrink-0">
+              <Settings className="h-5 w-5 text-blue-600" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <h4 className="font-semibold text-sm text-blue-900 mb-1">Demo Stream Active</h4>
+              <p className="text-xs text-blue-700 leading-relaxed">
+                Currently using a demo stream. To connect your Azuracast stream, update the URL in{' '}
+                <code className="bg-blue-100 px-1.5 py-0.5 rounded text-[11px] font-mono">/utils/AudioContext.tsx</code>
+              </p>
+            </div>
+          </div>
+        </div>
+
         {/* Today's Schedule */}
         <div>
           <div className="flex items-center justify-between mb-4">

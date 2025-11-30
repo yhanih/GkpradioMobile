@@ -11,6 +11,7 @@ import { ProfileScreen } from './components/ProfileScreen';
 import { PrivacyPolicyScreen } from './components/PrivacyPolicyScreen';
 import { TermsOfServiceScreen } from './components/TermsOfServiceScreen';
 import { AuthProvider, useAuth } from './utils/AuthContext';
+import { AudioProvider } from './utils/AudioContext';
 import { Toaster } from './components/ui/sonner';
 
 function AppContent() {
@@ -92,8 +93,8 @@ function AppContent() {
             isUserSignedIn={!!user}
           />
 
-          {/* Main Content */}
-          <main className="overflow-y-auto">
+          {/* Main Content - scrollable with proper padding for fixed elements */}
+          <main className="overflow-y-auto h-screen">
             {renderScreen()}
           </main>
 
@@ -114,7 +115,9 @@ function AppContent() {
 export default function App() {
   return (
     <AuthProvider>
-      <AppContent />
+      <AudioProvider>
+        <AppContent />
+      </AudioProvider>
     </AuthProvider>
   );
 }
