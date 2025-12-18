@@ -23,7 +23,7 @@ Native iOS and Android application for GKP Radio (God Kingdom Principles Radio).
 **CRITICAL: These are the REAL table names in Supabase. Always use these in queries:**
 - `episodes` - Audio content (NOT `podcasts`)
 - `videos` - Video content
-- `prayercircles` - Community prayers with `is_testimony` boolean flag
+- `prayercircles` - Community prayers (no `is_testimony` column yet - see optional migration)
 - `users` - User profiles and metadata (NOT `profiles`)
 - `communitycomments` - Comments on community content
 - `threadlikes`, `threadreactions`, `commentreactions` - Engagement data
