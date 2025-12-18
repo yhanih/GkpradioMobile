@@ -1,3 +1,23 @@
+/**
+ * ⚠️ SCHEMA REFERENCE - CRITICAL FOR SUPABASE QUERIES
+ * 
+ * ACTUAL Supabase table names (as of Dec 2024):
+ * - `episodes` (podcast episodes)
+ * - `prayercircles` (prayers & testimonies - uses is_testimony boolean)
+ * - `users` (user profiles)
+ * - `videos` (video content)
+ * - `communitycomments` (comments)
+ * - For columns: use `created_at` NOT `published_at`
+ * 
+ * DO NOT use old names like:
+ * ❌ podcasts → use episodes
+ * ❌ prayer_requests → use prayercircles with is_testimony=false
+ * ❌ testimonies → use prayercircles with is_testimony=true
+ * ❌ profiles → use users
+ * 
+ * See replit.md for full schema documentation.
+ */
+
 export interface Database {
   public: {
     Tables: {

@@ -18,14 +18,19 @@ Native iOS and Android application for GKP Radio (God Kingdom Principles Radio).
 ### Supabase Integration
 - **Database**: PostgreSQL with Row Level Security (RLS)
 - **Authentication**: Email/password with secure session management
-- **Tables**: 
-  - `prayer_requests` - Community prayer requests with status tracking
-  - `testimonies` - User testimonies with featured flag
-  - `podcasts` - Audio content with metadata
-  - `videos` - Video content with metadata
-  - `likes` - Polymorphic likes for all content types
-  - `comments` - User comments on prayers and testimonies
-  - `profiles` - Extended user profile data
+
+### ⚠️ ACTUAL Database Schema (Dec 2024)
+**CRITICAL: These are the REAL table names in Supabase. Always use these in queries:**
+- `episodes` - Audio content (NOT `podcasts`)
+- `videos` - Video content
+- `prayercircles` - Community prayers with `is_testimony` boolean flag
+- `users` - User profiles and metadata (NOT `profiles`)
+- `communitycomments` - Comments on community content
+- `threadlikes`, `threadreactions`, `commentreactions` - Engagement data
+- See Supabase dashboard for complete table list
+
+**Note**: The app originally used different table names (`podcasts`, `prayer_requests`, `profiles`, `testimonies`). These were renamed in Supabase. All queries in the app code have been updated to use the correct table names above.
+
 - **Security**: RLS policies ensure users can only modify their own content
 - **Real-time**: Automatic profile creation on user signup via triggers
 
@@ -147,6 +152,16 @@ mobile/
 - 📋 Add content filtering and categories
 
 ## Recent Changes
+
+### Dec 18, 2025 - Database Schema Alignment
+- ✅ Fixed critical table name mismatches between app code and Supabase schema
+- ✅ Mapped `podcasts` → `episodes` in all queries
+- ✅ Mapped `prayer_requests` → `prayercircles` with `is_testimony` filter
+- ✅ Mapped `profiles` → `users` in all queries
+- ✅ Fixed column reference from `published_at` → `created_at`
+- ✅ Updated all 5 screens (HomeScreen, CommunityScreen, PodcastsScreen, VideoScreen, ProfileScreen)
+- ✅ Updated AuthContext for user signup
+- ✅ Added schema documentation to prevent future mismatches
 
 ### Oct 26, 2025 - Code Optimization & Bug Fixes
 - ✅ Fixed critical Supabase configuration bug with proper error handling

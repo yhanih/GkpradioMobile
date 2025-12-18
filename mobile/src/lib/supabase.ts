@@ -3,6 +3,22 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createClient } from '@supabase/supabase-js';
 import Constants from 'expo-constants';
 
+/**
+ * ⚠️ IMPORTANT: Database Table Names
+ * 
+ * See mobile/SCHEMA_REFERENCE.md for complete schema documentation.
+ * 
+ * Current table names in Supabase (Dec 2024):
+ * - episodes (not podcasts)
+ * - prayercircles (not prayer_requests or testimonies)
+ * - users (not profiles)
+ * - videos
+ * - communitycomments
+ * 
+ * If you get "PGRST205: Could not find table" errors,
+ * check SCHEMA_REFERENCE.md and update your queries.
+ */
+
 const supabaseUrl = Constants.expoConfig?.extra?.supabaseUrl || process.env.EXPO_PUBLIC_SUPABASE_URL || '';
 const supabaseAnonKey = Constants.expoConfig?.extra?.supabaseAnonKey || process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '';
 
