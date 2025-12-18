@@ -23,7 +23,7 @@ export function VideoScreen() {
       const { data, error: fetchError } = await supabase
         .from('videos')
         .select('*')
-        .order('published_at', { ascending: false });
+        .order('created_at', { ascending: false });
 
       if (fetchError) throw fetchError;
       if (data) setVideos(data);

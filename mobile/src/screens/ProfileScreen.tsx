@@ -44,7 +44,7 @@ export function ProfileScreen() {
     try {
       setLoading(true);
       const { data, error } = await supabase
-        .from('profiles')
+        .from('users')
         .select('*')
         .eq('id', user?.id)
         .single();
@@ -82,7 +82,7 @@ export function ProfileScreen() {
     try {
       setSaving(true);
       const { error } = await supabase
-        .from('profiles')
+        .from('users')
         .upsert({
           id: user.id,
           full_name: fullName.trim() || null,

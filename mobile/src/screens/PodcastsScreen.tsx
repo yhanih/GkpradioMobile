@@ -20,9 +20,9 @@ export function PodcastsScreen() {
       setLoading(true);
       setError(null);
       const { data, error: fetchError } = await supabase
-        .from('podcasts')
+        .from('episodes')
         .select('*')
-        .order('published_at', { ascending: false });
+        .order('created_at', { ascending: false });
 
       if (fetchError) throw fetchError;
       if (data) setPodcasts(data);

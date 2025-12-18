@@ -26,8 +26,8 @@ export function CommunityScreen() {
   const fetchStats = async () => {
     try {
       const [prayersCount, testimoniesCount] = await Promise.all([
-        supabase.from('prayer_requests').select('id', { count: 'exact', head: true }),
-        supabase.from('testimonies').select('id', { count: 'exact', head: true }),
+        supabase.from('prayercircles').select('id', { count: 'exact', head: true }).eq('is_testimony', false),
+        supabase.from('prayercircles').select('id', { count: 'exact', head: true }).eq('is_testimony', true),
       ]);
 
       if (prayersCount.error) throw prayersCount.error;
@@ -51,14 +51,16 @@ export function CommunityScreen() {
 
       const [prayersData, testimoniesData] = await Promise.all([
         supabase
-          .from('prayer_requests')
+          .from('prayercircles')
           .select('*')
+          .eq('is_testimony', false)
           .eq('status', 'active')
           .order('created_at', { ascending: false })
           .limit(20),
         supabase
-          .from('testimonies')
+          .from('prayercircles')
           .select('*')
+          .eq('is_testimony', true)
           .order('created_at', { ascending: false })
           .limit(20),
       ]);

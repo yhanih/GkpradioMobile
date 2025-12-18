@@ -41,13 +41,13 @@ export function HomeScreen() {
       setError(null);
 
       const [prayersCount, testimoniesCount, podcastsCount, videosCount, featuredPodcasts, featuredVideos, featuredTestimonies] = await Promise.all([
-        supabase.from('prayer_requests').select('id', { count: 'exact', head: true }),
-        supabase.from('testimonies').select('id', { count: 'exact', head: true }),
-        supabase.from('podcasts').select('id', { count: 'exact', head: true }),
+        supabase.from('prayercircles').select('id', { count: 'exact', head: true }),
+        supabase.from('prayercircles').select('id', { count: 'exact', head: true }).eq('is_testimony', true),
+        supabase.from('episodes').select('id', { count: 'exact', head: true }),
         supabase.from('videos').select('id', { count: 'exact', head: true }),
-        supabase.from('podcasts').select('*').eq('is_featured', true).limit(2),
+        supabase.from('episodes').select('*').eq('is_featured', true).limit(2),
         supabase.from('videos').select('*').eq('is_featured', true).limit(2),
-        supabase.from('testimonies').select('*').eq('is_featured', true).limit(2),
+        supabase.from('prayercircles').select('*').eq('is_testimony', true).eq('is_featured', true).limit(2),
       ]);
 
       if (prayersCount.error) throw prayersCount.error;
@@ -83,7 +83,7 @@ export function HomeScreen() {
       if (!user) return;
       
       const { data, error } = await supabase
-        .from('profiles')
+        .from('users')
         .select('full_name')
         .eq('id', user.id)
         .single();
