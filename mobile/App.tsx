@@ -18,7 +18,39 @@ import { SignupScreen } from './src/screens/auth/SignupScreen';
 
 const Tab = createBottomTabNavigator();
 
+function GuestProfileScreen({ onNavigateToLogin, onNavigateToSignup }: { 
+  onNavigateToLogin: () => void; 
+  onNavigateToSignup: () => void;
+}) {
+  return <LoginScreen onNavigateToSignup={onNavigateToSignup} />;
+}
+
+function ProfileScreenWrapper({ 
+  showAuth, 
+  setShowAuth, 
+  showSignup, 
+  setShowSignup 
+}: { 
+  showAuth: boolean;
+  setShowAuth: (show: boolean) => void;
+  showSignup: boolean;
+  setShowSignup: (show: boolean) => void;
+}) {
+  const { user } = useAuth();
+
+  if (!user) {
+    if (showSignup) {
+      return <SignupScreen onNavigateToLogin={() => setShowSignup(false)} />;
+    }
+    return <LoginScreen onNavigateToSignup={() => setShowSignup(true)} />;
+  }
+
+  return <ProfileScreen />;
+}
+
 function MainNavigator() {
+  const [showSignup, setShowSignup] = useState(false);
+
   return (
     <>
       <Tab.Navigator
@@ -66,7 +98,16 @@ function MainNavigator() {
         <Tab.Screen name="Community" component={CommunityScreen} />
         <Tab.Screen name="Podcasts" component={PodcastsScreen} />
         <Tab.Screen name="Video" component={VideoScreen} />
-        <Tab.Screen name="Profile" component={ProfileScreen} />
+        <Tab.Screen name="Profile">
+          {() => (
+            <ProfileScreenWrapper 
+              showAuth={true}
+              setShowAuth={() => {}}
+              showSignup={showSignup}
+              setShowSignup={setShowSignup}
+            />
+          )}
+        </Tab.Screen>
       </Tab.Navigator>
       
       <AudioPlayer />
@@ -75,8 +116,7 @@ function MainNavigator() {
 }
 
 function AppContent() {
-  const { user, loading } = useAuth();
-  const [showSignup, setShowSignup] = useState(false);
+  const { loading } = useAuth();
 
   if (loading) {
     return (
@@ -84,13 +124,6 @@ function AppContent() {
         <ActivityIndicator size="large" color="#047857" />
       </View>
     );
-  }
-
-  if (!user) {
-    if (showSignup) {
-      return <SignupScreen onNavigateToLogin={() => setShowSignup(false)} />;
-    }
-    return <LoginScreen onNavigateToSignup={() => setShowSignup(true)} />;
   }
 
   return <MainNavigator />;
