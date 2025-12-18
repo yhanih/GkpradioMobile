@@ -153,15 +153,17 @@ mobile/
 
 ## Recent Changes
 
-### Dec 18, 2025 - Database Schema Alignment
+### Dec 18, 2025 - Database Schema Alignment & Navigation Update
 - ✅ Fixed critical table name mismatches between app code and Supabase schema
 - ✅ Mapped `podcasts` → `episodes` in all queries
-- ✅ Mapped `prayer_requests` → `prayercircles` with `is_testimony` filter
+- ✅ Mapped `prayer_requests` → `prayercircles` (removed non-existent `is_testimony` filter)
 - ✅ Mapped `profiles` → `users` in all queries
 - ✅ Fixed column reference from `published_at` → `created_at`
-- ✅ Updated all 5 screens (HomeScreen, CommunityScreen, PodcastsScreen, VideoScreen, ProfileScreen)
-- ✅ Updated AuthContext for user signup
-- ✅ Added schema documentation to prevent future mismatches
+- ✅ Created new `MediaScreen` combining Podcasts + Videos with tabbed interface
+- ✅ Updated navigation: Home | Community | Live | Media | Profile
+- ✅ Created optional migration script for future testimonies support (`migrations/add_is_testimony_column.sql`)
+- ✅ Updated SCHEMA_REFERENCE.md with accurate table/column documentation
+- ✅ Added code comments to prevent future schema mismatches
 
 ### Oct 26, 2025 - Code Optimization & Bug Fixes
 - ✅ Fixed critical Supabase configuration bug with proper error handling

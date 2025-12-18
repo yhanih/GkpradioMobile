@@ -25,17 +25,15 @@ export function CommunityScreen() {
 
   const fetchStats = async () => {
     try {
-      const [prayersCount, testimoniesCount] = await Promise.all([
-        supabase.from('prayercircles').select('id', { count: 'exact', head: true }).eq('is_testimony', false),
-        supabase.from('prayercircles').select('id', { count: 'exact', head: true }).eq('is_testimony', true),
-      ]);
+      const prayersCount = await supabase
+        .from('prayercircles')
+        .select('id', { count: 'exact', head: true });
 
       if (prayersCount.error) throw prayersCount.error;
-      if (testimoniesCount.error) throw testimoniesCount.error;
 
       setStats({
         prayers: prayersCount.count || 0,
-        testimonies: testimoniesCount.count || 0,
+        testimonies: 0,
         users: 0,
       });
     } catch (error) {
@@ -49,27 +47,17 @@ export function CommunityScreen() {
       setLoading(true);
       setError(null);
 
-      const [prayersData, testimoniesData] = await Promise.all([
-        supabase
-          .from('prayercircles')
-          .select('*')
-          .eq('is_testimony', false)
-          .eq('status', 'active')
-          .order('created_at', { ascending: false })
-          .limit(20),
-        supabase
-          .from('prayercircles')
-          .select('*')
-          .eq('is_testimony', true)
-          .order('created_at', { ascending: false })
-          .limit(20),
-      ]);
+      const prayersData = await supabase
+        .from('prayercircles')
+        .select('*')
+        .eq('status', 'active')
+        .order('created_at', { ascending: false })
+        .limit(20);
 
       if (prayersData.error) throw prayersData.error;
-      if (testimoniesData.error) throw testimoniesData.error;
 
       if (prayersData.data) setPrayers(prayersData.data);
-      if (testimoniesData.data) setTestimonies(testimoniesData.data);
+      setTestimonies([]);
     } catch (err) {
       console.error('Error fetching community data:', err);
       setError('Unable to load community content. Please try again.');

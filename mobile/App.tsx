@@ -7,9 +7,8 @@ import { Ionicons } from '@expo/vector-icons';
 
 import { HomeScreen } from './src/screens/HomeScreen';
 import { CommunityScreen } from './src/screens/CommunityScreen';
-import { PodcastsScreen } from './src/screens/PodcastsScreen';
-import { VideoScreen } from './src/screens/VideoScreen';
 import { LiveScreen } from './src/screens/LiveScreen';
+import { MediaScreen } from './src/screens/MediaScreen';
 import { ProfileScreen } from './src/screens/ProfileScreen';
 import { AudioPlayer } from './src/components/AudioPlayer';
 import { AuthProvider, useAuth } from './src/contexts/AuthContext';
@@ -62,10 +61,10 @@ function MainNavigator() {
               iconName = 'home';
             } else if (route.name === 'Community') {
               iconName = 'people';
-            } else if (route.name === 'Podcasts') {
-              iconName = 'mic';
-            } else if (route.name === 'Video') {
-              iconName = 'videocam';
+            } else if (route.name === 'Live') {
+              iconName = 'radio';
+            } else if (route.name === 'Media') {
+              iconName = 'play-circle';
             } else if (route.name === 'Profile') {
               iconName = 'person';
             }
@@ -96,8 +95,8 @@ function MainNavigator() {
       >
         <Tab.Screen name="Home" component={HomeScreen} />
         <Tab.Screen name="Community" component={CommunityScreen} />
-        <Tab.Screen name="Podcasts" component={PodcastsScreen} />
-        <Tab.Screen name="Video" component={VideoScreen} />
+        <Tab.Screen name="Live" component={LiveScreen} />
+        <Tab.Screen name="Media" component={MediaScreen} />
         <Tab.Screen name="Profile">
           {() => (
             <ProfileScreenWrapper 

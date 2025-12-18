@@ -4,18 +4,18 @@ import { createClient } from '@supabase/supabase-js';
 import Constants from 'expo-constants';
 
 /**
- * ⚠️ IMPORTANT: Database Table Names
+ * ⚠️ IMPORTANT: Database Table Names (Dec 2024)
  * 
  * See mobile/SCHEMA_REFERENCE.md for complete schema documentation.
  * 
- * Current table names in Supabase (Dec 2024):
+ * Current table names in Supabase:
  * - episodes (not podcasts)
- * - prayercircles (not prayer_requests or testimonies)
+ * - prayercircles (not prayer_requests) - NOTE: no is_testimony column yet
  * - users (not profiles)
  * - videos
  * - communitycomments
  * 
- * If you get "PGRST205: Could not find table" errors,
+ * If you get "PGRST205: Could not find table" or "42703: column does not exist",
  * check SCHEMA_REFERENCE.md and update your queries.
  */
 

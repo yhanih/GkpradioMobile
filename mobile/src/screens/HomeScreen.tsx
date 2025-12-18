@@ -40,34 +40,29 @@ export function HomeScreen() {
       setLoading(true);
       setError(null);
 
-      const [prayersCount, testimoniesCount, podcastsCount, videosCount, featuredPodcasts, featuredVideos, featuredTestimonies] = await Promise.all([
+      const [prayersCount, podcastsCount, videosCount, featuredPodcasts, featuredVideos] = await Promise.all([
         supabase.from('prayercircles').select('id', { count: 'exact', head: true }),
-        supabase.from('prayercircles').select('id', { count: 'exact', head: true }).eq('is_testimony', true),
         supabase.from('episodes').select('id', { count: 'exact', head: true }),
         supabase.from('videos').select('id', { count: 'exact', head: true }),
         supabase.from('episodes').select('*').eq('is_featured', true).limit(2),
         supabase.from('videos').select('*').eq('is_featured', true).limit(2),
-        supabase.from('prayercircles').select('*').eq('is_testimony', true).eq('is_featured', true).limit(2),
       ]);
 
       if (prayersCount.error) throw prayersCount.error;
-      if (testimoniesCount.error) throw testimoniesCount.error;
       if (podcastsCount.error) throw podcastsCount.error;
       if (videosCount.error) throw videosCount.error;
       if (featuredPodcasts.error) throw featuredPodcasts.error;
       if (featuredVideos.error) throw featuredVideos.error;
-      if (featuredTestimonies.error) throw featuredTestimonies.error;
 
       setStats({
         prayers: prayersCount.count || 0,
-        testimonies: testimoniesCount.count || 0,
+        testimonies: 0,
         content: (podcastsCount.count || 0) + (videosCount.count || 0),
       });
 
       const combined = [
         ...(featuredPodcasts.data || []),
         ...(featuredVideos.data || []),
-        ...(featuredTestimonies.data || []),
       ];
       setFeaturedContent(combined.slice(0, 3));
     } catch (error) {
