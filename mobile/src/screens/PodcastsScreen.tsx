@@ -3,10 +3,10 @@ import { View, Text, ScrollView, Image, StyleSheet, Pressable, ActivityIndicator
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '../lib/supabase';
-import { Podcast } from '../types/database.types';
+import { Episode } from '../types/database.types';
 
 export function PodcastsScreen() {
-  const [podcasts, setPodcasts] = useState<Podcast[]>([]);
+  const [podcasts, setPodcasts] = useState<Episode[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);

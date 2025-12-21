@@ -1,310 +1,192 @@
 import React, { useState, useEffect } from 'react';
 import {
   View,
-  Text,
+  SafeAreaView,
   ScrollView,
-  Image,
-  Pressable,
+  RefreshControl,
   StyleSheet,
   ActivityIndicator,
-  RefreshControl,
+  StatusBar,
+  Text,
+  Pressable,
+  Animated
 } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
+import { useNavigation } from '@react-navigation/native';
+import { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
+import * as Haptics from 'expo-haptics';
 import { Ionicons } from '@expo/vector-icons';
-import { SafeAreaView } from 'react-native-safe-area-context';
+
 import { supabase } from '../lib/supabase';
-import { Podcast, Video, Testimony } from '../types/database.types';
+import { Episode, Video, Schedule } from '../types/database.types';
 import { useAuth } from '../contexts/AuthContext';
+import { useAudio } from '../contexts/AudioContext';
+
+import { HeroPlayerCard } from '../components/HeroPlayerCard';
+import { MediaRail } from '../components/MediaRail';
+import { StatsStrip } from '../components/StatsStrip';
+import { MinistryRail } from '../components/MinistryRail';
 
 export function HomeScreen() {
   const { user } = useAuth();
-  const [stats, setStats] = useState({ prayers: 0, testimonies: 0, content: 0 });
-  const [featuredContent, setFeaturedContent] = useState<(Podcast | Video | Testimony)[]>([]);
+  const { isPlaying, play, pause } = useAudio();
+  const navigation = useNavigation<BottomTabNavigationProp<any>>();
+
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [userName, setUserName] = useState<string>('');
+  const [userName, setUserName] = useState('Friend');
+
+  // Data State
+  const [featuredEpisodes, setFeaturedEpisodes] = useState<Episode[]>([]);
+  const [recentVideos, setRecentVideos] = useState<Video[]>([]);
+  const [schedule, setSchedule] = useState<Schedule[]>([]);
+
+  // Animation State
+  const fadeAnim = React.useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    fetchData();
+    Animated.timing(fadeAnim, {
+      toValue: 1,
+      duration: 1000,
+      useNativeDriver: true,
+    }).start();
   }, []);
 
   useEffect(() => {
-    if (user) {
-      fetchUserProfile();
+    fetchData();
+    if (user?.email) {
+      setUserName(user.email.split('@')[0]);
     }
   }, [user]);
 
   const fetchData = async () => {
     try {
       setLoading(true);
-      setError(null);
 
-      const [prayersCount, podcastsCount, videosCount, featuredPodcasts, featuredVideos] = await Promise.all([
-        supabase.from('prayercircles').select('id', { count: 'exact', head: true }),
-        supabase.from('episodes').select('id', { count: 'exact', head: true }),
-        supabase.from('videos').select('id', { count: 'exact', head: true }),
-        supabase.from('episodes').select('*').eq('is_featured', true).limit(2),
-        supabase.from('videos').select('*').eq('is_featured', true).limit(2),
+      const [episodes, videos, scheduleData] = await Promise.all([
+        supabase.from('episodes').select('*').order('created_at', { ascending: false }).limit(6),
+        supabase.from('videos').select('*').order('created_at', { ascending: false }).limit(6),
+        supabase.from('schedule').select('*').order('start_time', { ascending: true }),
       ]);
 
-      if (prayersCount.error) throw prayersCount.error;
-      if (podcastsCount.error) throw podcastsCount.error;
-      if (videosCount.error) throw videosCount.error;
-      if (featuredPodcasts.error) throw featuredPodcasts.error;
-      if (featuredVideos.error) throw featuredVideos.error;
+      if (episodes.data) setFeaturedEpisodes(episodes.data);
+      if (videos.data) setRecentVideos(videos.data);
+      if (scheduleData.data) setSchedule(scheduleData.data);
 
-      setStats({
-        prayers: prayersCount.count || 0,
-        testimonies: 0,
-        content: (podcastsCount.count || 0) + (videosCount.count || 0),
-      });
-
-      const combined = [
-        ...(featuredPodcasts.data || []),
-        ...(featuredVideos.data || []),
-      ];
-      setFeaturedContent(combined.slice(0, 3));
     } catch (error) {
-      console.error('Error fetching home data:', error);
-      setError('Unable to load content. Please try again.');
+      console.error('Error fetching dashboard data:', error);
     } finally {
       setLoading(false);
     }
   };
 
-  const fetchUserProfile = async () => {
-    try {
-      if (!user) return;
-      
-      const { data, error } = await supabase
-        .from('users')
-        .select('full_name')
-        .eq('id', user.id)
-        .single();
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await fetchData();
+    setRefreshing(false);
+  };
 
-      if (error && error.code !== 'PGRST116') {
-        console.error('Error fetching user profile:', error);
-        return;
-      }
-
-      if (data?.full_name) {
-        setUserName(data.full_name.split(' ')[0]);
-      } else if (user.email) {
-        setUserName(user.email.split('@')[0]);
-      }
-    } catch (error) {
-      console.error('Error in fetchUserProfile:', error);
+  const handleTogglePlay = async () => {
+    if (isPlaying) {
+      await pause();
+    } else {
+      await play();
     }
   };
 
   const getGreeting = () => {
     const hour = new Date().getHours();
-    if (hour < 12) return 'Good morning';
-    if (hour < 17) return 'Good afternoon';
-    return 'Good evening';
-  };
-
-  const onRefresh = async () => {
-    setRefreshing(true);
-    await Promise.all([fetchData(), fetchUserProfile()]);
-    setRefreshing(false);
+    if (hour < 12) return 'Good Morning';
+    if (hour < 17) return 'Good Afternoon';
+    return 'Good Evening';
   };
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
-      <ScrollView
-        style={styles.scrollView}
-        showsVerticalScrollIndicator={false}
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#047857" />
-        }
-      >
-        {/* Hero Section */}
-        <View style={styles.heroContainer}>
-          <LinearGradient
-            colors={['#047857', '#059669', '#0d9488']}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={styles.heroGradient}
+    <View style={styles.container}>
+      <StatusBar barStyle="dark-content" backgroundColor="#fff" />
+      <SafeAreaView style={styles.safeArea}>
+
+        {/* Header with Greeting */}
+        <View style={styles.header}>
+          <View>
+            <Text style={styles.brandingText}>GOD KINGDOM PRINCIPLES RADIO</Text>
+            <Text style={styles.greetingText}>{getGreeting()}, {userName}</Text>
+          </View>
+          <Pressable
+            style={styles.profileButton}
+            onPress={() => navigation.navigate('Profile')}
           >
-            <View style={styles.heroContent}>
-              <View style={styles.heroHeader}>
-                <View style={styles.logoContainer}>
-                  <View style={styles.logoBox}>
-                    <Text style={styles.logoText}>GKP</Text>
-                  </View>
-                  <View>
-                    <Text style={styles.welcomeText}>
-                      {getGreeting()}{userName ? `, ${userName}` : ''}!
-                    </Text>
-                    <Text style={styles.radioName}>Kingdom Principles Radio</Text>
-                  </View>
-                </View>
-                <Ionicons name="sparkles" size={24} color="rgba(255,255,255,0.7)" />
-              </View>
-
-              <Text style={styles.tagline}>
-                Broadcasting Truth • Building Community • Transforming Lives
-              </Text>
-
-              <Pressable style={styles.liveButton}>
-                <View style={styles.liveIndicator} />
-                <Text style={styles.liveButtonText}>Listen Live Now</Text>
-              </Pressable>
-            </View>
-          </LinearGradient>
+            <Ionicons name="person-outline" size={20} color="#047857" />
+          </Pressable>
         </View>
 
-        {/* Stats Card */}
-        <View style={styles.statsCard}>
-          {error ? (
-            <View style={styles.errorContainer}>
-              <Ionicons name="alert-circle-outline" size={32} color="#ef4444" />
-              <Text style={styles.errorText}>{error}</Text>
-              <Pressable style={styles.retryButton} onPress={fetchData}>
-                <Text style={styles.retryButtonText}>Retry</Text>
-              </Pressable>
-            </View>
-          ) : loading ? (
-            <ActivityIndicator size="large" color="#047857" style={{ paddingVertical: 20 }} />
-          ) : (
-            <View style={styles.statsGrid}>
-              <View style={styles.statItem}>
-                <LinearGradient
-                  colors={['#047857', '#059669']}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 1 }}
-                  style={styles.statIcon}
-                >
-                  <Ionicons name="heart" size={24} color="#fff" />
-                </LinearGradient>
-                <Text style={styles.statValue}>{stats.prayers}</Text>
-                <Text style={styles.statLabel}>Prayers</Text>
-              </View>
-              <View style={styles.statItem}>
-                <LinearGradient
-                  colors={['#a855f7', '#9333ea']}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 1 }}
-                  style={styles.statIcon}
-                >
-                  <Ionicons name="sparkles" size={24} color="#fff" />
-                </LinearGradient>
-                <Text style={styles.statValue}>{stats.testimonies}</Text>
-                <Text style={styles.statLabel}>Testimonies</Text>
-              </View>
-              <View style={styles.statItem}>
-                <LinearGradient
-                  colors={['#3b82f6', '#2563eb']}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 1 }}
-                  style={styles.statIcon}
-                >
-                  <Ionicons name="play-circle" size={24} color="#fff" />
-                </LinearGradient>
-                <Text style={styles.statValue}>{stats.content}</Text>
-                <Text style={styles.statLabel}>Content</Text>
-              </View>
-            </View>
-          )}
-        </View>
+        <ScrollView
+          showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#047857" />
+          }
+          contentContainerStyle={{ paddingBottom: 100 }}
+        >
+          <View style={{ height: 12 }} />
 
-        {/* Quick Actions */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Quick Actions</Text>
-          <View style={styles.quickActionsGrid}>
-            <Pressable style={styles.quickActionCard}>
-              <View style={[styles.quickActionIcon, { backgroundColor: 'rgba(4, 120, 87, 0.1)' }]}>
-                <Ionicons name="chatbubbles" size={20} color="#047857" />
-              </View>
-              <Text style={styles.quickActionTitle}>Prayer Request</Text>
-              <Text style={styles.quickActionSubtitle}>Share your needs</Text>
-            </Pressable>
+          {/* Welcome Text */}
+          <Animated.View style={[styles.welcomeSection, { opacity: fadeAnim, transform: [{ translateY: fadeAnim.interpolate({ inputRange: [0, 1], outputRange: [20, 0] }) }] }]}>
+            <Text style={styles.welcomeTitle}>Welcome to</Text>
+            <Text style={styles.welcomeBrand}>God Kingdom Principles</Text>
+            <Text style={styles.welcomeBrandSuffix}>Radio.</Text>
+            <Text style={styles.welcomeSubtitle}>
+              Join our community of believers in daily inspiration, powerful testimonies, and life-changing conversations.
+            </Text>
+          </Animated.View>
 
-            <Pressable style={styles.quickActionCard}>
-              <View style={[styles.quickActionIcon, { backgroundColor: 'rgba(168, 85, 247, 0.1)' }]}>
-                <Ionicons name="heart" size={20} color="#a855f7" />
-              </View>
-              <Text style={styles.quickActionTitle}>Testimony</Text>
-              <Text style={styles.quickActionSubtitle}>Share God's work</Text>
-            </Pressable>
-          </View>
-        </View>
+          {/* Hero Section - The Radio */}
+          <HeroPlayerCard
+            isPlaying={isPlaying}
+            onTogglePlay={handleTogglePlay}
+            currentShowTitle="Praise & Worship Music"
+            currentShowHost="10:00 PM - 12:00 AM • Auto-DJ"
+            schedule={schedule}
+            onPress={() => navigation.navigate('Live')}
+          />
 
-        {/* Featured Content */}
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Featured Content</Text>
-            <Text style={styles.viewAll}>View All</Text>
-          </View>
+          {/* Brand Stats */}
+          <StatsStrip />
 
-          {featuredContent.length === 0 ? (
-            <View style={styles.emptyState}>
-              <Ionicons name="albums-outline" size={48} color="#d4d4d8" />
-              <Text style={styles.emptyStateText}>No featured content yet</Text>
-            </View>
-          ) : (
-            featuredContent.map((content) => {
-              const isVideo = 'video_url' in content;
-              const isPodcast = 'audio_url' in content;
-              const isTestimony = 'content' in content;
-              const thumbnail = 'thumbnail_url' in content ? content.thumbnail_url : null;
+          {/* Ministry Fields (Brand Element from Web) */}
+          <MinistryRail onPressItem={(item) => navigation.navigate('Community')} />
 
-              return (
-                <Pressable key={content.id} style={styles.contentCard}>
-                  <View style={styles.imageContainer}>
-                    <Image
-                      source={{
-                        uri: thumbnail || 'https://images.unsplash.com/photo-1629143949694-606987575b07?w=600',
-                      }}
-                      style={styles.contentImage}
-                    />
-                    <LinearGradient
-                      colors={['transparent', 'rgba(0,0,0,0.6)']}
-                      style={styles.imageGradient}
-                    />
-                    {isPodcast && (
-                      <View style={styles.categoryBadge}>
-                        <Text style={styles.categoryText}>Podcast</Text>
-                      </View>
-                    )}
-                    {isVideo && (
-                      <View style={styles.categoryBadge}>
-                        <Text style={styles.categoryText}>Video</Text>
-                      </View>
-                    )}
-                    {isTestimony && (
-                      <View style={styles.categoryBadge}>
-                        <Text style={styles.categoryText}>Testimony</Text>
-                      </View>
-                    )}
-                  </View>
+          {/* Podcast Rail */}
+          <MediaRail
+            title="Faith on Demand"
+            type="podcast"
+            items={featuredEpisodes.map(ep => ({
+              id: ep.id,
+              title: ep.title,
+              subtitle: new Date(ep.created_at || new Date().toISOString()).toLocaleDateString(),
+              imageUrl: ep.thumbnail_url || 'https://images.unsplash.com/photo-1478737270239-2f02b77ac6d5?w=400&q=80',
+              duration: ep.duration ? `${Math.floor(ep.duration / 60)}m` : undefined
+            }))}
+            onPressItem={() => navigation.navigate('Podcasts')}
+            onPressViewAll={() => navigation.navigate('Podcasts')}
+          />
 
-                  <View style={styles.contentInfo}>
-                    <Text style={styles.contentTitle} numberOfLines={2}>
-                      {content.title}
-                    </Text>
-                    {isTestimony && 'content' in content && (
-                      <Text style={styles.contentSpeaker} numberOfLines={2}>
-                        {content.content}
-                      </Text>
-                    )}
-                    {!isTestimony && 'description' in content && content.description && (
-                      <Text style={styles.contentSpeaker} numberOfLines={2}>
-                        {content.description}
-                      </Text>
-                    )}
-                  </View>
-                </Pressable>
-              );
-            })
-          )}
-        </View>
+          {/* Video Rail */}
+          <MediaRail
+            title="Watch & Learn"
+            type="video"
+            items={recentVideos.map(vid => ({
+              id: vid.id,
+              title: vid.title,
+              subtitle: 'GKP TV',
+              imageUrl: vid.thumbnail_url || 'https://images.unsplash.com/photo-1516280440614-6697288d5d38?w=400&q=80',
+              duration: vid.duration ? `${Math.floor(vid.duration / 60)}m` : undefined
+            }))}
+            onPressItem={() => navigation.navigate('Media')}
+            onPressViewAll={() => navigation.navigate('Media')}
+          />
 
-        <View style={{ height: 120 }} />
-      </ScrollView>
-    </SafeAreaView>
+        </ScrollView>
+      </SafeAreaView>
+    </View>
   );
 }
 
@@ -313,305 +195,63 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#fff',
   },
-  scrollView: {
+  safeArea: {
     flex: 1,
   },
-  heroContainer: {
-    overflow: 'hidden',
-    marginBottom: 8,
-  },
-  heroGradient: {
-    paddingHorizontal: 20,
-    paddingTop: 24,
-    paddingBottom: 40,
-  },
-  heroContent: {
-    gap: 16,
-  },
-  heroHeader: {
+  header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'flex-start',
-  },
-  logoContainer: {
-    flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    paddingHorizontal: 20,
+    paddingTop: 16,
+    paddingBottom: 8,
   },
-  logoBox: {
-    width: 56,
-    height: 56,
-    backgroundColor: 'rgba(255,255,255,0.2)',
-    borderRadius: 16,
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 2,
-    borderColor: 'rgba(255,255,255,0.3)',
-  },
-  logoText: {
-    color: '#fff',
-    fontSize: 20,
-    fontWeight: 'bold',
-  },
-  welcomeText: {
-    color: '#fff',
-    fontSize: 21,
-    fontWeight: '600',
-  },
-  radioName: {
-    color: 'rgba(255,255,255,0.8)',
-    fontSize: 14,
-  },
-  tagline: {
-    color: 'rgba(255,255,255,0.9)',
-    fontSize: 15,
-    lineHeight: 22,
-  },
-  liveButton: {
-    backgroundColor: 'rgba(255,255,255,0.95)',
-    height: 48,
-    borderRadius: 12,
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-    gap: 8,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 12,
-    elevation: 5,
-  },
-  liveIndicator: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: '#ef4444',
-  },
-  liveButtonText: {
+  brandingText: {
+    fontSize: 10,
     color: '#047857',
+    fontWeight: '700',
+    letterSpacing: 1,
+    marginBottom: 2,
+  },
+  greetingText: {
     fontSize: 16,
+    color: '#09090b',
     fontWeight: '600',
   },
-  statsCard: {
-    backgroundColor: '#fff',
-    marginHorizontal: 20,
-    marginTop: -32,
+  profileButton: {
+    width: 40,
+    height: 40,
     borderRadius: 20,
-    padding: 24,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.08,
-    shadowRadius: 24,
-    elevation: 8,
     borderWidth: 1,
-    borderColor: 'rgba(228, 228, 231, 0.3)',
-  },
-  statsGrid: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-  },
-  statItem: {
-    alignItems: 'center',
-    gap: 10,
-  },
-  statIcon: {
-    width: 52,
-    height: 52,
-    borderRadius: 18,
+    borderColor: '#e4e4e7',
     justifyContent: 'center',
     alignItems: 'center',
-    shadowColor: '#047857',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
-    elevation: 4,
   },
-  statValue: {
-    fontSize: 19,
-    fontWeight: '600',
-    color: '#09090b',
-  },
-  statLabel: {
-    fontSize: 12,
-    color: '#71717a',
-    fontWeight: '500',
-  },
-  section: {
+  welcomeSection: {
     paddingHorizontal: 20,
-    marginTop: 28,
+    marginBottom: 24,
   },
-  sectionHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  sectionTitle: {
-    fontSize: 17,
-    fontWeight: '600',
+  welcomeTitle: {
+    fontSize: 28,
+    fontWeight: '400',
     color: '#09090b',
   },
-  viewAll: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#047857',
+  welcomeBrand: {
+    fontSize: 28,
+    fontWeight: '700',
+    color: '#eab308', // Gold color from brand
+    lineHeight: 34,
   },
-  quickActionsGrid: {
-    flexDirection: 'row',
-    gap: 12,
-  },
-  quickActionCard: {
-    flex: 1,
-    backgroundColor: '#fff',
-    padding: 20,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: 'rgba(228, 228, 231, 0.4)',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.06,
-    shadowRadius: 12,
-    elevation: 3,
-  },
-  quickActionIcon: {
-    width: 44,
-    height: 44,
-    borderRadius: 12,
-    justifyContent: 'center',
-    alignItems: 'center',
+  welcomeBrandSuffix: {
+    fontSize: 28,
+    fontWeight: '700',
+    color: '#09090b',
+    lineHeight: 34,
     marginBottom: 12,
   },
-  quickActionTitle: {
+  welcomeSubtitle: {
     fontSize: 15,
-    fontWeight: '600',
-    color: '#09090b',
-    marginBottom: 4,
-  },
-  quickActionSubtitle: {
-    fontSize: 12,
-    color: '#71717a',
-  },
-  contentCard: {
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    marginBottom: 16,
-    overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: 'rgba(228, 228, 231, 0.5)',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 12,
-    elevation: 3,
-  },
-  imageContainer: {
-    height: 208,
-    position: 'relative',
-  },
-  contentImage: {
-    width: '100%',
-    height: '100%',
-  },
-  imageGradient: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    height: '50%',
-  },
-  categoryBadge: {
-    position: 'absolute',
-    top: 16,
-    left: 16,
-    backgroundColor: 'rgba(255,255,255,0.95)',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 8,
-  },
-  categoryText: {
-    color: '#047857',
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  durationBadge: {
-    position: 'absolute',
-    bottom: 16,
-    right: 16,
-    backgroundColor: 'rgba(0,0,0,0.7)',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 999,
-  },
-  durationText: {
-    color: '#fff',
-    fontSize: 12,
-    fontWeight: '500',
-  },
-  contentInfo: {
-    padding: 20,
-    backgroundColor: '#fff',
-  },
-  contentTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#09090b',
-    marginBottom: 6,
-  },
-  contentSpeaker: {
-    fontSize: 14,
-    color: '#71717a',
-    fontWeight: '500',
-    marginBottom: 16,
-  },
-  contentActions: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  contentStats: {
-    flexDirection: 'row',
-    gap: 16,
-  },
-  actionButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  actionText: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: '#71717a',
-  },
-  emptyState: {
-    paddingVertical: 40,
-    alignItems: 'center',
-  },
-  emptyStateText: {
-    fontSize: 14,
-    color: '#71717a',
-    marginTop: 12,
-  },
-  errorContainer: {
-    paddingVertical: 40,
-    paddingHorizontal: 20,
-    alignItems: 'center',
-  },
-  errorText: {
-    fontSize: 14,
-    color: '#ef4444',
-    marginTop: 12,
-    marginBottom: 16,
-    textAlign: 'center',
-  },
-  retryButton: {
-    backgroundColor: '#047857',
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    borderRadius: 8,
-  },
-  retryButtonText: {
-    color: '#fff',
-    fontSize: 14,
-    fontWeight: '600',
+    color: '#52525b',
+    lineHeight: 22,
   },
 });

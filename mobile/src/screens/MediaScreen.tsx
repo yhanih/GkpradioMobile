@@ -4,13 +4,14 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { supabase } from '../lib/supabase';
-import { Podcast, Video } from '../types/database.types';
+import { Episode, Video } from '../types/database.types';
+import * as Haptics from 'expo-haptics';
 
 type TabType = 'podcasts' | 'videos';
 
 export function MediaScreen() {
   const [activeTab, setActiveTab] = useState<TabType>('podcasts');
-  const [podcasts, setPodcasts] = useState<Podcast[]>([]);
+  const [podcasts, setPodcasts] = useState<Episode[]>([]);
   const [videos, setVideos] = useState<Video[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -78,8 +79,12 @@ export function MediaScreen() {
     return `${Math.floor(diffInDays / 30)} months ago`;
   };
 
-  const renderPodcast = (podcast: Podcast) => (
-    <Pressable key={podcast.id} style={styles.podcastCard}>
+  const renderPodcast = (podcast: Episode) => (
+    <Pressable
+      key={podcast.id}
+      style={styles.podcastCard}
+      onPress={() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)}
+    >
       <Image
         source={{
           uri: podcast.thumbnail_url || 'https://images.unsplash.com/photo-1516589178581-6cd7833ae3b2?w=400',
@@ -115,7 +120,11 @@ export function MediaScreen() {
   );
 
   const renderVideo = (video: Video) => (
-    <Pressable key={video.id} style={styles.videoCard}>
+    <Pressable
+      key={video.id}
+      style={styles.videoCard}
+      onPress={() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)}
+    >
       <View style={styles.thumbnailContainer}>
         <Image
           source={{
@@ -174,28 +183,34 @@ export function MediaScreen() {
         <View style={styles.tabs}>
           <Pressable
             style={[styles.tab, activeTab === 'podcasts' && styles.activeTab]}
-            onPress={() => setActiveTab('podcasts')}
+            onPress={() => {
+              Haptics.selectionAsync();
+              setActiveTab('podcasts');
+            }}
           >
-            <Ionicons 
-              name="mic" 
-              size={18} 
-              color={activeTab === 'podcasts' ? '#fff' : '#71717a'} 
+            <Ionicons
+              name="mic"
+              size={18}
+              color={activeTab === 'podcasts' ? '#fff' : '#71717a'}
             />
             <Text style={[styles.tabText, activeTab === 'podcasts' && styles.activeTabText]}>
-              Podcasts ({podcasts.length})
+              Podcasts
             </Text>
           </Pressable>
           <Pressable
             style={[styles.tab, activeTab === 'videos' && styles.activeTab]}
-            onPress={() => setActiveTab('videos')}
+            onPress={() => {
+              Haptics.selectionAsync();
+              setActiveTab('videos');
+            }}
           >
-            <Ionicons 
-              name="videocam" 
-              size={18} 
-              color={activeTab === 'videos' ? '#fff' : '#71717a'} 
+            <Ionicons
+              name="videocam"
+              size={18}
+              color={activeTab === 'videos' ? '#fff' : '#71717a'}
             />
             <Text style={[styles.tabText, activeTab === 'videos' && styles.activeTabText]}>
-              Videos ({videos.length})
+              Videos
             </Text>
           </Pressable>
         </View>
@@ -346,9 +361,9 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(228, 228, 231, 0.5)',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.06,
-    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.04,
+    shadowRadius: 16,
     elevation: 3,
   },
   podcastImage: {
@@ -397,9 +412,9 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(228, 228, 231, 0.5)',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.08,
-    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 16 },
+    shadowOpacity: 0.06,
+    shadowRadius: 24,
     elevation: 4,
   },
   thumbnailContainer: {

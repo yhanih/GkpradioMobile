@@ -15,6 +15,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
+import * as Haptics from 'expo-haptics';
 
 interface ProfileData {
   full_name: string | null;
@@ -30,7 +31,7 @@ export function ProfileScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [editing, setEditing] = useState(false);
-  
+
   const [fullName, setFullName] = useState('');
   const [bio, setBio] = useState('');
 
@@ -110,6 +111,7 @@ export function ProfileScreen() {
   };
 
   const handleLogout = () => {
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
     Alert.alert(
       'Logout',
       'Are you sure you want to logout?',
@@ -127,6 +129,58 @@ export function ProfileScreen() {
             }
           },
         },
+      ]
+    );
+  };
+
+  const handleDeleteAccount = () => {
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+    Alert.alert(
+      'Delete Account',
+      'WARNING: This action is permanent. All your data, including prayer requests and testimonies, will be permanently deleted.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete Permanently',
+          style: 'destructive',
+          onPress: () => {
+            Alert.alert(
+              'Final Confirmation',
+              'Are you absolutely sure? This cannot be undone.',
+              [
+                { text: 'Cancel', style: 'cancel' },
+                {
+                  text: 'Yes, Delete My Account',
+                  style: 'destructive',
+                  onPress: async () => {
+                    try {
+                      setSaving(true);
+
+                      // 1. Call the Edge Function to delete the auth user
+                      // This ensures complete account erasure as required by Apple
+                      const { data, error: functionError } = await supabase.functions.invoke('delete-user');
+
+                      if (functionError) throw functionError;
+
+                      // 2. Sign out locally
+                      await signOut();
+
+                      Alert.alert('Account Deleted', 'Your account and all associated data have been permanently removed.');
+                    } catch (error) {
+                      console.error('Error deleting account:', error);
+                      Alert.alert(
+                        'Deletion Error',
+                        'Unable to complete account deletion automatically. Please contact support@gkpradio.com to manually request deletion.'
+                      );
+                    } finally {
+                      setSaving(false);
+                    }
+                  }
+                }
+              ]
+            );
+          }
+        }
       ]
     );
   };
@@ -185,7 +239,13 @@ export function ProfileScreen() {
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>Profile Information</Text>
             {!editing && (
-              <Pressable onPress={() => setEditing(true)} style={styles.editButton}>
+              <Pressable
+                onPress={() => {
+                  Haptics.selectionAsync();
+                  setEditing(true);
+                }}
+                style={styles.editButton}
+              >
                 <Ionicons name="create-outline" size={20} color="#047857" />
                 <Text style={styles.editButtonText}>Edit</Text>
               </Pressable>
@@ -223,14 +283,20 @@ export function ProfileScreen() {
             {editing && (
               <View style={styles.buttonRow}>
                 <Pressable
-                  onPress={handleCancel}
+                  onPress={() => {
+                    Haptics.selectionAsync();
+                    handleCancel();
+                  }}
                   style={[styles.button, styles.cancelButton]}
                   disabled={saving}
                 >
                   <Text style={styles.cancelButtonText}>Cancel</Text>
                 </Pressable>
                 <Pressable
-                  onPress={handleSave}
+                  onPress={() => {
+                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                    handleSave();
+                  }}
                   style={[styles.button, styles.saveButton]}
                   disabled={saving}
                 >
@@ -313,6 +379,16 @@ export function ProfileScreen() {
                 <Text style={styles.settingText}>About</Text>
               </View>
               <Ionicons name="chevron-forward" size={20} color="#d4d4d8" />
+            </Pressable>
+
+            <View style={styles.divider} />
+
+            <Pressable style={styles.settingItem} onPress={handleDeleteAccount}>
+              <View style={styles.settingLeft}>
+                <Ionicons name="trash-outline" size={24} color="#ef4444" />
+                <Text style={[styles.settingText, { color: '#ef4444' }]}>Delete Account</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={20} color="#fee2e2" />
             </Pressable>
           </View>
         </View>

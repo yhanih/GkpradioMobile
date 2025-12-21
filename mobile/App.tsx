@@ -11,25 +11,26 @@ import { LiveScreen } from './src/screens/LiveScreen';
 import { MediaScreen } from './src/screens/MediaScreen';
 import { ProfileScreen } from './src/screens/ProfileScreen';
 import { AudioPlayer } from './src/components/AudioPlayer';
+import { AudioProvider } from './src/contexts/AudioContext';
 import { AuthProvider, useAuth } from './src/contexts/AuthContext';
 import { LoginScreen } from './src/screens/auth/LoginScreen';
 import { SignupScreen } from './src/screens/auth/SignupScreen';
 
 const Tab = createBottomTabNavigator();
 
-function GuestProfileScreen({ onNavigateToLogin, onNavigateToSignup }: { 
-  onNavigateToLogin: () => void; 
+function GuestProfileScreen({ onNavigateToLogin, onNavigateToSignup }: {
+  onNavigateToLogin: () => void;
   onNavigateToSignup: () => void;
 }) {
   return <LoginScreen onNavigateToSignup={onNavigateToSignup} />;
 }
 
-function ProfileScreenWrapper({ 
-  showAuth, 
-  setShowAuth, 
-  showSignup, 
-  setShowSignup 
-}: { 
+function ProfileScreenWrapper({
+  showAuth,
+  setShowAuth,
+  showSignup,
+  setShowSignup
+}: {
   showAuth: boolean;
   setShowAuth: (show: boolean) => void;
   showSignup: boolean;
@@ -72,24 +73,24 @@ function MainNavigator() {
             return <Ionicons name={iconName} size={size} color={color} />;
           },
           tabBarActiveTintColor: '#047857',
-          tabBarInactiveTintColor: '#71717a',
+          tabBarInactiveTintColor: '#a1a1aa',
           headerShown: false,
           tabBarStyle: {
-            height: 64,
-            paddingBottom: 8,
-            paddingTop: 8,
-            borderTopWidth: 1,
-            borderTopColor: 'rgba(228, 228, 231, 0.5)',
+            height: 88,
+            paddingBottom: 30,
+            paddingTop: 12,
+            borderTopWidth: 0,
             backgroundColor: '#fff',
             shadowColor: '#000',
-            shadowOffset: { width: 0, height: -2 },
-            shadowOpacity: 0.06,
-            shadowRadius: 20,
-            elevation: 10,
+            shadowOffset: { width: 0, height: -4 },
+            shadowOpacity: 0.04,
+            shadowRadius: 16,
+            elevation: 20,
           },
           tabBarLabelStyle: {
             fontSize: 11,
-            fontWeight: '500',
+            fontWeight: '600',
+            marginTop: 4,
           },
         })}
       >
@@ -99,16 +100,16 @@ function MainNavigator() {
         <Tab.Screen name="Media" component={MediaScreen} />
         <Tab.Screen name="Profile">
           {() => (
-            <ProfileScreenWrapper 
+            <ProfileScreenWrapper
               showAuth={true}
-              setShowAuth={() => {}}
+              setShowAuth={() => { }}
               showSignup={showSignup}
               setShowSignup={setShowSignup}
             />
           )}
         </Tab.Screen>
       </Tab.Navigator>
-      
+
       <AudioPlayer />
     </>
   );
@@ -132,10 +133,12 @@ export default function App() {
   return (
     <SafeAreaProvider>
       <AuthProvider>
-        <StatusBar barStyle="dark-content" />
-        <NavigationContainer>
-          <AppContent />
-        </NavigationContainer>
+        <AudioProvider>
+          <StatusBar barStyle="dark-content" />
+          <NavigationContainer>
+            <AppContent />
+          </NavigationContainer>
+        </AudioProvider>
       </AuthProvider>
     </SafeAreaProvider>
   );

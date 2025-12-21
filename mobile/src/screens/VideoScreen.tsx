@@ -132,7 +132,7 @@ export function VideoScreen() {
                     <Text style={styles.channelName}>{video.category}</Text>
                   )}
                   <View style={styles.videoMeta}>
-                    <Text style={styles.metaText}>{formatTimeAgo(video.published_at)}</Text>
+                    <Text style={styles.metaText}>{formatTimeAgo(video.created_at)}</Text>
                     {video.is_featured && (
                       <>
                         <Text style={styles.metaDot}>•</Text>

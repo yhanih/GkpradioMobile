@@ -21,89 +21,43 @@
 export interface Database {
   public: {
     Tables: {
-      profiles: {
+      users: {
         Row: {
           id: string;
+          email: string | null;
+          username: string | null;
           full_name: string | null;
           avatar_url: string | null;
           bio: string | null;
-          created_at: string;
-          updated_at: string;
-        };
-        Insert: {
-          id: string;
-          full_name?: string | null;
-          avatar_url?: string | null;
-          bio?: string | null;
-          created_at?: string;
-          updated_at?: string;
-        };
-        Update: {
-          full_name?: string | null;
-          avatar_url?: string | null;
-          bio?: string | null;
-          updated_at?: string;
-        };
-      };
-      prayer_requests: {
-        Row: {
-          id: string;
-          user_id: string;
-          title: string;
-          description: string;
-          is_anonymous: boolean;
-          status: 'active' | 'answered' | 'archived';
-          created_at: string;
-          updated_at: string;
+          role: string | null;
+          is_email_verified: boolean | null;
+          created_at: string | null;
+          updated_at: string | null;
         };
         Insert: {
           id?: string;
-          user_id: string;
-          title: string;
-          description: string;
-          is_anonymous?: boolean;
-          status?: 'active' | 'answered' | 'archived';
-          created_at?: string;
-          updated_at?: string;
+          email?: string | null;
+          username?: string | null;
+          full_name?: string | null;
+          avatar_url?: string | null;
+          bio?: string | null;
+          role?: string | null;
+          is_email_verified?: boolean | null;
+          created_at?: string | null;
+          updated_at?: string | null;
         };
         Update: {
-          title?: string;
-          description?: string;
-          is_anonymous?: boolean;
-          status?: 'active' | 'answered' | 'archived';
-          updated_at?: string;
+          email?: string | null;
+          username?: string | null;
+          full_name?: string | null;
+          avatar_url?: string | null;
+          bio?: string | null;
+          role?: string | null;
+          is_email_verified?: boolean | null;
+          updated_at?: string | null;
         };
       };
-      testimonies: {
-        Row: {
-          id: string;
-          user_id: string;
-          title: string;
-          content: string;
-          is_anonymous: boolean;
-          is_featured: boolean;
-          created_at: string;
-          updated_at: string;
-        };
-        Insert: {
-          id?: string;
-          user_id: string;
-          title: string;
-          content: string;
-          is_anonymous?: boolean;
-          is_featured?: boolean;
-          created_at?: string;
-          updated_at?: string;
-        };
-        Update: {
-          title?: string;
-          content?: string;
-          is_anonymous?: boolean;
-          is_featured?: boolean;
-          updated_at?: string;
-        };
-      };
-      podcasts: {
+      episodes: {
         Row: {
           id: string;
           title: string;
@@ -114,7 +68,6 @@ export interface Database {
           author: string | null;
           category: string | null;
           is_featured: boolean;
-          published_at: string;
           created_at: string;
         };
         Insert: {
@@ -127,7 +80,6 @@ export interface Database {
           author?: string | null;
           category?: string | null;
           is_featured?: boolean;
-          published_at?: string;
           created_at?: string;
         };
         Update: {
@@ -139,7 +91,6 @@ export interface Database {
           author?: string | null;
           category?: string | null;
           is_featured?: boolean;
-          published_at?: string;
         };
       };
       videos: {
@@ -152,7 +103,6 @@ export interface Database {
           duration: number | null;
           category: string | null;
           is_featured: boolean;
-          published_at: string;
           created_at: string;
         };
         Insert: {
@@ -164,7 +114,6 @@ export interface Database {
           duration?: number | null;
           category?: string | null;
           is_featured?: boolean;
-          published_at?: string;
           created_at?: string;
         };
         Update: {
@@ -175,47 +124,219 @@ export interface Database {
           duration?: number | null;
           category?: string | null;
           is_featured?: boolean;
-          published_at?: string;
         };
       };
-      likes: {
+      communitythreads: {
         Row: {
           id: string;
-          user_id: string;
-          likeable_type: 'prayer_request' | 'testimony' | 'podcast' | 'video';
-          likeable_id: string;
+          userid: string;
+          title: string;
+          content: string;
+          category: string;
+          ispinned: boolean;
+          islocked: boolean;
+          viewcount: number;
+          createdat: string;
+          updatedat: string;
+          taggedspouseid: string | null;
+          privacy_level: string;
+          is_anonymous: boolean;
+          like_count: number;
+          comment_count: number;
+        };
+        Insert: {
+          id?: string;
+          userid: string;
+          title: string;
+          content: string;
+          category: string;
+          ispinned?: boolean;
+          islocked?: boolean;
+          viewcount?: number;
+          createdat?: string;
+          updatedat?: string;
+          taggedspouseid?: string | null;
+          privacy_level?: string;
+          is_anonymous?: boolean;
+          like_count?: number;
+          comment_count?: number;
+        };
+        Update: {
+          title?: string;
+          content?: string;
+          category?: string;
+          ispinned?: boolean;
+          islocked?: boolean;
+          viewcount?: number;
+          updatedat?: string;
+          taggedspouseid?: string | null;
+          privacy_level?: string;
+          is_anonymous?: boolean;
+          like_count?: number;
+          comment_count?: number;
+        };
+      };
+      communitycomments: {
+        Row: {
+          id: string;
+          userid: string;
+          threadid: string;
+          content: string;
+          createdat: string;
+        };
+        Insert: {
+          id?: string;
+          userid: string;
+          threadid: string;
+          content: string;
+          createdat?: string;
+        };
+        Update: {
+          content?: string;
+        };
+      };
+      reports: {
+        Row: {
+          id: string;
+          reporter_id: string;
+          target_type: string;
+          target_id: string;
+          reason: string | null;
           created_at: string;
         };
         Insert: {
           id?: string;
-          user_id: string;
-          likeable_type: 'prayer_request' | 'testimony' | 'podcast' | 'video';
-          likeable_id: string;
+          reporter_id: string;
+          target_type: string;
+          target_id: string;
+          reason?: string | null;
           created_at?: string;
         };
         Update: {};
       };
-      comments: {
+      blocked_users: {
         Row: {
           id: string;
-          user_id: string;
-          commentable_type: 'prayer_request' | 'testimony';
-          commentable_id: string;
-          content: string;
+          blocker_id: string;
+          blocked_id: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          blocker_id: string;
+          blocked_id: string;
+          created_at?: string;
+        };
+        Update: {};
+      };
+      prayercircles: {
+        Row: {
+          id: string;
+          followerid: string;
+          followingid: string;
+          createdat: string;
+        };
+        Insert: {
+          id?: string;
+          followerid: string;
+          followingid: string;
+          createdat?: string;
+        };
+        Update: {
+          followerid?: string;
+          followingid?: string;
+        };
+      };
+      schedule: {
+        Row: {
+          id: string;
+          day_of_week: string;
+          show_title: string;
+          hosts: string | null;
+          start_time: string;
+          end_time: string;
+          is_live: boolean;
+          created_at: string | null;
+          updated_at: string | null;
+        };
+        Insert: {
+          id?: string;
+          day_of_week: string;
+          show_title: string;
+          hosts?: string | null;
+          start_time: string;
+          end_time: string;
+          is_live?: boolean;
+          created_at?: string | null;
+          updated_at?: string | null;
+        };
+        Update: {
+          day_of_week?: string;
+          show_title?: string;
+          hosts?: string | null;
+          start_time?: string;
+          end_time?: string;
+          is_live?: boolean;
+          updated_at?: string | null;
+        };
+        community_thread_likes: {
+          Row: {
+            id: string;
+            thread_id: string;
+            user_id: string;
+            created_at: string;
+          };
+          Insert: {
+            id?: string;
+            thread_id: string;
+            user_id: string;
+            created_at?: string;
+          };
+          Update: {
+            thread_id?: string;
+            user_id?: string;
+          };
+        };
+      };
+      live_events: {
+        Row: {
+          id: string;
+          title: string;
+          description: string | null;
+          video_url: string;
+          thumbnail_url: string | null;
+          scheduled_start: string;
+          scheduled_end: string | null;
+          status: 'scheduled' | 'live' | 'ended' | 'cancelled';
+          is_featured: boolean;
+          viewer_count: number | null;
           created_at: string;
           updated_at: string;
         };
         Insert: {
           id?: string;
-          user_id: string;
-          commentable_type: 'prayer_request' | 'testimony';
-          commentable_id: string;
-          content: string;
+          title: string;
+          description?: string | null;
+          video_url: string;
+          thumbnail_url?: string | null;
+          scheduled_start: string;
+          scheduled_end?: string | null;
+          status?: 'scheduled' | 'live' | 'ended' | 'cancelled';
+          is_featured?: boolean;
+          viewer_count?: number | null;
           created_at?: string;
           updated_at?: string;
         };
         Update: {
-          content?: string;
+          title?: string;
+          description?: string | null;
+          video_url?: string;
+          thumbnail_url?: string | null;
+          scheduled_start?: string;
+          scheduled_end?: string | null;
+          status?: 'scheduled' | 'live' | 'ended' | 'cancelled';
+          is_featured?: boolean;
+          viewer_count?: number | null;
           updated_at?: string;
         };
       };
@@ -224,10 +345,14 @@ export interface Database {
 }
 
 // Convenience types
-export type PrayerRequest = Database['public']['Tables']['prayer_requests']['Row'];
-export type Testimony = Database['public']['Tables']['testimonies']['Row'];
-export type Podcast = Database['public']['Tables']['podcasts']['Row'];
+export type User = Database['public']['Tables']['users']['Row'];
+export type Episode = Database['public']['Tables']['episodes']['Row'];
 export type Video = Database['public']['Tables']['videos']['Row'];
-export type Profile = Database['public']['Tables']['profiles']['Row'];
-export type Like = Database['public']['Tables']['likes']['Row'];
-export type Comment = Database['public']['Tables']['comments']['Row'];
+export type CommunityThread = Database['public']['Tables']['communitythreads']['Row'];
+export type CommunityComment = Database['public']['Tables']['communitycomments']['Row'];
+export type Report = Database['public']['Tables']['reports']['Row'];
+export type BlockedUser = Database['public']['Tables']['blocked_users']['Row'];
+export type PrayerCircle = Database['public']['Tables']['prayercircles']['Row'];
+export type Schedule = Database['public']['Tables']['schedule']['Row'];
+export type LiveEvent = Database['public']['Tables']['live_events']['Row'];
+export type CommunityThreadLike = Database['public']['Tables']['community_thread_likes']['Row'];

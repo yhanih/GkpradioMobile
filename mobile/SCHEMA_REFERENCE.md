@@ -9,30 +9,22 @@ This file documents the ACTUAL database schema used in Supabase. **Always refer 
 | Feature | Table Name | Key Columns | Notes |
 |---------|-----------|------------|-------|
 | Episodes/Podcasts | `episodes` | id, title, audio_url, created_at | Use `created_at` for sorting |
-| Prayers | `prayercircles` | id, title, description, status, created_at | Query all records (no is_testimony filter) |
+| Community Content | `communitythreads` | id, userid, title, content, category, createdat | Feature: prayers, testimonies |
 | Videos | `videos` | id, title, video_url, created_at | Use `created_at` for sorting |
 | User Profiles | `users` | id, full_name, email, created_at | NOT `profiles` table |
 | Comments | `communitycomments` | id, content, created_at | For comments on threads |
+| Social (Following) | `prayercircles` | id, followerid, followingid | NOT for prayer requests |
 | Likes/Reactions | `threadlikes`, `threadreactions`, `commentreactions` | Various | See Supabase dashboard |
-
-### ⚠️ Notes on `prayercircles` table
-
-The `prayercircles` table currently does NOT have an `is_testimony` column.
-All records are treated as prayers. If you need to distinguish testimonies:
-
-1. Run the optional migration: `migrations/add_is_testimony_column.sql`
-2. This adds `is_testimony` (boolean) column non-destructively
-3. Then update the app queries to filter by `is_testimony`
 
 ## ❌ OLD Names - DO NOT USE
 
 These table names were used in the original code but are WRONG:
 - ❌ `podcasts` → Use `episodes` 
-- ❌ `prayer_requests` → Use `prayercircles`
-- ❌ `testimonies` → Use `prayercircles` (after adding is_testimony column)
+- ❌ `prayer_requests` → Use `communitythreads` with category filter
+- ❌ `testimonies` → Use `communitythreads` with category filter
 - ❌ `profiles` → Use `users`
 - ❌ `comments` → Use `communitycomments`
-- ❌ Column `published_at` → Use `created_at`
+- ❌ Column `published_at` → Use `created_at` or `createdat` (depending on table)
 
 ## Query Examples
 
