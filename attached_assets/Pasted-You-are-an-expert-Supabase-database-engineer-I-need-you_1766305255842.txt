@@ -1,0 +1,61 @@
+You are an expert Supabase database engineer. I need you to deeply audit and fix the Row Level Security (RLS) policies and indexing for my Supabase project.
+
+Scope:
+
+Analyze every table in the database that has RLS policies.
+
+Verify that all RLS policies that reference auth.uid() or other Supabase auth functions are written using select auth.uid() in the USING clause to optimize performance per Supabase best practices.
+
+Ensure every RLS policy is scoped to the correct role (TO authenticated or other roles) and not accidentally open to anon.
+
+Tasks:
+
+List all tables with RLS policies.
+
+For each table:
+
+Check if the RLS policy uses auth.uid() directly.
+
+If it does, rewrite the policy so it uses (select auth.uid()) in the USING clause.
+
+Ensure the policy includes the TO authenticated role where appropriate (so the policy only runs for logged‑in users).
+
+Generate SQL to drop old policies and create replacement policies that use the optimized select auth.uid() pattern wherever possible.
+
+Detect any columns used in RLS policies that lack indexes. For each such column, generate a CREATE INDEX IF NOT EXISTS SQL statement.
+
+For performance timing issues, also suggest filters or policy rewrites that avoid per‑row expensive function calls or unnecessary joins (minimizing RLS overhead).
+
+Output Requirements:
+
+Provide a JSON structured output containing:
+
+Each table name
+
+Existing RLS policy text
+
+Optimized policy text
+
+Columns used in policies needing indexes
+
+SQL statements for dropping old policies, creating new policies, and creating indexes
+
+A brief explanation for why each change improves performance (including reference to caching auth.uid() per query and index usage)
+
+Provide a human‑readable report text that:
+
+Explains how the new policies are better
+
+Lists any remaining warnings (e.g., overlapping policies or redundant checks)
+
+Includes installation order (e.g., drop → create → index)
+
+Important:
+
+The rewritten policies must follow Supabase performance best practices — specifically wrapping auth function calls in select so that the function is evaluated once per statement rather than per row.
+
+For every policy and index change, include explicit SQL statements ready to run in the Supabase Dashboard SQL editor.
+
+Example benchmark justification:
+
+When possible, reference that policies like using (auth.uid() = user_id) perform per row and are slower, while using ((select auth.uid()) = user_id) allows the database optimizer to cache the function result and significantly speed up queries. (Benchmarks show orders‑of‑magnitude improvement in similar cases.)
