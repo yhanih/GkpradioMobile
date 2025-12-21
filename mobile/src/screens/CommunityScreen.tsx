@@ -1,13 +1,16 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, ScrollView, StyleSheet, Pressable, ActivityIndicator, RefreshControl, Alert, Image } from 'react-native';
+import { View, Text, ScrollView, StyleSheet, Pressable, ActivityIndicator, RefreshControl, Alert, Image, TextInput } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { useNavigation } from '@react-navigation/native';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { supabase } from '../lib/supabase';
 import { CommunityThread, User } from '../types/database.types';
 import { useAuth } from '../contexts/AuthContext';
 import * as Haptics from 'expo-haptics';
 import { NewPostModal } from '../components/NewPostModal';
 import { COMMUNITY_CATEGORIES, getCategoryIcon, getCategoryLabel, Category } from '../constants/categories';
+import { RootStackParamList } from '../types/navigation';
 
 type SortOption = 'newest' | 'popular' | 'discussed';
 
@@ -16,9 +19,14 @@ interface ThreadWithUser extends CommunityThread {
   user_has_liked?: boolean;
 }
 
+type CommunityNavProp = NativeStackNavigationProp<RootStackParamList, 'MainTabs'>;
+
 export function CommunityScreen() {
+  const navigation = useNavigation<CommunityNavProp>();
   const { user } = useAuth();
   const [activeCategory, setActiveCategory] = useState('all');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [showSearch, setShowSearch] = useState(false);
   const [sortBy, setSortBy] = useState<SortOption>('newest');
   const [threads, setThreads] = useState<ThreadWithUser[]>([]);
   const [loading, setLoading] = useState(true);
@@ -309,7 +317,28 @@ export function CommunityScreen() {
     );
   };
 
-  const renderThread = (thread: ThreadWithUser) => {
+  const navigateToPost = (thread: ThreadWithUser) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    navigation.navigate('PostDetail', { threadId: thread.id, thread });
+  };
+
+  const navigateToUserProfile = (userId: string, userData?: User | null) => {
+    if (!userId) return;
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    navigation.navigate('UserProfile', { userId, user: userData || undefined });
+  };
+
+  const filteredBySearch = searchQuery.trim() 
+    ? filteredThreads.filter(t => 
+        t.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        t.content.toLowerCase().includes(searchQuery.toLowerCase())
+      )
+    : filteredThreads;
+
+  const pinnedThreads = filteredBySearch.filter(t => t.ispinned);
+  const regularThreads = filteredBySearch.filter(t => !t.ispinned);
+
+  const renderThread = (thread: ThreadWithUser, isPinned = false) => {
     const authorName = thread.is_anonymous 
       ? 'Anonymous' 
       : thread.users?.fullname || thread.users?.username || 'Member';
@@ -318,11 +347,25 @@ export function CommunityScreen() {
     return (
       <Pressable
         key={thread.id}
-        style={styles.card}
-        onPress={() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)}
+        style={[styles.card, isPinned && styles.pinnedCard]}
+        onPress={() => navigateToPost(thread)}
       >
+        {isPinned && (
+          <View style={styles.pinnedBadge}>
+            <Ionicons name="pin" size={12} color="#f59e0b" />
+            <Text style={styles.pinnedText}>Pinned</Text>
+          </View>
+        )}
         <View style={styles.cardHeader}>
-          <View style={styles.authorInfo}>
+          <Pressable 
+            style={styles.authorInfo}
+            onPress={(e) => {
+              e.stopPropagation();
+              if (!thread.is_anonymous && thread.users) {
+                navigateToUserProfile(thread.userid, thread.users);
+              }
+            }}
+          >
             {avatarUrl ? (
               <Image source={{ uri: avatarUrl }} style={styles.avatar} />
             ) : (
@@ -331,10 +374,12 @@ export function CommunityScreen() {
               </View>
             )}
             <View style={styles.authorMeta}>
-              <Text style={styles.authorName}>{authorName}</Text>
+              <Text style={[styles.authorName, !thread.is_anonymous && styles.authorNameClickable]}>
+                {authorName}
+              </Text>
               <Text style={styles.time}>{formatTimeAgo(thread.createdat)}</Text>
             </View>
-          </View>
+          </Pressable>
           <View style={styles.categoryBadge}>
             <Ionicons
               name={getCategoryIcon(thread.category)}
@@ -408,6 +453,24 @@ export function CommunityScreen() {
           <Text style={styles.subtitle}>
             Share testimonies, lift prayers, and encourage one another
           </Text>
+        </View>
+
+        <View style={styles.searchContainer}>
+          <TextInput
+            style={styles.searchInput}
+            placeholder="Search posts..."
+            placeholderTextColor="#a1a1aa"
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+          />
+          {searchQuery.length > 0 && (
+            <Pressable 
+              onPress={() => setSearchQuery('')}
+              style={styles.searchButton}
+            >
+              <Ionicons name="close-circle" size={20} color="#71717a" />
+            </Pressable>
+          )}
         </View>
 
         <View style={styles.stats}>
@@ -497,7 +560,7 @@ export function CommunityScreen() {
               <ActivityIndicator size="large" color="#047857" />
               <Text style={styles.loadingText}>Loading...</Text>
             </View>
-          ) : filteredThreads.length === 0 ? (
+          ) : filteredBySearch.length === 0 ? (
             <View style={styles.emptyState}>
               <Ionicons 
                 name={getCategoryIcon(activeCategory)} 
@@ -518,7 +581,10 @@ export function CommunityScreen() {
               </Pressable>
             </View>
           ) : (
-            filteredThreads.map(renderThread)
+            <>
+              {pinnedThreads.map(thread => renderThread(thread, true))}
+              {regularThreads.map(thread => renderThread(thread, false))}
+            </>
           )}
         </View>
 
@@ -880,5 +946,43 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 14,
     fontWeight: '600',
+  },
+  pinnedCard: {
+    borderColor: '#fbbf24',
+    borderWidth: 1,
+    backgroundColor: '#fffbeb',
+  },
+  pinnedBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginBottom: 10,
+  },
+  pinnedText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#f59e0b',
+  },
+  authorNameClickable: {
+    color: '#047857',
+  },
+  searchContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    marginBottom: 16,
+  },
+  searchInput: {
+    flex: 1,
+    backgroundColor: '#f4f4f5',
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    fontSize: 15,
+    color: '#09090b',
+  },
+  searchButton: {
+    padding: 8,
+    marginLeft: 8,
   },
 });

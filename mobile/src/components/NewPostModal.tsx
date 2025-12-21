@@ -32,12 +32,14 @@ export function NewPostModal({ visible, onClose, onSuccess }: NewPostModalProps)
     const [selectedCategory, setSelectedCategory] = useState<Category>(categories[0]);
     const [title, setTitle] = useState('');
     const [content, setContent] = useState('');
+    const [isAnonymous, setIsAnonymous] = useState(false);
     const [loading, setLoading] = useState(false);
 
     const resetForm = () => {
         setSelectedCategory(categories[0]);
         setTitle('');
         setContent('');
+        setIsAnonymous(false);
     };
 
     const handleClose = () => {
@@ -82,7 +84,7 @@ export function NewPostModal({ visible, onClose, onSuccess }: NewPostModalProps)
                 content: content.trim(),
                 category: selectedCategory.id,
                 privacy_level: 'public',
-                is_anonymous: false,
+                is_anonymous: isAnonymous,
             });
 
             if (error) throw error;
@@ -195,10 +197,37 @@ export function NewPostModal({ visible, onClose, onSuccess }: NewPostModalProps)
                             <Text style={styles.charCount}>{content.length}/1000</Text>
                         </View>
 
+                        <View style={styles.section}>
+                            <View style={styles.anonymousRow}>
+                                <View style={styles.anonymousInfo}>
+                                    <Ionicons name="eye-off" size={20} color={isAnonymous ? '#047857' : '#71717a'} />
+                                    <View>
+                                        <Text style={styles.anonymousLabel}>Post Anonymously</Text>
+                                        <Text style={styles.anonymousDescription}>
+                                            Your name will be hidden from other users
+                                        </Text>
+                                    </View>
+                                </View>
+                                <Pressable
+                                    style={[styles.toggle, isAnonymous && styles.toggleActive]}
+                                    onPress={() => {
+                                        Haptics.selectionAsync();
+                                        setIsAnonymous(!isAnonymous);
+                                    }}
+                                    disabled={loading}
+                                >
+                                    <View style={[styles.toggleKnob, isAnonymous && styles.toggleKnobActive]} />
+                                </Pressable>
+                            </View>
+                        </View>
+
                         <View style={styles.guidanceContainer}>
                             <Ionicons name="information-circle" size={20} color="#047857" />
                             <Text style={styles.guidanceText}>
-                                Your post will be visible to the community. Others can interact, support, and pray with you.
+                                {isAnonymous 
+                                    ? 'Your post will be shared anonymously. Your identity will remain private.'
+                                    : 'Your post will be visible to the community. Others can interact, support, and pray with you.'
+                                }
                             </Text>
                         </View>
                     </ScrollView>
@@ -368,5 +397,54 @@ const styles = StyleSheet.create({
         fontSize: 16,
         fontWeight: '600',
         color: '#fff',
+    },
+    anonymousRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        backgroundColor: '#f4f4f5',
+        borderRadius: 12,
+        padding: 16,
+    },
+    anonymousInfo: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 12,
+        flex: 1,
+    },
+    anonymousLabel: {
+        fontSize: 15,
+        fontWeight: '600',
+        color: '#09090b',
+    },
+    anonymousDescription: {
+        fontSize: 12,
+        color: '#71717a',
+        marginTop: 2,
+    },
+    toggle: {
+        width: 50,
+        height: 28,
+        borderRadius: 14,
+        backgroundColor: '#e4e4e7',
+        padding: 2,
+        justifyContent: 'center',
+    },
+    toggleActive: {
+        backgroundColor: '#047857',
+    },
+    toggleKnob: {
+        width: 24,
+        height: 24,
+        borderRadius: 12,
+        backgroundColor: '#fff',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 4,
+        elevation: 2,
+    },
+    toggleKnobActive: {
+        alignSelf: 'flex-end',
     },
 });

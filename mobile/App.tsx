@@ -3,6 +3,7 @@ import { StatusBar, View, ActivityIndicator } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { NavigationContainer } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
+import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
 
 import { HomeScreen } from './src/screens/HomeScreen';
@@ -10,29 +11,22 @@ import { CommunityScreen } from './src/screens/CommunityScreen';
 import { LiveScreen } from './src/screens/LiveScreen';
 import { MediaScreen } from './src/screens/MediaScreen';
 import { ProfileScreen } from './src/screens/ProfileScreen';
+import { PostDetailScreen } from './src/screens/PostDetailScreen';
+import { UserProfileScreen } from './src/screens/UserProfileScreen';
 import { AudioPlayer } from './src/components/AudioPlayer';
 import { AudioProvider } from './src/contexts/AudioContext';
 import { AuthProvider, useAuth } from './src/contexts/AuthContext';
 import { LoginScreen } from './src/screens/auth/LoginScreen';
 import { SignupScreen } from './src/screens/auth/SignupScreen';
+import { RootStackParamList, MainTabParamList } from './src/types/navigation';
 
-const Tab = createBottomTabNavigator();
-
-function GuestProfileScreen({ onNavigateToLogin, onNavigateToSignup }: {
-  onNavigateToLogin: () => void;
-  onNavigateToSignup: () => void;
-}) {
-  return <LoginScreen onNavigateToSignup={onNavigateToSignup} />;
-}
+const Stack = createNativeStackNavigator<RootStackParamList>();
+const Tab = createBottomTabNavigator<MainTabParamList>();
 
 function ProfileScreenWrapper({
-  showAuth,
-  setShowAuth,
   showSignup,
   setShowSignup
 }: {
-  showAuth: boolean;
-  setShowAuth: (show: boolean) => void;
   showSignup: boolean;
   setShowSignup: (show: boolean) => void;
 }) {
@@ -48,7 +42,7 @@ function ProfileScreenWrapper({
   return <ProfileScreen />;
 }
 
-function MainNavigator() {
+function MainTabs() {
   const [showSignup, setShowSignup] = useState(false);
 
   return (
@@ -101,8 +95,6 @@ function MainNavigator() {
         <Tab.Screen name="Profile">
           {() => (
             <ProfileScreenWrapper
-              showAuth={true}
-              setShowAuth={() => { }}
               showSignup={showSignup}
               setShowSignup={setShowSignup}
             />
@@ -112,6 +104,28 @@ function MainNavigator() {
 
       <AudioPlayer />
     </>
+  );
+}
+
+function RootNavigator() {
+  return (
+    <Stack.Navigator screenOptions={{ headerShown: false }}>
+      <Stack.Screen name="MainTabs" component={MainTabs} />
+      <Stack.Screen 
+        name="PostDetail" 
+        component={PostDetailScreen}
+        options={{
+          animation: 'slide_from_right',
+        }}
+      />
+      <Stack.Screen 
+        name="UserProfile" 
+        component={UserProfileScreen}
+        options={{
+          animation: 'slide_from_right',
+        }}
+      />
+    </Stack.Navigator>
   );
 }
 
@@ -126,7 +140,7 @@ function AppContent() {
     );
   }
 
-  return <MainNavigator />;
+  return <RootNavigator />;
 }
 
 export default function App() {

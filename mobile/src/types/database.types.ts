@@ -298,6 +298,42 @@ export interface Database {
           user_id?: string;
         };
       };
+      bookmarks: {
+        Row: {
+          id: string;
+          user_id: string;
+          thread_id: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          thread_id: string;
+          created_at?: string;
+        };
+        Update: {
+          user_id?: string;
+          thread_id?: string;
+        };
+      };
+      thread_prayers: {
+        Row: {
+          id: string;
+          user_id: string;
+          thread_id: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          thread_id: string;
+          created_at?: string;
+        };
+        Update: {
+          user_id?: string;
+          thread_id?: string;
+        };
+      };
       live_events: {
         Row: {
           id: string;
@@ -356,3 +392,5 @@ export type PrayerCircle = Database['public']['Tables']['prayercircles']['Row'];
 export type Schedule = Database['public']['Tables']['schedule']['Row'];
 export type LiveEvent = Database['public']['Tables']['live_events']['Row'];
 export type CommunityThreadLike = Database['public']['Tables']['community_thread_likes']['Row'];
+export type Bookmark = Database['public']['Tables']['bookmarks']['Row'];
+export type ThreadPrayer = Database['public']['Tables']['thread_prayers']['Row'];
