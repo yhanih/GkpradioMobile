@@ -14,7 +14,6 @@ import { HubScreen } from './src/screens/HubScreen';
 import { ProfileScreen } from './src/screens/ProfileScreen';
 import { PostDetailScreen } from './src/screens/PostDetailScreen';
 import { UserProfileScreen } from './src/screens/UserProfileScreen';
-import { MiniPlayer } from './src/components/MiniPlayer';
 import { AudioPlayer } from './src/components/AudioPlayer';
 import { AudioProvider } from './src/contexts/AudioContext';
 import { AuthProvider, useAuth } from './src/contexts/AuthContext';
@@ -99,7 +98,6 @@ function MainTabs() {
         <Tab.Screen name="Hub" component={HubScreen} />
       </Tab.Navigator>
 
-      <MiniPlayer />
       <AudioPlayer />
     </>
   );

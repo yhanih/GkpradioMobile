@@ -4,9 +4,12 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
 import * as Haptics from 'expo-haptics';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAudio } from '../contexts/AudioContext';
 
 export function AudioPlayer() {
+  const insets = useSafeAreaInsets();
+  const bottomOffset = Math.max(88, 60 + insets.bottom);
   const { isPlaying, isLoading, nowPlaying, togglePlayback } = useAudio();
   const [isLiked, setIsLiked] = React.useState(false);
 
@@ -14,7 +17,7 @@ export function AudioPlayer() {
   const hasAlbumArt = currentSong?.art && currentSong.art !== '';
 
   return (
-    <View style={styles.outerContainer}>
+    <View style={[styles.outerContainer, { bottom: bottomOffset }]}>
       <BlurView intensity={80} tint="light" style={styles.container}>
         <View style={styles.content}>
           <View style={styles.trackInfo}>
@@ -93,7 +96,6 @@ export function AudioPlayer() {
 const styles = StyleSheet.create({
   outerContainer: {
     position: 'absolute',
-    bottom: 88, // Above tab bar
     left: 12,
     right: 12,
     zIndex: 100,
