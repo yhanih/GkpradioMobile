@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   View,
   Text,
@@ -11,11 +11,12 @@ import {
   Animated,
   Dimensions,
   ImageBackground,
+  Alert,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { supabase } from '../lib/supabase';
 import { Episode, Video } from '../types/database.types';
@@ -70,6 +71,14 @@ export function MediaScreen() {
     fetchData();
     startPlayButtonPulse();
   }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      if (!loading) {
+        fetchData();
+      }
+    }, [])
+  );
 
   useEffect(() => {
     Animated.spring(tabIndicatorAnim, {
@@ -174,6 +183,14 @@ export function MediaScreen() {
   const handleBookmarkToggle = async (contentType: 'episode' | 'video', contentId: string) => {
     if (!user) {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+      Alert.alert(
+        'Sign In Required',
+        'Please sign in to save bookmarks.',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Sign In', onPress: () => navigation.navigate('Login' as any) }
+        ]
+      );
       return;
     }
     
@@ -487,7 +504,12 @@ export function MediaScreen() {
               <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>
                 Continue Watching
               </Text>
-              <Pressable onPress={() => Haptics.selectionAsync()}>
+              <Pressable 
+                onPress={() => {
+                  Haptics.selectionAsync();
+                  setActiveTab('videos');
+                }}
+              >
                 <Text style={[styles.seeAllText, { color: theme.colors.primary }]}>
                   See All
                 </Text>
@@ -546,7 +568,12 @@ export function MediaScreen() {
               <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>
                 Continue Listening
               </Text>
-              <Pressable onPress={() => Haptics.selectionAsync()}>
+              <Pressable 
+                onPress={() => {
+                  Haptics.selectionAsync();
+                  setActiveTab('podcasts');
+                }}
+              >
                 <Text style={[styles.seeAllText, { color: theme.colors.primary }]}>
                   See All
                 </Text>
