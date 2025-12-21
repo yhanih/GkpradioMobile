@@ -85,7 +85,7 @@ export function CommunityScreen() {
             id,
             username,
             fullname,
-            avatar_url
+            avatarurl
           )
         `)
         .order('createdat', { ascending: false })

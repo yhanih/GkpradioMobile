@@ -27,7 +27,7 @@ export interface Database {
           email: string | null;
           username: string | null;
           fullname: string | null;
-          avatar_url: string | null;
+          avatarurl: string | null;
           bio: string | null;
           role: string | null;
           is_email_verified: boolean | null;
@@ -39,7 +39,7 @@ export interface Database {
           email?: string | null;
           username?: string | null;
           fullname?: string | null;
-          avatar_url?: string | null;
+          avatarurl?: string | null;
           bio?: string | null;
           role?: string | null;
           is_email_verified?: boolean | null;
@@ -50,7 +50,7 @@ export interface Database {
           email?: string | null;
           username?: string | null;
           fullname?: string | null;
-          avatar_url?: string | null;
+          avatarurl?: string | null;
           bio?: string | null;
           role?: string | null;
           is_email_verified?: boolean | null;
@@ -279,23 +279,23 @@ export interface Database {
           is_live?: boolean;
           updated_at?: string | null;
         };
-        community_thread_likes: {
-          Row: {
-            id: string;
-            thread_id: string;
-            user_id: string;
-            created_at: string;
-          };
-          Insert: {
-            id?: string;
-            thread_id: string;
-            user_id: string;
-            created_at?: string;
-          };
-          Update: {
-            thread_id?: string;
-            user_id?: string;
-          };
+      };
+      community_thread_likes: {
+        Row: {
+          id: string;
+          thread_id: string;
+          user_id: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          thread_id: string;
+          user_id: string;
+          created_at?: string;
+        };
+        Update: {
+          thread_id?: string;
+          user_id?: string;
         };
       };
       live_events: {

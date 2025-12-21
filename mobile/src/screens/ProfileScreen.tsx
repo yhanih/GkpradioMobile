@@ -20,7 +20,7 @@ import * as Haptics from 'expo-haptics';
 interface ProfileData {
   fullname: string | null;
   bio: string | null;
-  avatar_url: string | null;
+  avatarurl: string | null;
   created_at: string;
 }
 
