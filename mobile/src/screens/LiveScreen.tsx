@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   View,
   Text,
@@ -17,11 +17,12 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import * as Haptics from 'expo-haptics';
 import * as Notifications from 'expo-notifications';
 import * as Calendar from 'expo-calendar';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '../lib/supabase';
 import { LiveEvent } from '../types/database.types';
 import { RootStackParamList, MainTabParamList } from '../types/navigation';
@@ -34,6 +35,8 @@ Notifications.setNotificationHandler({
     shouldShowAlert: true,
     shouldPlaySound: true,
     shouldSetBadge: false,
+    shouldShowBanner: true,
+    shouldShowList: true,
   }),
 });
 
@@ -52,7 +55,31 @@ export function LiveScreen() {
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const glowAnim = useRef(new Animated.Value(0.4)).current;
 
+  const loadReminders = async () => {
+    try {
+      const stored = await AsyncStorage.getItem('live_event_reminders');
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        setReminders(new Set(parsed));
+      }
+    } catch (error) {
+      console.error('Error loading reminders:', error);
+    }
+  };
+
+  const saveReminders = async (newReminders: Set<string>) => {
+    try {
+      await AsyncStorage.setItem('live_event_reminders', JSON.stringify([...newReminders]));
+    } catch (error) {
+      console.error('Error saving reminders:', error);
+    }
+  };
+
   const scheduleReminder = async (event: LiveEvent) => {
+    if (reminders.has(event.id)) {
+      Alert.alert('Already Set', `You already have a reminder for "${event.title}".`);
+      return;
+    }
     try {
       const { status: existingStatus } = await Notifications.getPermissionsAsync();
       let finalStatus = existingStatus;
@@ -90,7 +117,9 @@ export function LiveScreen() {
         },
       });
 
-      setReminders(prev => new Set(prev).add(event.id));
+      const newReminders = new Set(reminders).add(event.id);
+      setReminders(newReminders);
+      saveReminders(newReminders);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       Alert.alert('Reminder Set', `We'll remind you 15 minutes before "${event.title}" starts.`);
     } catch (error) {
@@ -161,9 +190,18 @@ export function LiveScreen() {
   };
 
   useEffect(() => {
+    loadReminders();
     loadLiveEvents();
     startPulseAnimation();
   }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      if (!loading) {
+        loadLiveEvents();
+      }
+    }, [])
+  );
 
   const startPulseAnimation = () => {
     Animated.loop(
@@ -458,7 +496,10 @@ export function LiveScreen() {
                       { backgroundColor: theme.colors.surface },
                       pressed && styles.timelineCardPressed,
                     ]}
-                    onPress={() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)}
+                    onPress={() => {
+                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                      scheduleReminder(event);
+                    }}
                   >
                     <Image
                       source={{ 
@@ -548,7 +589,7 @@ export function LiveScreen() {
                     styles.storyCard,
                     pressed && styles.storyCardPressed,
                   ]}
-                  onPress={() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)}
+                  onPress={() => handlePastBroadcastPlay(event)}
                 >
                   <ImageBackground
                     source={{ 
