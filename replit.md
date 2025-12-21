@@ -153,6 +153,16 @@ mobile/
 
 ## Recent Changes
 
+### Dec 21, 2025 - Community Page UX Improvements
+- ✅ Expanded Community categories from 2 to 14 (matching all existing database categories)
+- ✅ Added horizontal scrollable category tabs with icons and post count badges
+- ✅ Added "All" tab to view all posts regardless of category
+- ✅ Enhanced post cards with author avatars, engagement stats (likes, comments)
+- ✅ Added sort options: Newest, Most Liked, Most Discussed
+- ✅ Updated NewPostModal with scrollable category selector for all categories
+- ✅ Created categories constants file (`mobile/src/constants/categories.ts`)
+- Categories include: Prayer Requests, Pray for Others, Testimonies, Praise & Worship, Words of Encouragement, Born Again, Youth Voices, Sharing Hobbies, Physical & Mental Health, Money & Finances, To My Wife, To My Husband, My Children
+
 ### Dec 21, 2025 - Column Name Fixes & Deprecation Updates
 - ✅ Fixed `avatar_url` → `avatarurl` column name mismatch in CommunityScreen query
 - ✅ Updated ProfileScreen interface to use correct `avatarurl` column name
