@@ -1,25 +1,83 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, ScrollView, Image, StyleSheet, Pressable, ActivityIndicator, RefreshControl } from 'react-native';
+import React, { useState, useEffect, useRef } from 'react';
+import {
+  View,
+  Text,
+  ScrollView,
+  Image,
+  StyleSheet,
+  Pressable,
+  ActivityIndicator,
+  RefreshControl,
+  Animated,
+  Dimensions,
+  ImageBackground,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { supabase } from '../lib/supabase';
 import { Episode, Video } from '../types/database.types';
+import { useTheme } from '../contexts/ThemeContext';
 import * as Haptics from 'expo-haptics';
+
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
+const HERO_HEIGHT = 280;
 
 type TabType = 'podcasts' | 'videos';
 
+const CATEGORIES = [
+  { id: 'all', label: 'All', icon: 'apps' },
+  { id: 'sermons', label: 'Sermons', icon: 'book' },
+  { id: 'teachings', label: 'Teachings', icon: 'school' },
+  { id: 'worship', label: 'Worship', icon: 'musical-notes' },
+  { id: 'testimonies', label: 'Testimonies', icon: 'heart' },
+  { id: 'youth', label: 'Youth', icon: 'people' },
+];
+
 export function MediaScreen() {
+  const { theme, isDark } = useTheme();
   const [activeTab, setActiveTab] = useState<TabType>('podcasts');
+  const [selectedCategory, setSelectedCategory] = useState('all');
   const [podcasts, setPodcasts] = useState<Episode[]>([]);
   const [videos, setVideos] = useState<Video[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const tabIndicatorAnim = useRef(new Animated.Value(0)).current;
+  const heroScaleAnim = useRef(new Animated.Value(1)).current;
+  const playButtonPulse = useRef(new Animated.Value(1)).current;
+
   useEffect(() => {
     fetchData();
+    startPlayButtonPulse();
   }, []);
+
+  useEffect(() => {
+    Animated.spring(tabIndicatorAnim, {
+      toValue: activeTab === 'podcasts' ? 0 : 1,
+      useNativeDriver: true,
+      tension: 100,
+      friction: 10,
+    }).start();
+  }, [activeTab]);
+
+  const startPlayButtonPulse = () => {
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(playButtonPulse, {
+          toValue: 1.15,
+          duration: 1000,
+          useNativeDriver: true,
+        }),
+        Animated.timing(playButtonPulse, {
+          toValue: 1,
+          duration: 1000,
+          useNativeDriver: true,
+        }),
+      ])
+    ).start();
+  };
 
   const fetchData = async () => {
     try {
@@ -79,228 +137,731 @@ export function MediaScreen() {
     return `${Math.floor(diffInDays / 30)} months ago`;
   };
 
-  const renderPodcast = (podcast: Episode) => (
-    <Pressable
-      key={podcast.id}
-      style={styles.podcastCard}
-      onPress={() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)}
-    >
-      <Image
-        source={{
-          uri: podcast.thumbnail_url || 'https://images.unsplash.com/photo-1516589178581-6cd7833ae3b2?w=400',
-        }}
-        style={styles.podcastImage}
-      />
-      <View style={styles.podcastInfo}>
-        <Text style={styles.podcastTitle} numberOfLines={2}>
-          {podcast.title}
-        </Text>
-        {podcast.author && (
-          <Text style={styles.podcastAuthor}>{podcast.author}</Text>
-        )}
-        {podcast.description && (
-          <Text style={styles.podcastDescription} numberOfLines={2}>
-            {podcast.description}
+  const filterByCategory = <T extends { category?: string | null }>(items: T[]): T[] => {
+    if (selectedCategory === 'all') return items;
+    return items.filter(item => 
+      item.category?.toLowerCase().includes(selectedCategory.toLowerCase())
+    );
+  };
+
+  const filteredPodcasts = filterByCategory(podcasts);
+  const filteredVideos = filterByCategory(videos);
+
+  const featuredContent = activeTab === 'podcasts' 
+    ? filteredPodcasts.find(p => p.is_featured) || filteredPodcasts[0]
+    : filteredVideos.find(v => v.is_featured) || filteredVideos[0];
+
+  const continueWatching = filteredVideos.slice(0, 4);
+  const continuePlaying = filteredPodcasts.slice(0, 4);
+
+  const tabIndicatorTranslate = tabIndicatorAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0, (SCREEN_WIDTH - 48) / 2],
+  });
+
+  if (loading) {
+    return (
+      <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={theme.colors.primary} />
+          <Text style={[styles.loadingText, { color: theme.colors.textMuted }]}>
+            Loading media...
           </Text>
-        )}
-        <View style={styles.podcastMeta}>
-          {podcast.category && (
-            <View style={styles.metaItem}>
-              <Ionicons name="folder" size={14} color="#71717a" />
-              <Text style={styles.metaText}>{podcast.category}</Text>
-            </View>
-          )}
-          <View style={styles.metaItem}>
-            <Ionicons name="time" size={14} color="#71717a" />
-            <Text style={styles.metaText}>{formatDuration(podcast.duration)}</Text>
-          </View>
         </View>
       </View>
-    </Pressable>
-  );
-
-  const renderVideo = (video: Video) => (
-    <Pressable
-      key={video.id}
-      style={styles.videoCard}
-      onPress={() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)}
-    >
-      <View style={styles.thumbnailContainer}>
-        <Image
-          source={{
-            uri: video.thumbnail_url || 'https://images.unsplash.com/photo-1438032005730-c779502df39b?w=600',
-          }}
-          style={styles.thumbnail}
-        />
-        <LinearGradient
-          colors={['transparent', 'rgba(0,0,0,0.3)']}
-          style={styles.thumbnailGradient}
-        />
-        <View style={styles.playButton}>
-          <Ionicons name="play" size={32} color="#fff" />
-        </View>
-        <View style={styles.durationBadge}>
-          <Text style={styles.durationText}>{formatDuration(video.duration)}</Text>
-        </View>
-      </View>
-
-      <View style={styles.videoInfo}>
-        <Text style={styles.videoTitle} numberOfLines={2}>
-          {video.title}
-        </Text>
-        {video.category && (
-          <Text style={styles.channelName}>{video.category}</Text>
-        )}
-        <View style={styles.videoMeta}>
-          <Text style={styles.videoMetaText}>{formatTimeAgo(video.created_at)}</Text>
-          {video.is_featured && (
-            <>
-              <Text style={styles.metaDot}>•</Text>
-              <Text style={styles.featuredText}>Featured</Text>
-            </>
-          )}
-        </View>
-      </View>
-    </Pressable>
-  );
+    );
+  }
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
+    <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
       <ScrollView
         style={styles.scrollView}
         showsVerticalScrollIndicator={false}
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#047857" />
+          <RefreshControl 
+            refreshing={refreshing} 
+            onRefresh={onRefresh} 
+            tintColor={theme.colors.primary} 
+          />
         }
       >
-        <View style={styles.header}>
-          <Text style={styles.title}>Media</Text>
-          <Text style={styles.subtitle}>
-            Stream sermons, teachings, and watch videos
-          </Text>
-        </View>
+        {/* Header */}
+        <SafeAreaView edges={['top']} style={styles.headerSafeArea}>
+          <View style={styles.header}>
+            <Text style={[styles.title, { color: theme.colors.text }]}>Media</Text>
+            <Pressable 
+              style={[styles.searchButton, { backgroundColor: theme.colors.surface }]}
+              onPress={() => Haptics.selectionAsync()}
+            >
+              <Ionicons name="search" size={20} color={theme.colors.textMuted} />
+            </Pressable>
+          </View>
+        </SafeAreaView>
 
-        <View style={styles.tabs}>
+        {/* Featured Hero */}
+        {featuredContent && (
           <Pressable
-            style={[styles.tab, activeTab === 'podcasts' && styles.activeTab]}
-            onPress={() => {
-              Haptics.selectionAsync();
-              setActiveTab('podcasts');
+            style={styles.heroContainer}
+            onPress={() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium)}
+            onPressIn={() => {
+              Animated.spring(heroScaleAnim, {
+                toValue: 0.98,
+                useNativeDriver: true,
+              }).start();
+            }}
+            onPressOut={() => {
+              Animated.spring(heroScaleAnim, {
+                toValue: 1,
+                useNativeDriver: true,
+              }).start();
             }}
           >
-            <Ionicons
-              name="mic"
-              size={18}
-              color={activeTab === 'podcasts' ? '#fff' : '#71717a'}
-            />
-            <Text style={[styles.tabText, activeTab === 'podcasts' && styles.activeTabText]}>
-              Podcasts
-            </Text>
+            <Animated.View style={[styles.heroWrapper, { transform: [{ scale: heroScaleAnim }] }]}>
+              <ImageBackground
+                source={{
+                  uri: featuredContent.thumbnail_url ||
+                    'https://images.unsplash.com/photo-1507692049790-de58290a4334?w=1200',
+                }}
+                style={styles.heroImage}
+                resizeMode="cover"
+              >
+                <LinearGradient
+                  colors={['transparent', 'rgba(0,0,0,0.4)', 'rgba(0,0,0,0.9)']}
+                  locations={[0, 0.4, 1]}
+                  style={styles.heroGradient}
+                >
+                  <View style={styles.heroContent}>
+                    <View style={styles.heroBadge}>
+                      <Ionicons 
+                        name={activeTab === 'podcasts' ? 'mic' : 'videocam'} 
+                        size={12} 
+                        color="#fff" 
+                      />
+                      <Text style={styles.heroBadgeText}>
+                        {activeTab === 'podcasts' ? 'FEATURED EPISODE' : 'FEATURED VIDEO'}
+                      </Text>
+                    </View>
+                    
+                    <Text style={styles.heroTitle} numberOfLines={2}>
+                      {featuredContent.title}
+                    </Text>
+                    
+                    {'author' in featuredContent && featuredContent.author && (
+                      <Text style={styles.heroAuthor}>{featuredContent.author}</Text>
+                    )}
+                    
+                    <View style={styles.heroMeta}>
+                      <View style={styles.heroMetaItem}>
+                        <Ionicons name="time-outline" size={14} color="rgba(255,255,255,0.7)" />
+                        <Text style={styles.heroMetaText}>
+                          {formatDuration(featuredContent.duration)}
+                        </Text>
+                      </View>
+                      {featuredContent.category && (
+                        <View style={styles.heroMetaItem}>
+                          <Ionicons name="folder-outline" size={14} color="rgba(255,255,255,0.7)" />
+                          <Text style={styles.heroMetaText}>{featuredContent.category}</Text>
+                        </View>
+                      )}
+                    </View>
+                  </View>
+
+                  {/* Play Button */}
+                  <Animated.View 
+                    style={[
+                      styles.heroPlayButton,
+                      { transform: [{ scale: playButtonPulse }] }
+                    ]}
+                  >
+                    <LinearGradient
+                      colors={[theme.colors.primary, '#059669']}
+                      style={styles.heroPlayGradient}
+                    >
+                      <Ionicons name="play" size={32} color="#fff" />
+                    </LinearGradient>
+                  </Animated.View>
+                </LinearGradient>
+              </ImageBackground>
+            </Animated.View>
           </Pressable>
-          <Pressable
-            style={[styles.tab, activeTab === 'videos' && styles.activeTab]}
-            onPress={() => {
-              Haptics.selectionAsync();
-              setActiveTab('videos');
-            }}
-          >
-            <Ionicons
-              name="videocam"
-              size={18}
-              color={activeTab === 'videos' ? '#fff' : '#71717a'}
+        )}
+
+        {/* Animated Tab Switcher */}
+        <View style={styles.tabContainer}>
+          <View style={[styles.tabBackground, { backgroundColor: theme.colors.surface }]}>
+            <Animated.View
+              style={[
+                styles.tabIndicator,
+                { 
+                  backgroundColor: theme.colors.primary,
+                  transform: [{ translateX: tabIndicatorTranslate }],
+                },
+              ]}
             />
-            <Text style={[styles.tabText, activeTab === 'videos' && styles.activeTabText]}>
-              Videos
-            </Text>
-          </Pressable>
+            <Pressable
+              style={styles.tab}
+              onPress={() => {
+                Haptics.selectionAsync();
+                setActiveTab('podcasts');
+              }}
+            >
+              <Ionicons
+                name="mic"
+                size={18}
+                color={activeTab === 'podcasts' ? '#fff' : theme.colors.textMuted}
+              />
+              <Text
+                style={[
+                  styles.tabText,
+                  { color: activeTab === 'podcasts' ? '#fff' : theme.colors.textMuted },
+                ]}
+              >
+                Podcasts
+              </Text>
+              <View style={[
+                styles.tabBadge,
+                { backgroundColor: activeTab === 'podcasts' ? 'rgba(255,255,255,0.3)' : theme.colors.primaryLight }
+              ]}>
+                <Text style={[
+                  styles.tabBadgeText,
+                  { color: activeTab === 'podcasts' ? '#fff' : theme.colors.primary }
+                ]}>
+                  {podcasts.length}
+                </Text>
+              </View>
+            </Pressable>
+            <Pressable
+              style={styles.tab}
+              onPress={() => {
+                Haptics.selectionAsync();
+                setActiveTab('videos');
+              }}
+            >
+              <Ionicons
+                name="videocam"
+                size={18}
+                color={activeTab === 'videos' ? '#fff' : theme.colors.textMuted}
+              />
+              <Text
+                style={[
+                  styles.tabText,
+                  { color: activeTab === 'videos' ? '#fff' : theme.colors.textMuted },
+                ]}
+              >
+                Videos
+              </Text>
+              <View style={[
+                styles.tabBadge,
+                { backgroundColor: activeTab === 'videos' ? 'rgba(255,255,255,0.3)' : theme.colors.primaryLight }
+              ]}>
+                <Text style={[
+                  styles.tabBadgeText,
+                  { color: activeTab === 'videos' ? '#fff' : theme.colors.primary }
+                ]}>
+                  {videos.length}
+                </Text>
+              </View>
+            </Pressable>
+          </View>
         </View>
 
-        <View style={styles.content}>
-          {error ? (
-            <View style={styles.errorContainer}>
-              <Ionicons name="alert-circle-outline" size={48} color="#ef4444" />
-              <Text style={styles.errorText}>{error}</Text>
-              <Pressable style={styles.retryButton} onPress={fetchData}>
-                <Text style={styles.retryButtonText}>Retry</Text>
+        {/* Category Filter Chips */}
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.categoryScroll}
+        >
+          {CATEGORIES.map((category) => (
+            <Pressable
+              key={category.id}
+              style={[
+                styles.categoryChip,
+                {
+                  backgroundColor:
+                    selectedCategory === category.id
+                      ? theme.colors.primary
+                      : theme.colors.surface,
+                  borderColor:
+                    selectedCategory === category.id
+                      ? theme.colors.primary
+                      : theme.colors.border,
+                },
+              ]}
+              onPress={() => {
+                Haptics.selectionAsync();
+                setSelectedCategory(category.id);
+              }}
+            >
+              <Ionicons
+                name={category.icon as any}
+                size={14}
+                color={selectedCategory === category.id ? '#fff' : theme.colors.textMuted}
+              />
+              <Text
+                style={[
+                  styles.categoryChipText,
+                  {
+                    color:
+                      selectedCategory === category.id ? '#fff' : theme.colors.text,
+                  },
+                ]}
+              >
+                {category.label}
+              </Text>
+            </Pressable>
+          ))}
+        </ScrollView>
+
+        {/* Continue Section */}
+        {activeTab === 'videos' && continueWatching.length > 0 && (
+          <View style={styles.section}>
+            <View style={styles.sectionHeader}>
+              <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>
+                Continue Watching
+              </Text>
+              <Pressable onPress={() => Haptics.selectionAsync()}>
+                <Text style={[styles.seeAllText, { color: theme.colors.primary }]}>
+                  See All
+                </Text>
               </Pressable>
             </View>
-          ) : loading ? (
-            <View style={styles.loadingContainer}>
-              <ActivityIndicator size="large" color="#047857" />
-              <Text style={styles.loadingText}>Loading media...</Text>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.continueScroll}
+            >
+              {continueWatching.map((video, index) => (
+                <Pressable
+                  key={video.id}
+                  style={({ pressed }) => [
+                    styles.continueCard,
+                    pressed && styles.continueCardPressed,
+                  ]}
+                  onPress={() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)}
+                >
+                  <Image
+                    source={{
+                      uri: video.thumbnail_url ||
+                        'https://images.unsplash.com/photo-1438032005730-c779502df39b?w=600',
+                    }}
+                    style={styles.continueThumbnail}
+                  />
+                  <View style={styles.continuePlayIcon}>
+                    <Ionicons name="play" size={16} color="#fff" />
+                  </View>
+                  <View style={styles.continueProgress}>
+                    <View 
+                      style={[
+                        styles.continueProgressFill, 
+                        { width: `${30 + index * 15}%`, backgroundColor: theme.colors.primary }
+                      ]} 
+                    />
+                  </View>
+                  <Text 
+                    style={[styles.continueTitle, { color: theme.colors.text }]} 
+                    numberOfLines={2}
+                  >
+                    {video.title}
+                  </Text>
+                </Pressable>
+              ))}
+            </ScrollView>
+          </View>
+        )}
+
+        {activeTab === 'podcasts' && continuePlaying.length > 0 && (
+          <View style={styles.section}>
+            <View style={styles.sectionHeader}>
+              <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>
+                Continue Listening
+              </Text>
+              <Pressable onPress={() => Haptics.selectionAsync()}>
+                <Text style={[styles.seeAllText, { color: theme.colors.primary }]}>
+                  See All
+                </Text>
+              </Pressable>
             </View>
-          ) : (
-            <>
-              {activeTab === 'podcasts' && (
-                <>
-                  {podcasts.length === 0 ? (
-                    <View style={styles.emptyState}>
-                      <Ionicons name="mic-outline" size={48} color="#d4d4d8" />
-                      <Text style={styles.emptyStateTitle}>No podcasts available</Text>
-                      <Text style={styles.emptyStateText}>
-                        Check back soon for new episodes
-                      </Text>
-                    </View>
-                  ) : (
-                    podcasts.map(renderPodcast)
-                  )}
-                </>
-              )}
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.continueScroll}
+            >
+              {continuePlaying.map((podcast, index) => (
+                <Pressable
+                  key={podcast.id}
+                  style={({ pressed }) => [
+                    styles.continueCard,
+                    pressed && styles.continueCardPressed,
+                  ]}
+                  onPress={() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)}
+                >
+                  <Image
+                    source={{
+                      uri: podcast.thumbnail_url ||
+                        'https://images.unsplash.com/photo-1516589178581-6cd7833ae3b2?w=400',
+                    }}
+                    style={styles.continueThumbnail}
+                  />
+                  <View style={styles.continuePlayIcon}>
+                    <Ionicons name="play" size={16} color="#fff" />
+                  </View>
+                  <View style={styles.continueProgress}>
+                    <View 
+                      style={[
+                        styles.continueProgressFill, 
+                        { width: `${20 + index * 20}%`, backgroundColor: theme.colors.primary }
+                      ]} 
+                    />
+                  </View>
+                  <Text 
+                    style={[styles.continueTitle, { color: theme.colors.text }]} 
+                    numberOfLines={2}
+                  >
+                    {podcast.title}
+                  </Text>
+                </Pressable>
+              ))}
+            </ScrollView>
+          </View>
+        )}
 
-              {activeTab === 'videos' && (
-                <>
-                  {videos.length === 0 ? (
-                    <View style={styles.emptyState}>
-                      <Ionicons name="videocam-outline" size={48} color="#d4d4d8" />
-                      <Text style={styles.emptyStateTitle}>No videos available</Text>
-                      <Text style={styles.emptyStateText}>
-                        Check back soon for new content
-                      </Text>
-                    </View>
-                  ) : (
-                    videos.map(renderVideo)
-                  )}
-                </>
-              )}
-            </>
-          )}
-        </View>
+        {/* Content Error State */}
+        {error && (
+          <View style={styles.errorContainer}>
+            <Ionicons name="alert-circle-outline" size={48} color={theme.colors.error} />
+            <Text style={[styles.errorText, { color: theme.colors.error }]}>{error}</Text>
+            <Pressable 
+              style={[styles.retryButton, { backgroundColor: theme.colors.primary }]} 
+              onPress={fetchData}
+            >
+              <Text style={styles.retryButtonText}>Retry</Text>
+            </Pressable>
+          </View>
+        )}
 
-        <View style={{ height: 120 }} />
+        {/* Main Content List */}
+        {!error && (
+          <View style={styles.contentSection}>
+            <View style={styles.sectionHeader}>
+              <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>
+                {activeTab === 'podcasts' ? 'All Episodes' : 'All Videos'}
+              </Text>
+              <Text style={[styles.countText, { color: theme.colors.textMuted }]}>
+                {activeTab === 'podcasts' ? filteredPodcasts.length : filteredVideos.length} items
+              </Text>
+            </View>
+
+            {activeTab === 'podcasts' && (
+              <>
+                {filteredPodcasts.length === 0 ? (
+                  <View style={styles.emptyState}>
+                    <View style={[styles.emptyIconBg, { backgroundColor: theme.colors.primaryLight }]}>
+                      <Ionicons name="mic-outline" size={32} color={theme.colors.primary} />
+                    </View>
+                    <Text style={[styles.emptyStateTitle, { color: theme.colors.text }]}>
+                      No podcasts yet
+                    </Text>
+                    <Text style={[styles.emptyStateText, { color: theme.colors.textMuted }]}>
+                      {selectedCategory === 'all' ? 'Check back soon for new episodes' : 'No episodes in this category'}
+                    </Text>
+                  </View>
+                ) : (
+                  filteredPodcasts.map((podcast, index) => (
+                    <Pressable
+                      key={podcast.id}
+                      style={({ pressed }) => [
+                        styles.podcastCard,
+                        { backgroundColor: theme.colors.surface },
+                        pressed && styles.cardPressed,
+                      ]}
+                      onPress={() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)}
+                    >
+                      <View style={styles.podcastImageContainer}>
+                        <Image
+                          source={{
+                            uri: podcast.thumbnail_url ||
+                              'https://images.unsplash.com/photo-1516589178581-6cd7833ae3b2?w=400',
+                          }}
+                          style={styles.podcastImage}
+                        />
+                        <View style={styles.podcastPlayOverlay}>
+                          <Ionicons name="play" size={20} color="#fff" />
+                        </View>
+                        {podcast.is_featured && (
+                          <View style={[styles.featuredBadge, { backgroundColor: theme.colors.primary }]}>
+                            <Ionicons name="star" size={10} color="#fff" />
+                          </View>
+                        )}
+                      </View>
+                      <View style={styles.podcastInfo}>
+                        <Text style={[styles.podcastTitle, { color: theme.colors.text }]} numberOfLines={2}>
+                          {podcast.title}
+                        </Text>
+                        {podcast.author && (
+                          <Text style={[styles.podcastAuthor, { color: theme.colors.textMuted }]}>
+                            {podcast.author}
+                          </Text>
+                        )}
+                        <View style={styles.podcastMeta}>
+                          <View style={[styles.durationPill, { backgroundColor: theme.colors.primaryLight }]}>
+                            <Ionicons name="time" size={12} color={theme.colors.primary} />
+                            <Text style={[styles.durationPillText, { color: theme.colors.primary }]}>
+                              {formatDuration(podcast.duration)}
+                            </Text>
+                          </View>
+                          <Text style={[styles.dateText, { color: theme.colors.textMuted }]}>
+                            {formatTimeAgo(podcast.created_at)}
+                          </Text>
+                        </View>
+                      </View>
+                      <Pressable 
+                        style={styles.moreButton}
+                        onPress={() => Haptics.selectionAsync()}
+                      >
+                        <Ionicons name="ellipsis-vertical" size={18} color={theme.colors.textMuted} />
+                      </Pressable>
+                    </Pressable>
+                  ))
+                )}
+              </>
+            )}
+
+            {activeTab === 'videos' && (
+              <>
+                {filteredVideos.length === 0 ? (
+                  <View style={styles.emptyState}>
+                    <View style={[styles.emptyIconBg, { backgroundColor: theme.colors.primaryLight }]}>
+                      <Ionicons name="videocam-outline" size={32} color={theme.colors.primary} />
+                    </View>
+                    <Text style={[styles.emptyStateTitle, { color: theme.colors.text }]}>
+                      No videos yet
+                    </Text>
+                    <Text style={[styles.emptyStateText, { color: theme.colors.textMuted }]}>
+                      {selectedCategory === 'all' ? 'Check back soon for new content' : 'No videos in this category'}
+                    </Text>
+                  </View>
+                ) : (
+                  filteredVideos.map((video) => (
+                    <Pressable
+                      key={video.id}
+                      style={({ pressed }) => [
+                        styles.videoCard,
+                        pressed && styles.cardPressed,
+                      ]}
+                      onPress={() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)}
+                    >
+                      <View style={styles.videoThumbnailContainer}>
+                        <Image
+                          source={{
+                            uri: video.thumbnail_url ||
+                              'https://images.unsplash.com/photo-1438032005730-c779502df39b?w=600',
+                          }}
+                          style={styles.videoThumbnail}
+                        />
+                        <LinearGradient
+                          colors={['transparent', 'rgba(0,0,0,0.6)']}
+                          style={styles.videoGradient}
+                        />
+                        <View style={styles.videoPlayButton}>
+                          <Ionicons name="play" size={28} color="#fff" />
+                        </View>
+                        <View style={styles.videoDuration}>
+                          <Text style={styles.videoDurationText}>
+                            {formatDuration(video.duration)}
+                          </Text>
+                        </View>
+                        {video.is_featured && (
+                          <View style={[styles.videoFeaturedBadge, { backgroundColor: theme.colors.primary }]}>
+                            <Ionicons name="star" size={12} color="#fff" />
+                            <Text style={styles.videoFeaturedText}>Featured</Text>
+                          </View>
+                        )}
+                      </View>
+                      <View style={[styles.videoInfo, { backgroundColor: theme.colors.surface }]}>
+                        <Text style={[styles.videoTitle, { color: theme.colors.text }]} numberOfLines={2}>
+                          {video.title}
+                        </Text>
+                        <View style={styles.videoMetaRow}>
+                          {video.category && (
+                            <Text style={[styles.videoCategory, { color: theme.colors.primary }]}>
+                              {video.category}
+                            </Text>
+                          )}
+                          <Text style={[styles.videoDate, { color: theme.colors.textMuted }]}>
+                            {formatTimeAgo(video.created_at)}
+                          </Text>
+                        </View>
+                      </View>
+                    </Pressable>
+                  ))
+                )}
+              </>
+            )}
+          </View>
+        )}
+
+        <View style={{ height: 140 }} />
       </ScrollView>
-    </SafeAreaView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fff',
   },
   scrollView: {
     flex: 1,
   },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  loadingText: {
+    marginTop: 16,
+    fontSize: 15,
+    fontWeight: '500',
+  },
+  headerSafeArea: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    zIndex: 10,
+  },
   header: {
-    paddingHorizontal: 20,
-    paddingTop: 20,
-    paddingBottom: 24,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 24,
+    paddingTop: 12,
+    paddingBottom: 16,
   },
   title: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    color: '#09090b',
-    marginBottom: 8,
+    fontSize: 34,
+    fontWeight: '800',
+    letterSpacing: -0.5,
   },
-  subtitle: {
-    fontSize: 15,
-    color: '#71717a',
-    lineHeight: 22,
+  searchButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
-  tabs: {
-    flexDirection: 'row',
-    paddingHorizontal: 20,
-    gap: 12,
+
+  // Hero Styles
+  heroContainer: {
+    marginHorizontal: 20,
+    marginTop: 100,
     marginBottom: 20,
+    borderRadius: 24,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.2,
+    shadowRadius: 20,
+    elevation: 12,
+  },
+  heroWrapper: {
+    borderRadius: 24,
+    overflow: 'hidden',
+  },
+  heroImage: {
+    height: HERO_HEIGHT,
+    width: '100%',
+  },
+  heroGradient: {
+    flex: 1,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-end',
+    padding: 20,
+  },
+  heroContent: {
+    flex: 1,
+    justifyContent: 'flex-end',
+    paddingRight: 16,
+  },
+  heroBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    alignSelf: 'flex-start',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 12,
+    marginBottom: 12,
+  },
+  heroBadgeText: {
+    color: '#fff',
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 1,
+  },
+  heroTitle: {
+    fontSize: 22,
+    fontWeight: '800',
+    color: '#fff',
+    marginBottom: 6,
+    lineHeight: 28,
+  },
+  heroAuthor: {
+    fontSize: 14,
+    color: 'rgba(255,255,255,0.8)',
+    marginBottom: 10,
+  },
+  heroMeta: {
+    flexDirection: 'row',
+    gap: 16,
+  },
+  heroMetaItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  heroMetaText: {
+    fontSize: 13,
+    color: 'rgba(255,255,255,0.7)',
+  },
+  heroPlayButton: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.3,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  heroPlayGradient: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+
+  // Tab Styles
+  tabContainer: {
+    paddingHorizontal: 24,
+    marginBottom: 16,
+  },
+  tabBackground: {
+    flexDirection: 'row',
+    borderRadius: 14,
+    padding: 4,
+    position: 'relative',
+  },
+  tabIndicator: {
+    position: 'absolute',
+    top: 4,
+    left: 4,
+    width: '50%',
+    height: '100%',
+    borderRadius: 10,
   },
   tab: {
     flex: 1,
@@ -308,206 +869,342 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     paddingVertical: 12,
-    borderRadius: 8,
-    backgroundColor: '#f4f4f5',
-    gap: 8,
-  },
-  activeTab: {
-    backgroundColor: '#047857',
+    gap: 6,
+    zIndex: 1,
   },
   tabText: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#71717a',
   },
-  activeTabText: {
-    color: '#fff',
-  },
-  content: {
-    paddingHorizontal: 20,
-  },
-  loadingContainer: {
-    paddingVertical: 60,
+  tabBadge: {
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 8,
+    minWidth: 24,
     alignItems: 'center',
   },
-  loadingText: {
-    marginTop: 16,
-    fontSize: 15,
-    color: '#71717a',
+  tabBadgeText: {
+    fontSize: 11,
+    fontWeight: '700',
   },
-  emptyState: {
-    paddingVertical: 60,
-    alignItems: 'center',
+
+  // Category Chips
+  categoryScroll: {
+    paddingHorizontal: 24,
+    gap: 10,
+    marginBottom: 24,
   },
-  emptyStateTitle: {
-    fontSize: 17,
-    fontWeight: '600',
-    color: '#09090b',
-    marginTop: 16,
-    marginBottom: 8,
-  },
-  emptyStateText: {
-    fontSize: 14,
-    color: '#71717a',
-    textAlign: 'center',
-    paddingHorizontal: 40,
-  },
-  podcastCard: {
+  categoryChip: {
     flexDirection: 'row',
-    backgroundColor: '#fff',
-    borderRadius: 16,
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 20,
+    borderWidth: 1,
+  },
+  categoryChipText: {
+    fontSize: 13,
+    fontWeight: '600',
+  },
+
+  // Sections
+  section: {
+    marginBottom: 28,
+  },
+  sectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'baseline',
+    paddingHorizontal: 24,
     marginBottom: 16,
-    overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: 'rgba(228, 228, 231, 0.5)',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 12 },
-    shadowOpacity: 0.04,
-    shadowRadius: 16,
-    elevation: 3,
   },
-  podcastImage: {
-    width: 120,
-    height: 120,
+  sectionTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    letterSpacing: -0.3,
   },
-  podcastInfo: {
-    flex: 1,
-    padding: 12,
-    justifyContent: 'center',
-  },
-  podcastTitle: {
-    fontSize: 16,
+  seeAllText: {
+    fontSize: 14,
     fontWeight: '600',
-    color: '#09090b',
-    marginBottom: 4,
   },
-  podcastAuthor: {
-    fontSize: 13,
-    color: '#71717a',
-    marginBottom: 6,
+  countText: {
+    fontSize: 14,
+    fontWeight: '500',
   },
-  podcastDescription: {
-    fontSize: 13,
-    color: '#71717a',
-    marginBottom: 8,
+
+  // Continue Cards
+  continueScroll: {
+    paddingHorizontal: 24,
+    gap: 14,
   },
-  podcastMeta: {
-    flexDirection: 'row',
-    gap: 12,
+  continueCard: {
+    width: 140,
   },
-  metaItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
+  continueCardPressed: {
+    opacity: 0.8,
+    transform: [{ scale: 0.98 }],
   },
-  metaText: {
-    fontSize: 12,
-    color: '#71717a',
+  continueThumbnail: {
+    width: 140,
+    height: 80,
+    borderRadius: 12,
+    marginBottom: 2,
   },
-  videoCard: {
-    backgroundColor: '#fff',
-    borderRadius: 16,
-    marginBottom: 20,
-    overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: 'rgba(228, 228, 231, 0.5)',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 16 },
-    shadowOpacity: 0.06,
-    shadowRadius: 24,
-    elevation: 4,
-  },
-  thumbnailContainer: {
-    position: 'relative',
-    aspectRatio: 16 / 9,
-  },
-  thumbnail: {
-    width: '100%',
-    height: '100%',
-  },
-  thumbnailGradient: {
+  continuePlayIcon: {
     position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: 0,
-    height: '40%',
-  },
-  playButton: {
-    position: 'absolute',
-    top: '50%',
-    left: '50%',
-    marginLeft: -24,
-    marginTop: -24,
-    width: 48,
-    height: 48,
-    borderRadius: 24,
+    top: 28,
+    left: 56,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
     backgroundColor: 'rgba(0,0,0,0.6)',
     justifyContent: 'center',
     alignItems: 'center',
   },
-  durationBadge: {
-    position: 'absolute',
-    bottom: 8,
-    right: 8,
-    backgroundColor: 'rgba(0,0,0,0.8)',
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 4,
+  continueProgress: {
+    height: 3,
+    backgroundColor: 'rgba(0,0,0,0.1)',
+    borderRadius: 2,
+    marginBottom: 8,
   },
-  durationText: {
-    color: '#fff',
-    fontSize: 12,
-    fontWeight: '600',
+  continueProgressFill: {
+    height: '100%',
+    borderRadius: 2,
   },
-  videoInfo: {
-    padding: 12,
-  },
-  videoTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#09090b',
-    marginBottom: 6,
-  },
-  channelName: {
+  continueTitle: {
     fontSize: 13,
-    color: '#71717a',
-    marginBottom: 4,
+    fontWeight: '600',
+    lineHeight: 18,
   },
-  videoMeta: {
+
+  // Content Section
+  contentSection: {
+    paddingHorizontal: 24,
+  },
+
+  // Podcast Cards
+  podcastCard: {
     flexDirection: 'row',
+    borderRadius: 16,
+    marginBottom: 14,
+    padding: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.06,
+    shadowRadius: 12,
+    elevation: 3,
+  },
+  cardPressed: {
+    opacity: 0.9,
+    transform: [{ scale: 0.99 }],
+  },
+  podcastImageContainer: {
+    position: 'relative',
+    width: 80,
+    height: 80,
+    borderRadius: 12,
+    overflow: 'hidden',
+  },
+  podcastImage: {
+    width: 80,
+    height: 80,
+  },
+  podcastPlayOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0,0,0,0.3)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    opacity: 0.8,
+  },
+  featuredBadge: {
+    position: 'absolute',
+    top: 4,
+    right: 4,
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    justifyContent: 'center',
     alignItems: 'center',
   },
-  videoMetaText: {
-    fontSize: 12,
-    color: '#71717a',
+  podcastInfo: {
+    flex: 1,
+    marginLeft: 14,
+    justifyContent: 'center',
   },
-  metaDot: {
-    fontSize: 12,
-    color: '#a1a1aa',
-    marginHorizontal: 6,
+  podcastTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    marginBottom: 4,
+    lineHeight: 20,
   },
-  featuredText: {
-    fontSize: 12,
-    color: '#047857',
+  podcastAuthor: {
+    fontSize: 13,
+    marginBottom: 8,
+  },
+  podcastMeta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  durationPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  durationPillText: {
+    fontSize: 11,
     fontWeight: '600',
   },
-  errorContainer: {
+  dateText: {
+    fontSize: 12,
+  },
+  moreButton: {
+    width: 32,
+    height: 32,
+    justifyContent: 'center',
+    alignItems: 'center',
+    alignSelf: 'center',
+  },
+
+  // Video Cards
+  videoCard: {
+    borderRadius: 20,
+    marginBottom: 20,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.1,
+    shadowRadius: 16,
+    elevation: 6,
+  },
+  videoThumbnailContainer: {
+    position: 'relative',
+    aspectRatio: 16 / 9,
+  },
+  videoThumbnail: {
+    width: '100%',
+    height: '100%',
+  },
+  videoGradient: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    height: '50%',
+  },
+  videoPlayButton: {
+    position: 'absolute',
+    top: '50%',
+    left: '50%',
+    marginLeft: -28,
+    marginTop: -28,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  videoDuration: {
+    position: 'absolute',
+    bottom: 10,
+    right: 10,
+    backgroundColor: 'rgba(0,0,0,0.8)',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+  },
+  videoDurationText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  videoFeaturedBadge: {
+    position: 'absolute',
+    top: 12,
+    left: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 12,
+  },
+  videoFeaturedText: {
+    color: '#fff',
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  videoInfo: {
+    padding: 16,
+  },
+  videoTitle: {
+    fontSize: 17,
+    fontWeight: '700',
+    marginBottom: 8,
+    lineHeight: 22,
+  },
+  videoMetaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  videoCategory: {
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  videoDate: {
+    fontSize: 13,
+  },
+
+  // Empty State
+  emptyState: {
     paddingVertical: 60,
     alignItems: 'center',
   },
-  errorText: {
-    fontSize: 14,
-    color: '#ef4444',
-    marginTop: 16,
+  emptyIconBg: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    justifyContent: 'center',
+    alignItems: 'center',
     marginBottom: 20,
+  },
+  emptyStateTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    marginBottom: 8,
+  },
+  emptyStateText: {
+    fontSize: 14,
     textAlign: 'center',
     paddingHorizontal: 40,
   },
+
+  // Error State
+  errorContainer: {
+    paddingVertical: 60,
+    alignItems: 'center',
+    paddingHorizontal: 24,
+  },
+  errorText: {
+    fontSize: 14,
+    marginTop: 16,
+    marginBottom: 20,
+    textAlign: 'center',
+  },
   retryButton: {
-    backgroundColor: '#047857',
     paddingHorizontal: 24,
     paddingVertical: 12,
-    borderRadius: 8,
+    borderRadius: 12,
   },
   retryButtonText: {
     color: '#fff',
