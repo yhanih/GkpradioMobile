@@ -1,9 +1,10 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, ScrollView, StyleSheet, Pressable, ActivityIndicator, RefreshControl, Alert, Image, TextInput } from 'react-native';
+import React, { useState, useEffect, useRef } from 'react';
+import { View, Text, ScrollView, StyleSheet, Pressable, ActivityIndicator, RefreshControl, Alert, Image, TextInput, Animated, Share } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { LinearGradient } from 'expo-linear-gradient';
 import { supabase } from '../lib/supabase';
 import { CommunityThread, User } from '../types/database.types';
 import { useAuth } from '../contexts/AuthContext';
@@ -36,6 +37,9 @@ export function CommunityScreen() {
   const [blockedUserIds, setBlockedUserIds] = useState<string[]>([]);
   const [showNewPostModal, setShowNewPostModal] = useState(false);
   const [showSortMenu, setShowSortMenu] = useState(false);
+  const [likeAnimations] = useState<{[key: string]: Animated.Value}>({});
+  const fabScale = useRef(new Animated.Value(1)).current;
+  const scrollY = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     fetchBlockedUsers();
@@ -141,11 +145,28 @@ export function CommunityScreen() {
     }
   };
 
+  const getLikeAnimation = (threadId: string) => {
+    if (!likeAnimations[threadId]) {
+      likeAnimations[threadId] = new Animated.Value(1);
+    }
+    return likeAnimations[threadId];
+  };
+
+  const animateLike = (threadId: string) => {
+    const anim = getLikeAnimation(threadId);
+    Animated.sequence([
+      Animated.timing(anim, { toValue: 1.3, duration: 100, useNativeDriver: true }),
+      Animated.timing(anim, { toValue: 1, duration: 100, useNativeDriver: true }),
+    ]).start();
+  };
+
   const handleLike = async (threadId: string, currentlyLiked: boolean) => {
     if (!user) {
       Alert.alert('Authentication Required', 'Please sign in to like posts.');
       return;
     }
+
+    animateLike(threadId);
 
     setThreads(prev => prev.map(t => {
       if (t.id === threadId) {
@@ -266,6 +287,65 @@ export function CommunityScreen() {
     setRefreshing(true);
     await Promise.all([fetchData(), fetchStats()]);
     setRefreshing(false);
+  };
+
+  const handleSharePost = async (thread: ThreadWithUser) => {
+    Haptics.selectionAsync();
+    try {
+      await Share.share({
+        title: thread.title,
+        message: `${thread.title}\n\n${thread.content.substring(0, 200)}${thread.content.length > 200 ? '...' : ''}\n\nShared from GKP Radio Community`,
+      });
+    } catch (error) {
+      console.error('Error sharing:', error);
+    }
+  };
+
+  const handleDeletePost = async (threadId: string, threadUserId: string) => {
+    if (!user || user.id !== threadUserId) {
+      Alert.alert('Not Allowed', 'You can only delete your own posts.');
+      return;
+    }
+
+    Alert.alert(
+      'Delete Post',
+      'Are you sure you want to delete this post? This action cannot be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              const { error } = await supabase
+                .from('communitythreads')
+                .delete()
+                .eq('id', threadId);
+
+              if (error) throw error;
+
+              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+              Alert.alert('Deleted', 'Your post has been deleted.');
+              fetchData();
+              fetchStats();
+            } catch (error) {
+              console.error('Error deleting post:', error);
+              Alert.alert('Error', 'Unable to delete post. Please try again.');
+            }
+          }
+        }
+      ]
+    );
+  };
+
+  const handleFabPress = () => {
+    Animated.sequence([
+      Animated.timing(fabScale, { toValue: 0.9, duration: 50, useNativeDriver: true }),
+      Animated.timing(fabScale, { toValue: 1, duration: 50, useNativeDriver: true }),
+    ]).start(() => {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      setShowNewPostModal(true);
+    });
   };
 
   const formatTimeAgo = (dateString: string) => {
@@ -403,11 +483,13 @@ export function CommunityScreen() {
               style={styles.statButton}
               onPress={() => handleLike(thread.id, thread.user_has_liked || false)}
             >
-              <Ionicons 
-                name={thread.user_has_liked ? "heart" : "heart-outline"} 
-                size={18} 
-                color={thread.user_has_liked ? "#ef4444" : "#71717a"} 
-              />
+              <Animated.View style={{ transform: [{ scale: getLikeAnimation(thread.id) }] }}>
+                <Ionicons 
+                  name={thread.user_has_liked ? "heart" : "heart-outline"} 
+                  size={18} 
+                  color={thread.user_has_liked ? "#ef4444" : "#71717a"} 
+                />
+              </Animated.View>
               <Text style={[styles.statText, thread.user_has_liked && styles.statTextActive]}>
                 {thread.like_count || 0}
               </Text>
@@ -416,8 +498,19 @@ export function CommunityScreen() {
               <Ionicons name="chatbubble-outline" size={18} color="#71717a" />
               <Text style={styles.statText}>{thread.comment_count || 0}</Text>
             </View>
+            <Pressable 
+              style={styles.statButton}
+              onPress={() => handleSharePost(thread)}
+            >
+              <Ionicons name="share-outline" size={18} color="#71717a" />
+            </Pressable>
           </View>
           <View style={styles.cardActions}>
+            {user && user.id === thread.userid && (
+              <Pressable onPress={() => handleDeletePost(thread.id, thread.userid)} style={styles.actionButton}>
+                <Ionicons name="trash-outline" size={16} color="#ef4444" />
+              </Pressable>
+            )}
             <Pressable onPress={() => handleReport('thread', thread.id)} style={styles.actionButton}>
               <Ionicons name="flag-outline" size={16} color="#a1a1aa" />
             </Pressable>
@@ -590,6 +683,17 @@ export function CommunityScreen() {
 
         <View style={{ height: 120 }} />
       </ScrollView>
+
+      <Animated.View style={[styles.fab, { transform: [{ scale: fabScale }] }]}>
+        <Pressable onPress={handleFabPress} style={styles.fabButton}>
+          <LinearGradient
+            colors={['#047857', '#059669']}
+            style={styles.fabGradient}
+          >
+            <Ionicons name="add" size={28} color="#fff" />
+          </LinearGradient>
+        </Pressable>
+      </Animated.View>
 
       <NewPostModal
         visible={showNewPostModal}
@@ -984,5 +1088,27 @@ const styles = StyleSheet.create({
   searchButton: {
     padding: 8,
     marginLeft: 8,
+  },
+  fab: {
+    position: 'absolute',
+    bottom: 100,
+    right: 20,
+    zIndex: 100,
+  },
+  fabButton: {
+    borderRadius: 30,
+    overflow: 'hidden',
+    shadowColor: '#047857',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 6,
+  },
+  fabGradient: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
 });

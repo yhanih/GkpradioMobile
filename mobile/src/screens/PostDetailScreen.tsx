@@ -529,15 +529,18 @@ export function PostDetailScreen() {
         </ScrollView>
 
         <View style={styles.commentInputContainer}>
-          <TextInput
-            style={styles.commentInput}
-            placeholder="Write a comment..."
-            placeholderTextColor="#a1a1aa"
-            value={newComment}
-            onChangeText={setNewComment}
-            multiline
-            maxLength={500}
-          />
+          <View style={styles.commentInputWrapper}>
+            <TextInput
+              style={styles.commentInput}
+              placeholder="Write a comment..."
+              placeholderTextColor="#a1a1aa"
+              value={newComment}
+              onChangeText={setNewComment}
+              multiline
+              maxLength={500}
+            />
+            <Text style={styles.charCounter}>{newComment.length}/500</Text>
+          </View>
           <Pressable
             style={[styles.sendButton, (!newComment.trim() || submittingComment) && styles.sendButtonDisabled]}
             onPress={handleSubmitComment}
@@ -798,8 +801,10 @@ const styles = StyleSheet.create({
     borderTopColor: '#e4e4e7',
     backgroundColor: '#fff',
   },
-  commentInput: {
+  commentInputWrapper: {
     flex: 1,
+  },
+  commentInput: {
     backgroundColor: '#f4f4f5',
     borderRadius: 20,
     paddingHorizontal: 16,
@@ -808,6 +813,13 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: '#09090b',
     maxHeight: 100,
+  },
+  charCounter: {
+    fontSize: 11,
+    color: '#a1a1aa',
+    textAlign: 'right',
+    marginTop: 4,
+    marginRight: 8,
   },
   sendButton: {
     backgroundColor: '#047857',
