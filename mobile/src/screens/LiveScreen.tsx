@@ -50,6 +50,7 @@ export function LiveScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [reminders, setReminders] = useState<Set<string>>(new Set());
+  const [countdownTick, setCountdownTick] = useState(0);
   
   const scrollY = useRef(new Animated.Value(0)).current;
   const pulseAnim = useRef(new Animated.Value(1)).current;
@@ -169,13 +170,52 @@ export function LiveScreen() {
     }
   };
 
+  const cancelReminder = async (event: LiveEvent) => {
+    try {
+      const scheduled = await Notifications.getAllScheduledNotificationsAsync();
+      const eventNotification = scheduled.find(n => 
+        n.content.body?.includes(event.title)
+      );
+      
+      if (eventNotification) {
+        await Notifications.cancelScheduledNotificationAsync(eventNotification.identifier);
+      }
+      
+      const newReminders = new Set(reminders);
+      newReminders.delete(event.id);
+      setReminders(newReminders);
+      saveReminders(newReminders);
+      
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      Alert.alert('Reminder Cancelled', `Reminder for "${event.title}" has been removed.`);
+    } catch (error) {
+      console.error('Error cancelling reminder:', error);
+      Alert.alert('Error', 'Could not cancel reminder. Please try again.');
+    }
+  };
+
+  const toggleReminder = (event: LiveEvent) => {
+    if (reminders.has(event.id)) {
+      Alert.alert(
+        'Cancel Reminder?',
+        `Do you want to remove the reminder for "${event.title}"?`,
+        [
+          { text: 'Keep', style: 'cancel' },
+          { text: 'Remove', style: 'destructive', onPress: () => cancelReminder(event) }
+        ]
+      );
+    } else {
+      scheduleReminder(event);
+    }
+  };
+
   const handleHeroAction = (event: LiveEvent | undefined, isLive: boolean) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
     
     if (isLive && event) {
       navigation.navigate('VideoPlayer', { liveEvent: event });
     } else if (event) {
-      scheduleReminder(event);
+      toggleReminder(event);
     }
   };
 
@@ -193,6 +233,12 @@ export function LiveScreen() {
     loadReminders();
     loadLiveEvents();
     startPulseAnimation();
+    
+    const countdownInterval = setInterval(() => {
+      setCountdownTick(prev => prev + 1);
+    }, 60000);
+    
+    return () => clearInterval(countdownInterval);
   }, []);
 
   useFocusEffect(
@@ -439,30 +485,49 @@ export function LiveScreen() {
               )}
 
               {/* Large Action Button */}
-              <Pressable
-                style={({ pressed }) => [
-                  styles.heroButton,
-                  isLive && styles.heroButtonLive,
-                  pressed && styles.heroButtonPressed,
-                ]}
-                onPress={() => handleHeroAction(heroEvent, isLive)}
-              >
-                <LinearGradient
-                  colors={isLive ? ['#ef4444', '#dc2626'] : [theme.colors.primary, '#059669']}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 0 }}
-                  style={styles.heroButtonGradient}
+              {heroEvent && (
+                <Pressable
+                  style={({ pressed }) => [
+                    styles.heroButton,
+                    isLive && styles.heroButtonLive,
+                    pressed && styles.heroButtonPressed,
+                  ]}
+                  onPress={() => handleHeroAction(heroEvent, isLive)}
                 >
-                  <Ionicons 
-                    name={isLive ? 'play' : 'notifications-outline'} 
-                    size={24} 
-                    color="#fff" 
-                  />
-                  <Text style={styles.heroButtonText}>
-                    {isLive ? 'Watch Now' : 'Set Reminder'}
-                  </Text>
-                </LinearGradient>
-              </Pressable>
+                  <LinearGradient
+                    colors={
+                      isLive 
+                        ? ['#ef4444', '#dc2626'] 
+                        : reminders.has(heroEvent.id)
+                          ? ['#059669', '#047857']
+                          : [theme.colors.primary, '#059669']
+                    }
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 0 }}
+                    style={styles.heroButtonGradient}
+                  >
+                    <Ionicons 
+                      name={
+                        isLive 
+                          ? 'play' 
+                          : reminders.has(heroEvent.id) 
+                            ? 'notifications' 
+                            : 'notifications-outline'
+                      } 
+                      size={24} 
+                      color="#fff" 
+                    />
+                    <Text style={styles.heroButtonText}>
+                      {isLive 
+                        ? 'Watch Now' 
+                        : reminders.has(heroEvent.id) 
+                          ? 'Reminder Set' 
+                          : 'Set Reminder'
+                      }
+                    </Text>
+                  </LinearGradient>
+                </Pressable>
+              )}
             </View>
           </SafeAreaView>
         </Animated.View>
@@ -498,7 +563,7 @@ export function LiveScreen() {
                     ]}
                     onPress={() => {
                       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                      scheduleReminder(event);
+                      toggleReminder(event);
                     }}
                   >
                     <Image
@@ -523,6 +588,12 @@ export function LiveScreen() {
                       </View>
                     )}
 
+                    {reminders.has(event.id) && (
+                      <View style={styles.reminderBadge}>
+                        <Ionicons name="notifications" size={12} color="#fff" />
+                      </View>
+                    )}
+
                     <View style={styles.timelineInfo}>
                       <Text 
                         style={[styles.timelineTitle, { color: theme.colors.text }]} 
@@ -540,7 +611,7 @@ export function LiveScreen() {
                             styles.reminderBtn, 
                             { backgroundColor: reminders.has(event.id) ? theme.colors.primary : theme.colors.primaryLight }
                           ]}
-                          onPress={() => scheduleReminder(event)}
+                          onPress={() => toggleReminder(event)}
                         >
                           <Ionicons 
                             name={reminders.has(event.id) ? 'notifications' : 'notifications-outline'} 
@@ -932,6 +1003,19 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.5)',
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  reminderBadge: {
+    position: 'absolute',
+    top: 12,
+    right: 52,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: '#10b981',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: '#fff',
   },
   timelineInfo: {
     padding: 16,
