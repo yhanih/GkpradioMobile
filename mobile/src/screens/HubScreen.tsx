@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -8,34 +8,53 @@ import {
   Switch,
   Linking,
   Alert,
+  ActivityIndicator,
+  Image,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../types/navigation';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
+import { supabase } from '../lib/supabase';
 
 type HubNavigationProp = NativeStackNavigationProp<RootStackParamList>;
+
+const HEADER_HEIGHT = 180;
+const AUDIO_PLAYER_HEIGHT = 100;
+const NOTIFICATION_KEY = '@gkp_notifications_enabled';
 
 interface SettingItemProps {
   icon: keyof typeof Ionicons.glyphMap;
   label: string;
+  subtitle?: string;
   onPress?: () => void;
   showChevron?: boolean;
   rightElement?: React.ReactNode;
   destructive?: boolean;
+  theme: any;
 }
 
-function SettingItem({ icon, label, onPress, showChevron = true, rightElement, destructive }: SettingItemProps) {
+function SettingItem({ 
+  icon, 
+  label, 
+  subtitle,
+  onPress, 
+  showChevron = true, 
+  rightElement, 
+  destructive,
+  theme
+}: SettingItemProps) {
   return (
     <Pressable 
       style={({ pressed }) => [
         styles.settingItem,
-        pressed && styles.settingItemPressed
+        { backgroundColor: pressed ? theme.colors.surfaceSecondary : 'transparent' }
       ]}
       onPress={() => {
         Haptics.selectionAsync();
@@ -43,27 +62,121 @@ function SettingItem({ icon, label, onPress, showChevron = true, rightElement, d
       }}
     >
       <View style={styles.settingLeft}>
-        <View style={[styles.settingIconContainer, destructive && styles.settingIconDestructive]}>
-          <Ionicons name={icon} size={20} color={destructive ? '#ef4444' : '#047857'} />
+        <View style={[
+          styles.settingIconContainer, 
+          { backgroundColor: destructive ? '#fef2f2' : theme.colors.primaryLight }
+        ]}>
+          <Ionicons 
+            name={icon} 
+            size={20} 
+            color={destructive ? '#ef4444' : theme.colors.primary} 
+          />
         </View>
-        <Text style={[styles.settingText, destructive && styles.settingTextDestructive]}>{label}</Text>
+        <View style={styles.settingTextContainer}>
+          <Text style={[
+            styles.settingText, 
+            { color: destructive ? '#ef4444' : theme.colors.text }
+          ]}>
+            {label}
+          </Text>
+          {subtitle && (
+            <Text style={[styles.settingSubtext, { color: theme.colors.textMuted }]}>
+              {subtitle}
+            </Text>
+          )}
+        </View>
       </View>
-      {rightElement || (showChevron && <Ionicons name="chevron-forward" size={20} color="#d4d4d8" />)}
+      {rightElement || (showChevron && (
+        <Ionicons name="chevron-forward" size={20} color={theme.colors.textMuted} />
+      ))}
     </Pressable>
   );
 }
 
-function SectionHeader({ title }: { title: string }) {
+function SectionHeader({ title, theme }: { title: string; theme: any }) {
   return (
-    <Text style={styles.sectionTitle}>{title}</Text>
+    <Text style={[styles.sectionTitle, { color: theme.colors.textMuted }]}>{title}</Text>
   );
 }
 
 export function HubScreen() {
   const navigation = useNavigation<HubNavigationProp>();
+  const insets = useSafeAreaInsets();
   const { user, signOut } = useAuth();
-  const { isDark, toggleTheme } = useTheme();
+  const { theme, isDark, toggleTheme } = useTheme();
+  
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
+  const [savedPostsCount, setSavedPostsCount] = useState(0);
+  const [userStats, setUserStats] = useState({ posts: 0, likes: 0 });
+  const [loadingStats, setLoadingStats] = useState(true);
+
+  const contentBottomPadding = AUDIO_PLAYER_HEIGHT + insets.bottom + 32;
+
+  useEffect(() => {
+    loadNotificationPreference();
+    if (user) {
+      fetchUserStats();
+    } else {
+      setLoadingStats(false);
+    }
+  }, [user]);
+
+  const loadNotificationPreference = async () => {
+    try {
+      const value = await AsyncStorage.getItem(NOTIFICATION_KEY);
+      if (value !== null) {
+        setNotificationsEnabled(value === 'true');
+      }
+    } catch (error) {
+      console.error('Error loading notification preference:', error);
+    }
+  };
+
+  const toggleNotifications = async (value: boolean) => {
+    try {
+      await AsyncStorage.setItem(NOTIFICATION_KEY, value.toString());
+      setNotificationsEnabled(value);
+      Haptics.selectionAsync();
+    } catch (error) {
+      console.error('Error saving notification preference:', error);
+      Alert.alert('Error', 'Could not save notification preference');
+    }
+  };
+
+  const fetchUserStats = async () => {
+    if (!user) return;
+    
+    try {
+      setLoadingStats(true);
+      
+      const [postsResult, likesResult] = await Promise.all([
+        supabase
+          .from('prayercircles')
+          .select('id', { count: 'exact', head: true })
+          .eq('user_id', user.id),
+        supabase
+          .from('threadlikes')
+          .select('id', { count: 'exact', head: true })
+          .eq('user_id', user.id),
+      ]);
+
+      setUserStats({
+        posts: postsResult.count || 0,
+        likes: likesResult.count || 0,
+      });
+
+      const savedResult = await supabase
+        .from('threadlikes')
+        .select('id', { count: 'exact', head: true })
+        .eq('user_id', user.id);
+      
+      setSavedPostsCount(savedResult.count || 0);
+    } catch (error) {
+      console.error('Error fetching user stats:', error);
+    } finally {
+      setLoadingStats(false);
+    }
+  };
 
   const handleLogout = () => {
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
@@ -89,7 +202,11 @@ export function HubScreen() {
   };
 
   const handleContactSupport = () => {
-    Linking.openURL('mailto:support@gkpradio.com');
+    Linking.openURL('mailto:support@gkpradio.com?subject=GKP%20Radio%20App%20Support');
+  };
+
+  const handleSendFeedback = () => {
+    Linking.openURL('mailto:feedback@gkpradio.com?subject=GKP%20Radio%20App%20Feedback');
   };
 
   const handleVisitWebsite = () => {
@@ -104,71 +221,164 @@ export function HubScreen() {
     Linking.openURL('https://gkpradio.com/terms');
   };
 
-  return (
-    <SafeAreaView style={styles.container} edges={['top']}>
-      <LinearGradient
-        colors={['#047857', '#059669', '#0d9488']}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-        style={styles.header}
-      >
-        <View style={styles.headerContent}>
-          <View style={styles.hubIconContainer}>
-            <Ionicons name="apps" size={32} color="#047857" />
-          </View>
-          <Text style={styles.headerTitle}>Hub</Text>
-          <Text style={styles.headerSubtitle}>Settings & More</Text>
-        </View>
-      </LinearGradient>
+  const handleRateApp = () => {
+    Alert.alert(
+      'Rate GKP Radio',
+      'Would you like to rate our app on the App Store?',
+      [
+        { text: 'Not Now', style: 'cancel' },
+        { 
+          text: 'Rate Now', 
+          onPress: () => {
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+          }
+        },
+      ]
+    );
+  };
 
-      <ScrollView 
+  const handleShareApp = async () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    Alert.alert(
+      'Share GKP Radio',
+      'Share the app with friends and family!\n\nDownload at: gkpradio.com/app'
+    );
+  };
+
+  const getUserInitials = () => {
+    if (!user?.email) return 'GK';
+    const parts = user.email.split('@')[0].split(/[._-]/);
+    if (parts.length >= 2) {
+      return (parts[0][0] + parts[1][0]).toUpperCase();
+    }
+    return user.email.slice(0, 2).toUpperCase();
+  };
+
+  return (
+    <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
+      <ScrollView
         style={styles.scrollView}
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.scrollContent}
+        contentContainerStyle={{ paddingBottom: contentBottomPadding }}
       >
+        <LinearGradient
+          colors={isDark 
+            ? ['#064e3b', '#047857', '#065f46'] 
+            : ['#047857', '#059669', '#0d9488']
+          }
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={[styles.header, { paddingTop: insets.top + 20 }]}
+        >
+          <View style={styles.headerContent}>
+            {user ? (
+              <Pressable 
+                style={styles.profileSection}
+                onPress={() => {
+                  Haptics.selectionAsync();
+                  navigation.navigate('Profile');
+                }}
+              >
+                <View style={styles.avatarContainer}>
+                  <LinearGradient
+                    colors={['#ffffff', '#f0fdf4']}
+                    style={styles.avatar}
+                  >
+                    <Text style={styles.avatarText}>{getUserInitials()}</Text>
+                  </LinearGradient>
+                  <View style={styles.onlineIndicator} />
+                </View>
+                <Text style={styles.welcomeText}>Welcome back!</Text>
+                <Text style={styles.emailText}>{user.email}</Text>
+                
+                {!loadingStats && (
+                  <View style={styles.statsRow}>
+                    <View style={styles.statItem}>
+                      <Text style={styles.statValue}>{userStats.posts}</Text>
+                      <Text style={styles.statLabel}>Posts</Text>
+                    </View>
+                    <View style={styles.statDivider} />
+                    <View style={styles.statItem}>
+                      <Text style={styles.statValue}>{userStats.likes}</Text>
+                      <Text style={styles.statLabel}>Likes</Text>
+                    </View>
+                    <View style={styles.statDivider} />
+                    <View style={styles.statItem}>
+                      <Text style={styles.statValue}>{savedPostsCount}</Text>
+                      <Text style={styles.statLabel}>Saved</Text>
+                    </View>
+                  </View>
+                )}
+                {loadingStats && (
+                  <ActivityIndicator 
+                    size="small" 
+                    color="rgba(255,255,255,0.6)" 
+                    style={{ marginTop: 16 }} 
+                  />
+                )}
+              </Pressable>
+            ) : (
+              <View style={styles.guestSection}>
+                <View style={styles.hubIconContainer}>
+                  <Ionicons name="radio" size={36} color="#047857" />
+                </View>
+                <Text style={styles.headerTitle}>GKP Radio</Text>
+                <Text style={styles.headerSubtitle}>Settings & More</Text>
+              </View>
+            )}
+          </View>
+        </LinearGradient>
+
         {user && (
           <View style={styles.section}>
-            <SectionHeader title="Account" />
-            <View style={styles.card}>
+            <SectionHeader title="Account" theme={theme} />
+            <View style={[styles.card, { backgroundColor: theme.colors.surface }]}>
               <SettingItem
                 icon="person-outline"
                 label="My Profile"
+                subtitle="Edit your profile and preferences"
                 onPress={() => navigation.navigate('Profile')}
+                theme={theme}
               />
-              <View style={styles.divider} />
+              <View style={[styles.divider, { backgroundColor: theme.colors.border }]} />
               <SettingItem
-                icon="bookmark-outline"
-                label="Saved Posts"
-                onPress={() => {}}
+                icon="heart-outline"
+                label="Liked Posts"
+                subtitle={`${savedPostsCount} posts you've liked`}
+                onPress={() => {
+                  Alert.alert('Liked Posts', 'This feature is coming soon!');
+                }}
+                theme={theme}
               />
             </View>
           </View>
         )}
 
         <View style={styles.section}>
-          <SectionHeader title="Preferences" />
-          <View style={styles.card}>
+          <SectionHeader title="Preferences" theme={theme} />
+          <View style={[styles.card, { backgroundColor: theme.colors.surface }]}>
             <SettingItem
               icon="notifications-outline"
               label="Push Notifications"
+              subtitle={notificationsEnabled ? 'Enabled' : 'Disabled'}
               showChevron={false}
+              theme={theme}
               rightElement={
                 <Switch
                   value={notificationsEnabled}
-                  onValueChange={(value) => {
-                    Haptics.selectionAsync();
-                    setNotificationsEnabled(value);
-                  }}
-                  trackColor={{ false: '#e4e4e7', true: '#86efac' }}
-                  thumbColor={notificationsEnabled ? '#047857' : '#fafafa'}
+                  onValueChange={toggleNotifications}
+                  trackColor={{ false: theme.colors.border, true: '#86efac' }}
+                  thumbColor={notificationsEnabled ? theme.colors.primary : '#fafafa'}
                 />
               }
             />
-            <View style={styles.divider} />
+            <View style={[styles.divider, { backgroundColor: theme.colors.border }]} />
             <SettingItem
-              icon="moon-outline"
+              icon={isDark ? 'moon' : 'moon-outline'}
               label="Dark Mode"
+              subtitle={isDark ? 'On' : 'Off'}
               showChevron={false}
+              theme={theme}
               rightElement={
                 <Switch
                   value={isDark}
@@ -176,8 +386,8 @@ export function HubScreen() {
                     Haptics.selectionAsync();
                     toggleTheme();
                   }}
-                  trackColor={{ false: '#e4e4e7', true: '#86efac' }}
-                  thumbColor={isDark ? '#047857' : '#fafafa'}
+                  trackColor={{ false: theme.colors.border, true: '#86efac' }}
+                  thumbColor={isDark ? theme.colors.primary : '#fafafa'}
                 />
               }
             />
@@ -185,77 +395,118 @@ export function HubScreen() {
         </View>
 
         <View style={styles.section}>
-          <SectionHeader title="Support" />
-          <View style={styles.card}>
+          <SectionHeader title="Share & Rate" theme={theme} />
+          <View style={[styles.card, { backgroundColor: theme.colors.surface }]}>
             <SettingItem
-              icon="help-circle-outline"
-              label="Help Center"
-              onPress={handleContactSupport}
+              icon="share-social-outline"
+              label="Share App"
+              subtitle="Spread the word about GKP Radio"
+              onPress={handleShareApp}
+              theme={theme}
             />
-            <View style={styles.divider} />
+            <View style={[styles.divider, { backgroundColor: theme.colors.border }]} />
             <SettingItem
-              icon="mail-outline"
-              label="Contact Support"
-              onPress={handleContactSupport}
-            />
-            <View style={styles.divider} />
-            <SettingItem
-              icon="chatbubble-outline"
-              label="Send Feedback"
-              onPress={handleContactSupport}
+              icon="star-outline"
+              label="Rate Us"
+              subtitle="Help us improve with your feedback"
+              onPress={handleRateApp}
+              theme={theme}
             />
           </View>
         </View>
 
         <View style={styles.section}>
-          <SectionHeader title="About" />
-          <View style={styles.card}>
+          <SectionHeader title="Support" theme={theme} />
+          <View style={[styles.card, { backgroundColor: theme.colors.surface }]}>
+            <SettingItem
+              icon="help-circle-outline"
+              label="Help Center"
+              subtitle="FAQs and troubleshooting"
+              onPress={handleVisitWebsite}
+              theme={theme}
+            />
+            <View style={[styles.divider, { backgroundColor: theme.colors.border }]} />
+            <SettingItem
+              icon="mail-outline"
+              label="Contact Support"
+              subtitle="support@gkpradio.com"
+              onPress={handleContactSupport}
+              theme={theme}
+            />
+            <View style={[styles.divider, { backgroundColor: theme.colors.border }]} />
+            <SettingItem
+              icon="chatbubble-outline"
+              label="Send Feedback"
+              subtitle="We'd love to hear from you"
+              onPress={handleSendFeedback}
+              theme={theme}
+            />
+          </View>
+        </View>
+
+        <View style={styles.section}>
+          <SectionHeader title="About" theme={theme} />
+          <View style={[styles.card, { backgroundColor: theme.colors.surface }]}>
             <SettingItem
               icon="globe-outline"
               label="Visit Website"
+              subtitle="gkpradio.com"
               onPress={handleVisitWebsite}
+              theme={theme}
             />
-            <View style={styles.divider} />
+            <View style={[styles.divider, { backgroundColor: theme.colors.border }]} />
             <SettingItem
               icon="document-text-outline"
               label="Privacy Policy"
               onPress={handlePrivacyPolicy}
+              theme={theme}
             />
-            <View style={styles.divider} />
+            <View style={[styles.divider, { backgroundColor: theme.colors.border }]} />
             <SettingItem
               icon="shield-checkmark-outline"
               label="Terms of Service"
               onPress={handleTermsOfService}
+              theme={theme}
             />
-            <View style={styles.divider} />
+            <View style={[styles.divider, { backgroundColor: theme.colors.border }]} />
             <View style={styles.versionRow}>
               <View style={styles.settingLeft}>
-                <View style={styles.settingIconContainer}>
-                  <Ionicons name="information-circle-outline" size={20} color="#047857" />
+                <View style={[styles.settingIconContainer, { backgroundColor: theme.colors.primaryLight }]}>
+                  <Ionicons name="information-circle-outline" size={20} color={theme.colors.primary} />
                 </View>
-                <Text style={styles.settingText}>Version</Text>
+                <View style={styles.settingTextContainer}>
+                  <Text style={[styles.settingText, { color: theme.colors.text }]}>App Version</Text>
+                </View>
               </View>
-              <Text style={styles.versionText}>1.0.0</Text>
+              <View style={[styles.versionBadge, { backgroundColor: theme.colors.primaryLight }]}>
+                <Text style={[styles.versionText, { color: theme.colors.primary }]}>1.0.0</Text>
+              </View>
             </View>
           </View>
         </View>
 
-        {user && (
+        {user ? (
           <View style={styles.section}>
             <Pressable 
-              style={({ pressed }) => [styles.logoutButton, pressed && styles.logoutButtonPressed]}
+              style={({ pressed }) => [
+                styles.logoutButton, 
+                { backgroundColor: theme.colors.surface },
+                pressed && styles.logoutButtonPressed
+              ]}
               onPress={handleLogout}
             >
               <Ionicons name="log-out-outline" size={20} color="#ef4444" />
               <Text style={styles.logoutButtonText}>Logout</Text>
             </Pressable>
           </View>
-        )}
-
-        {!user && (
+        ) : (
           <View style={styles.section}>
             <Pressable 
-              style={({ pressed }) => [styles.loginButton, pressed && styles.loginButtonPressed]}
+              style={({ pressed }) => [
+                styles.loginButton, 
+                { backgroundColor: theme.colors.primary },
+                pressed && styles.loginButtonPressed
+              ]}
               onPress={() => navigation.navigate('Profile')}
             >
               <Ionicons name="log-in-outline" size={20} color="#fff" />
@@ -265,46 +516,128 @@ export function HubScreen() {
         )}
 
         <View style={styles.footer}>
-          <Text style={styles.footerText}>God Kingdom Principles Radio</Text>
-          <Text style={styles.footerSubtext}>Spreading the Gospel through radio</Text>
+          <View style={[styles.footerLogo, { backgroundColor: theme.colors.surface }]}>
+            <Ionicons name="radio" size={24} color={theme.colors.primary} />
+          </View>
+          <Text style={[styles.footerText, { color: theme.colors.textMuted }]}>
+            God Kingdom Principles Radio
+          </Text>
+          <Text style={[styles.footerSubtext, { color: theme.colors.textMuted }]}>
+            Spreading the Gospel through radio
+          </Text>
         </View>
-
-        <View style={styles.bottomPadding} />
       </ScrollView>
-    </SafeAreaView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f9fafb',
+  },
+  scrollView: {
+    flex: 1,
   },
   header: {
-    paddingTop: 20,
-    paddingBottom: 28,
-    paddingHorizontal: 20,
+    paddingBottom: 32,
+    paddingHorizontal: 24,
   },
   headerContent: {
     alignItems: 'center',
   },
+  profileSection: {
+    alignItems: 'center',
+  },
+  avatarContainer: {
+    position: 'relative',
+    marginBottom: 14,
+  },
+  avatar: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 6,
+  },
+  avatarText: {
+    fontSize: 28,
+    fontWeight: '700',
+    color: '#047857',
+  },
+  onlineIndicator: {
+    position: 'absolute',
+    bottom: 4,
+    right: 4,
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: '#22c55e',
+    borderWidth: 3,
+    borderColor: '#047857',
+  },
+  welcomeText: {
+    fontSize: 22,
+    fontWeight: '700',
+    color: '#fff',
+    marginBottom: 4,
+  },
+  emailText: {
+    fontSize: 14,
+    color: 'rgba(255,255,255,0.8)',
+  },
+  statsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 20,
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    borderRadius: 16,
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+  },
+  statItem: {
+    alignItems: 'center',
+    paddingHorizontal: 16,
+  },
+  statValue: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#fff',
+  },
+  statLabel: {
+    fontSize: 12,
+    color: 'rgba(255,255,255,0.7)',
+    marginTop: 2,
+  },
+  statDivider: {
+    width: 1,
+    height: 24,
+    backgroundColor: 'rgba(255,255,255,0.3)',
+  },
+  guestSection: {
+    alignItems: 'center',
+  },
   hubIconContainer: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
+    width: 72,
+    height: 72,
+    borderRadius: 36,
     backgroundColor: '#fff',
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 12,
+    marginBottom: 14,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 4,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 6,
   },
   headerTitle: {
-    fontSize: 24,
-    fontWeight: '700',
+    fontSize: 26,
+    fontWeight: '800',
     color: '#fff',
     marginBottom: 4,
   },
@@ -312,100 +645,87 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: 'rgba(255,255,255,0.8)',
   },
-  scrollView: {
-    flex: 1,
-  },
-  scrollContent: {
-    paddingTop: 8,
-  },
   section: {
-    paddingHorizontal: 20,
-    marginTop: 20,
+    paddingHorizontal: 24,
+    marginTop: 24,
   },
   sectionTitle: {
     fontSize: 13,
     fontWeight: '600',
-    color: '#71717a',
     textTransform: 'uppercase',
-    letterSpacing: 0.5,
-    marginBottom: 10,
+    letterSpacing: 0.8,
+    marginBottom: 12,
     marginLeft: 4,
   },
   card: {
-    backgroundColor: '#fff',
-    borderRadius: 16,
+    borderRadius: 20,
     overflow: 'hidden',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.04,
-    shadowRadius: 8,
-    elevation: 2,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.06,
+    shadowRadius: 12,
+    elevation: 3,
   },
   settingItem: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: 14,
-    paddingHorizontal: 16,
-  },
-  settingItemPressed: {
-    backgroundColor: '#f4f4f5',
+    paddingVertical: 16,
+    paddingHorizontal: 18,
   },
   settingLeft: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    flex: 1,
   },
   settingIconContainer: {
-    width: 36,
-    height: 36,
-    borderRadius: 10,
-    backgroundColor: '#ecfdf5',
+    width: 40,
+    height: 40,
+    borderRadius: 12,
     justifyContent: 'center',
     alignItems: 'center',
+    marginRight: 14,
   },
-  settingIconDestructive: {
-    backgroundColor: '#fef2f2',
+  settingTextContainer: {
+    flex: 1,
   },
   settingText: {
     fontSize: 16,
-    fontWeight: '500',
-    color: '#18181b',
+    fontWeight: '600',
   },
-  settingTextDestructive: {
-    color: '#ef4444',
+  settingSubtext: {
+    fontSize: 13,
+    marginTop: 2,
   },
   divider: {
     height: 1,
-    backgroundColor: '#f4f4f5',
-    marginLeft: 64,
+    marginLeft: 72,
   },
   versionRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: 14,
-    paddingHorizontal: 16,
+    paddingVertical: 16,
+    paddingHorizontal: 18,
+  },
+  versionBadge: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 10,
   },
   versionText: {
-    fontSize: 14,
-    color: '#a1a1aa',
+    fontSize: 13,
+    fontWeight: '600',
   },
   logoutButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#fff',
-    paddingVertical: 16,
-    borderRadius: 16,
-    gap: 8,
-    borderWidth: 1,
+    paddingVertical: 18,
+    borderRadius: 20,
+    gap: 10,
+    borderWidth: 1.5,
     borderColor: '#fecaca',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.04,
-    shadowRadius: 8,
-    elevation: 2,
   },
   logoutButtonPressed: {
     backgroundColor: '#fef2f2',
@@ -419,18 +739,17 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#047857',
-    paddingVertical: 16,
-    borderRadius: 16,
-    gap: 8,
+    paddingVertical: 18,
+    borderRadius: 20,
+    gap: 10,
     shadowColor: '#047857',
-    shadowOffset: { width: 0, height: 4 },
+    shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 4,
+    shadowRadius: 12,
+    elevation: 6,
   },
   loginButtonPressed: {
-    backgroundColor: '#059669',
+    opacity: 0.9,
   },
   loginButtonText: {
     fontSize: 16,
@@ -439,20 +758,23 @@ const styles = StyleSheet.create({
   },
   footer: {
     alignItems: 'center',
-    paddingTop: 32,
-    paddingBottom: 16,
+    paddingTop: 40,
+    paddingBottom: 20,
+  },
+  footerLogo: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 14,
   },
   footerText: {
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: '600',
-    color: '#a1a1aa',
   },
   footerSubtext: {
-    fontSize: 12,
-    color: '#d4d4d8',
+    fontSize: 13,
     marginTop: 4,
-  },
-  bottomPadding: {
-    height: 100,
   },
 });
