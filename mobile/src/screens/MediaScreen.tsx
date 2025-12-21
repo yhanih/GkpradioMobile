@@ -12,7 +12,7 @@ import {
   Dimensions,
   ImageBackground,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { supabase } from '../lib/supabase';
@@ -34,8 +34,12 @@ const CATEGORIES = [
   { id: 'youth', label: 'Youth', icon: 'people' },
 ];
 
+const HEADER_HEIGHT = 72;
+const AUDIO_PLAYER_HEIGHT = 100;
+
 export function MediaScreen() {
   const { theme, isDark } = useTheme();
+  const insets = useSafeAreaInsets();
   const [activeTab, setActiveTab] = useState<TabType>('podcasts');
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [podcasts, setPodcasts] = useState<Episode[]>([]);
@@ -47,6 +51,9 @@ export function MediaScreen() {
   const tabIndicatorAnim = useRef(new Animated.Value(0)).current;
   const heroScaleAnim = useRef(new Animated.Value(1)).current;
   const playButtonPulse = useRef(new Animated.Value(1)).current;
+
+  const contentTopPadding = insets.top + HEADER_HEIGHT + 16;
+  const contentBottomPadding = AUDIO_PLAYER_HEIGHT + insets.bottom + 32;
 
   useEffect(() => {
     fetchData();
@@ -174,9 +181,26 @@ export function MediaScreen() {
 
   return (
     <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
+      {/* Fixed Header */}
+      <View style={[styles.headerContainer, { paddingTop: insets.top, backgroundColor: theme.colors.background }]}>
+        <View style={styles.header}>
+          <Text style={[styles.title, { color: theme.colors.text }]}>Media</Text>
+          <Pressable 
+            style={[styles.searchButton, { backgroundColor: theme.colors.surface }]}
+            onPress={() => Haptics.selectionAsync()}
+          >
+            <Ionicons name="search" size={20} color={theme.colors.textMuted} />
+          </Pressable>
+        </View>
+      </View>
+
       <ScrollView
         style={styles.scrollView}
         showsVerticalScrollIndicator={false}
+        contentContainerStyle={{ 
+          paddingTop: contentTopPadding,
+          paddingBottom: contentBottomPadding 
+        }}
         refreshControl={
           <RefreshControl 
             refreshing={refreshing} 
@@ -185,19 +209,6 @@ export function MediaScreen() {
           />
         }
       >
-        {/* Header */}
-        <SafeAreaView edges={['top']} style={styles.headerSafeArea}>
-          <View style={styles.header}>
-            <Text style={[styles.title, { color: theme.colors.text }]}>Media</Text>
-            <Pressable 
-              style={[styles.searchButton, { backgroundColor: theme.colors.surface }]}
-              onPress={() => Haptics.selectionAsync()}
-            >
-              <Ionicons name="search" size={20} color={theme.colors.textMuted} />
-            </Pressable>
-          </View>
-        </SafeAreaView>
-
         {/* Featured Hero */}
         {featuredContent && (
           <Pressable
@@ -700,7 +711,6 @@ export function MediaScreen() {
           </View>
         )}
 
-        <View style={{ height: 140 }} />
       </ScrollView>
     </View>
   );
@@ -724,7 +734,7 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '500',
   },
-  headerSafeArea: {
+  headerContainer: {
     position: 'absolute',
     top: 0,
     left: 0,
@@ -736,8 +746,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: 24,
-    paddingTop: 12,
-    paddingBottom: 16,
+    height: HEADER_HEIGHT,
   },
   title: {
     fontSize: 34,
@@ -754,9 +763,8 @@ const styles = StyleSheet.create({
 
   // Hero Styles
   heroContainer: {
-    marginHorizontal: 20,
-    marginTop: 100,
-    marginBottom: 20,
+    marginHorizontal: 24,
+    marginBottom: 24,
     borderRadius: 24,
     overflow: 'hidden',
     shadowColor: '#000',
@@ -847,7 +855,7 @@ const styles = StyleSheet.create({
   // Tab Styles
   tabContainer: {
     paddingHorizontal: 24,
-    marginBottom: 16,
+    marginBottom: 20,
   },
   tabBackground: {
     flexDirection: 'row',
@@ -890,18 +898,19 @@ const styles = StyleSheet.create({
 
   // Category Chips
   categoryScroll: {
-    paddingHorizontal: 24,
-    gap: 10,
-    marginBottom: 24,
+    paddingLeft: 24,
+    paddingRight: 16,
+    marginBottom: 28,
   },
   categoryChip: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    paddingHorizontal: 14,
+    paddingHorizontal: 16,
     paddingVertical: 10,
     borderRadius: 20,
     borderWidth: 1,
+    marginRight: 10,
   },
   categoryChipText: {
     fontSize: 13,
@@ -910,14 +919,14 @@ const styles = StyleSheet.create({
 
   // Sections
   section: {
-    marginBottom: 28,
+    marginBottom: 32,
   },
   sectionHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'baseline',
     paddingHorizontal: 24,
-    marginBottom: 16,
+    marginBottom: 18,
   },
   sectionTitle: {
     fontSize: 20,
@@ -935,26 +944,27 @@ const styles = StyleSheet.create({
 
   // Continue Cards
   continueScroll: {
-    paddingHorizontal: 24,
-    gap: 14,
+    paddingLeft: 24,
+    paddingRight: 16,
   },
   continueCard: {
-    width: 140,
+    width: 160,
+    marginRight: 14,
   },
   continueCardPressed: {
     opacity: 0.8,
     transform: [{ scale: 0.98 }],
   },
   continueThumbnail: {
-    width: 140,
-    height: 80,
-    borderRadius: 12,
-    marginBottom: 2,
+    width: 160,
+    height: 90,
+    borderRadius: 14,
+    marginBottom: 4,
   },
   continuePlayIcon: {
     position: 'absolute',
-    top: 28,
-    left: 56,
+    top: 31,
+    left: 66,
     width: 28,
     height: 28,
     borderRadius: 14,
