@@ -89,8 +89,9 @@ export function PostDetailScreen() {
           supabase
             .from('bookmarks')
             .select('id')
-            .eq('thread_id', route.params.threadId)
-            .eq('user_id', user.id)
+            .eq('content_type', 'thread')
+            .eq('content_id', route.params.threadId)
+            .eq('userid', user.id)
             .maybeSingle(),
         ]);
 
@@ -257,12 +258,17 @@ export function PostDetailScreen() {
         await supabase
           .from('bookmarks')
           .delete()
-          .eq('thread_id', thread.id)
-          .eq('user_id', user.id);
+          .eq('content_type', 'thread')
+          .eq('content_id', thread.id)
+          .eq('userid', user.id);
       } else {
         await supabase
           .from('bookmarks')
-          .insert({ thread_id: thread.id, user_id: user.id });
+          .insert({ 
+            content_type: 'thread', 
+            content_id: thread.id, 
+            userid: user.id 
+          });
       }
     } catch (error) {
       console.error('Error toggling bookmark:', error);
