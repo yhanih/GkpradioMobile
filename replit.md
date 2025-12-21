@@ -113,9 +113,19 @@ mobile/
 │   │   ├── VideoScreen.tsx          # Video library
 │   │   └── auth/                    # Login & signup screens
 │   ├── components/        # Reusable components
-│   │   └── AudioPlayer.tsx          # Live streaming player
+│   │   ├── AudioPlayer.tsx          # Live streaming player
+│   │   ├── MiniPlayer.tsx           # Persistent mini audio bar
+│   │   ├── AnimatedPressable.tsx    # Animated button/card component
+│   │   ├── SkeletonLoader.tsx       # Loading skeleton components
+│   │   ├── EmptyState.tsx           # Empty state displays
+│   │   ├── ErrorState.tsx           # Error state with retry
+│   │   ├── ProfileAvatar.tsx        # User avatar component
+│   │   ├── NotificationBadge.tsx    # Badge with animations
+│   │   └── SearchBar.tsx            # Search input component
 │   ├── contexts/          # React contexts
-│   │   └── AuthContext.tsx          # Authentication state
+│   │   ├── AuthContext.tsx          # Authentication state
+│   │   ├── AudioContext.tsx         # Audio playback state
+│   │   └── ThemeContext.tsx         # Dark mode theme state
 │   ├── lib/               # External integrations
 │   │   ├── supabase.ts              # Supabase client
 │   │   └── azuracast.ts             # AzuraCast API
@@ -141,6 +151,10 @@ mobile/
 - ✅ **Pull-to-Refresh**: All screens support refresh gestures
 - ✅ **Empty States**: Graceful UI for empty data scenarios
 - ✅ **Audio Cleanup**: Proper resource management on navigation
+- ✅ **Dark Mode**: Full dark theme with settings toggle
+- ✅ **Onboarding**: First-time user welcome flow
+- ✅ **MiniPlayer**: Persistent audio player bar
+- ✅ **Micro-animations**: Button/card press effects with haptics
 
 ### Future Enhancements
 - 📋 Add prayer request and testimony submission forms
@@ -152,6 +166,34 @@ mobile/
 - 📋 Add content filtering and categories
 
 ## Recent Changes
+
+### Dec 21, 2025 - UX/UI Component Library & Dark Mode
+- ✅ Created reusable UI component library:
+  - `AnimatedPressable` - Press animations with haptic feedback
+  - `SkeletonLoader` - Loading placeholders for different content types
+  - `EmptyState` - Contextual empty state displays
+  - `ErrorState` - Error handling with retry functionality
+  - `MiniPlayer` - Persistent audio player bar with safe area support
+  - `NotificationBadge` - Activity indicators with animations
+  - `SearchBar` - Search input with clear and cancel buttons
+  - `ProfileAvatar` - User avatar with fallback handling
+- ✅ Implemented dark mode with `ThemeContext`:
+  - Light/dark color themes with full palette
+  - AsyncStorage persistence of theme preference
+  - NavigationContainer theme integration
+  - StatusBar updates for light/dark modes
+  - Working toggle in Hub settings screen
+- ✅ Created onboarding flow for first-time users:
+  - 4-slide animated walkthrough (Radio, Community, Content, Events)
+  - Progress dots with width animation
+  - Skip/Next navigation with haptic feedback
+  - AsyncStorage persistence to show only once
+- ✅ Restructured navigation:
+  - Profile screen moved to header icon (accessible from any tab)
+  - Bottom tab renamed "Hub" with settings/help/about sections
+  - Fixed tab-to-stack navigation with CompositeNavigationProp
+- ✅ Added persistent MiniPlayer showing current playing track
+- ✅ Integrated AudioPlayer for full playback controls
 
 ### Dec 21, 2025 - Community Page UX Improvements
 - ✅ Expanded Community categories from 2 to 14 (matching all existing database categories)

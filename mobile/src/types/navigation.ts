@@ -10,6 +10,7 @@ export type RootStackParamList = {
     userId: string;
     user?: User;
   };
+  Profile: undefined;
 };
 
 export type MainTabParamList = {
@@ -17,5 +18,5 @@ export type MainTabParamList = {
   Community: undefined;
   Live: undefined;
   Media: undefined;
-  Profile: undefined;
+  Hub: undefined;
 };

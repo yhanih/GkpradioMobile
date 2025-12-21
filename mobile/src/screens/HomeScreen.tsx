@@ -11,10 +11,12 @@ import {
   Animated
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, CompositeNavigationProp } from '@react-navigation/native';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
-import * as Haptics from 'expo-haptics';
 import { Ionicons } from '@expo/vector-icons';
+import { RootStackParamList, MainTabParamList } from '../types/navigation';
+import { ProfileAvatar } from '../components/ProfileAvatar';
 
 import { supabase } from '../lib/supabase';
 import { Episode, Video, Schedule } from '../types/database.types';
@@ -26,10 +28,15 @@ import { MediaRail } from '../components/MediaRail';
 import { StatsStrip } from '../components/StatsStrip';
 import { MinistryRail } from '../components/MinistryRail';
 
+type HomeNavigationProp = CompositeNavigationProp<
+  BottomTabNavigationProp<MainTabParamList, 'Home'>,
+  NativeStackNavigationProp<RootStackParamList>
+>;
+
 export function HomeScreen() {
   const { user } = useAuth();
   const { isPlaying, play, pause } = useAudio();
-  const navigation = useNavigation<BottomTabNavigationProp<any>>();
+  const navigation = useNavigation<HomeNavigationProp>();
 
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -111,12 +118,10 @@ export function HomeScreen() {
             <Text style={styles.brandingText}>GOD KINGDOM PRINCIPLES RADIO</Text>
             <Text style={styles.greetingText}>{getGreeting()}, {userName}</Text>
           </View>
-          <Pressable
-            style={styles.profileButton}
+          <ProfileAvatar 
+            size="medium"
             onPress={() => navigation.navigate('Profile')}
-          >
-            <Ionicons name="person-outline" size={20} color="#047857" />
-          </Pressable>
+          />
         </View>
 
         <ScrollView
@@ -165,8 +170,8 @@ export function HomeScreen() {
               imageUrl: ep.thumbnail_url || 'https://images.unsplash.com/photo-1478737270239-2f02b77ac6d5?w=400&q=80',
               duration: ep.duration ? `${Math.floor(ep.duration / 60)}m` : undefined
             }))}
-            onPressItem={() => navigation.navigate('Podcasts')}
-            onPressViewAll={() => navigation.navigate('Podcasts')}
+            onPressItem={() => navigation.navigate('Media')}
+            onPressViewAll={() => navigation.navigate('Media')}
           />
 
           {/* Video Rail */}
@@ -217,15 +222,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#09090b',
     fontWeight: '600',
-  },
-  profileButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: '#e4e4e7',
-    justifyContent: 'center',
-    alignItems: 'center',
   },
   welcomeSection: {
     paddingHorizontal: 20,
