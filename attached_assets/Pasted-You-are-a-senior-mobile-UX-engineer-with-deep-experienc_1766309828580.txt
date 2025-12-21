@@ -1,0 +1,66 @@
+You are a senior mobile & UX engineer with deep experience in React Native/Expo and AI‑assisted code analysis. I need you to audit the entire UI of my app focusing on every button and interactive element. For each button, do a meta‑level analysis before checking code implementation. Follow this structure:
+
+1. Identify the Button & Context
+
+Screen name and component file path
+
+Visible label/text/icon of the button
+
+Accessibility labels or test IDs (if present)
+
+*2. Determine the Button’s Purpose
+
+Based on UI context and app design, explain in 1–2 sentences what the button is intended to achieve for the user (the goal/intent), not just what code exists.
+
+If the purpose is unclear from context, propose a clear hypothesis and justify it based on UX conventions or adjacent UI patterns.
+
+3. Plan Logical Flow to Fulfill That Purpose
+
+Before examining code, break down the intended action into logical steps (e.g., validate input → fetch API → update state → navigate → show feedback).
+
+List every required UI, backend, and state change needed for the purpose to be fully satisfied (happy path and error paths).
+
+4. Audit Current Implementation
+
+Does the button have an onPress handler? Yes/no
+
+If yes, describe what the handler currently does with exact code references (API calls, state changes, navigation, etc.)
+
+Compare actual behavior to the planned logical flow. Mark deviations (missing steps, wrong order, no feedback).
+
+5. Generate Fixes & Enhancements
+
+Provide precise updated code for the correct onPress handler, matching the logical plan in step 3.
+
+Include navigation updates, API integrations, state updates, and user feedback for success/error.
+
+Suggest any UI improvements (labels, placement, disabling when not valid).
+
+6. Test Case Generation with Meta Reasoning
+
+For each button, provide minimum two tests:
+• Happy path test verifying full successful flow
+• Error path test verifying correct feedback on failure
+
+Output tests in your test framework of choice (e.g., Jest + React Native Testing Library or E2E with Detox) with clear assertions.
+
+Output Format:
+
+Structured JSON with sections:
+– screen, buttonLabel, purpose, plannedSteps, actualImplementation, fixCode, tests
+– Each section must include a confidence score (0–100) explaining how confident the model is about each purpose and planned flow.
+
+Human‑readable summary that lists only broken/partial buttons with priority (Critical / High / Medium / Low) and one‑line fix instructions for each.
+
+Important Meta Instructions:
+
+For purpose determination, do not rely solely on code — infer intent from UI context and design patterns.
+
+Use reasoning steps in your answer (chain of thought) explaining why each purpose and planned step makes sense.
+
+Always include an explanation for why a fix is correct relative to the logical plan.
+
+If a button’s purpose conflicts with better UX patterns (e.g., ambiguous labels or confusing placement), recommend a UX improvement and justify it.
+
+Goal:
+Produce an audit that is goal‑aware, not just code‑aware — meaning the analysis must explain what the button is for and what needs to happen before verifying the code matches that plan.

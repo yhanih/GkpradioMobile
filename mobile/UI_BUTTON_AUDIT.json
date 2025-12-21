@@ -1,0 +1,1210 @@
+{
+  "auditDate": "2025-12-21",
+  "totalButtonsAudited": 67,
+  "brokenOrPartialButtons": 8,
+  "screens": [
+    {
+      "screen": "LoginScreen",
+      "filePath": "mobile/src/screens/auth/LoginScreen.tsx",
+      "buttons": [
+        {
+          "buttonLabel": "Sign In",
+          "purpose": "Authenticate user with email/password credentials to grant access to protected app features",
+          "purposeConfidence": 100,
+          "plannedSteps": [
+            "1. Validate email and password are not empty",
+            "2. Show loading state on button",
+            "3. Call Supabase signIn API",
+            "4. On success: Update auth context, navigate to main app",
+            "5. On error: Show alert with error message, reset loading state"
+          ],
+          "actualImplementation": {
+            "hasOnPress": true,
+            "handlerActions": [
+              "Validates fields are non-empty",
+              "Sets loading state",
+              "Calls signIn from AuthContext",
+              "Shows Alert on error"
+            ],
+            "deviations": []
+          },
+          "status": "WORKING",
+          "priority": null,
+          "fixRequired": false
+        },
+        {
+          "buttonLabel": "Eye Icon (Toggle Password Visibility)",
+          "purpose": "Toggle password field visibility between masked and plain text for user convenience",
+          "purposeConfidence": 100,
+          "plannedSteps": ["1. Toggle showPassword state", "2. Update secureTextEntry prop"],
+          "actualImplementation": {
+            "hasOnPress": true,
+            "handlerActions": ["Toggles showPassword state"],
+            "deviations": []
+          },
+          "status": "WORKING",
+          "priority": null,
+          "fixRequired": false
+        },
+        {
+          "buttonLabel": "Don't have an account? Sign up",
+          "purpose": "Navigate user to signup screen to create a new account",
+          "purposeConfidence": 100,
+          "plannedSteps": ["1. Call navigation callback to show signup screen"],
+          "actualImplementation": {
+            "hasOnPress": true,
+            "handlerActions": ["Calls onNavigateToSignup prop"],
+            "deviations": []
+          },
+          "status": "WORKING",
+          "priority": null,
+          "fixRequired": false
+        }
+      ]
+    },
+    {
+      "screen": "SignupScreen",
+      "filePath": "mobile/src/screens/auth/SignupScreen.tsx",
+      "buttons": [
+        {
+          "buttonLabel": "Create Account",
+          "purpose": "Register new user account with provided credentials",
+          "purposeConfidence": 100,
+          "plannedSteps": [
+            "1. Validate all fields are filled",
+            "2. Validate passwords match",
+            "3. Validate password length >= 6",
+            "4. Show loading state",
+            "5. Call Supabase signUp API",
+            "6. On success: Show success alert, navigate to login",
+            "7. On error: Show error alert"
+          ],
+          "actualImplementation": {
+            "hasOnPress": true,
+            "handlerActions": [
+              "Full validation implemented",
+              "Loading state managed",
+              "SignUp API called with fullName",
+              "Success/Error alerts shown"
+            ],
+            "deviations": []
+          },
+          "status": "WORKING",
+          "priority": null,
+          "fixRequired": false
+        },
+        {
+          "buttonLabel": "Eye Icon (Toggle Password Visibility)",
+          "purpose": "Toggle password visibility for both password fields",
+          "purposeConfidence": 100,
+          "plannedSteps": ["1. Toggle showPassword state"],
+          "actualImplementation": {
+            "hasOnPress": true,
+            "handlerActions": ["Toggles showPassword state"],
+            "deviations": []
+          },
+          "status": "WORKING",
+          "priority": null,
+          "fixRequired": false
+        },
+        {
+          "buttonLabel": "Already have an account? Sign in",
+          "purpose": "Navigate user back to login screen",
+          "purposeConfidence": 100,
+          "plannedSteps": ["1. Call navigation callback"],
+          "actualImplementation": {
+            "hasOnPress": true,
+            "handlerActions": ["Calls onNavigateToLogin prop"],
+            "deviations": []
+          },
+          "status": "WORKING",
+          "priority": null,
+          "fixRequired": false
+        }
+      ]
+    },
+    {
+      "screen": "LiveScreen",
+      "filePath": "mobile/src/screens/LiveScreen.tsx",
+      "buttons": [
+        {
+          "buttonLabel": "Watch Now / Set Reminder (Hero Button)",
+          "purpose": "When live: Play the live stream. When upcoming: Schedule a reminder notification for the event",
+          "purposeConfidence": 95,
+          "plannedSteps": [
+            "If LIVE: 1. Navigate to stream player or start playback, 2. Show loading state, 3. Handle playback errors",
+            "If UPCOMING: 1. Request notification permissions, 2. Schedule local notification, 3. Confirm to user, 4. Store reminder state"
+          ],
+          "actualImplementation": {
+            "hasOnPress": true,
+            "handlerActions": ["Triggers haptic feedback only"],
+            "deviations": [
+              "CRITICAL: No stream playback implemented",
+              "CRITICAL: No reminder scheduling implemented",
+              "Button is purely decorative - does nothing functional"
+            ]
+          },
+          "status": "BROKEN",
+          "priority": "Critical",
+          "fixRequired": true,
+          "fixInstructions": "Implement stream playback navigation for live events and local notification scheduling for upcoming events using expo-notifications"
+        },
+        {
+          "buttonLabel": "Remind Me (Timeline Card)",
+          "purpose": "Set a reminder notification for an upcoming scheduled event",
+          "purposeConfidence": 95,
+          "plannedSteps": [
+            "1. Request notification permissions if not granted",
+            "2. Schedule local notification for event start time",
+            "3. Update button state to show reminder is set",
+            "4. Store reminder in AsyncStorage or database"
+          ],
+          "actualImplementation": {
+            "hasOnPress": true,
+            "handlerActions": ["Triggers haptic selection feedback only"],
+            "deviations": [
+              "CRITICAL: No notification scheduling",
+              "No visual state change after press",
+              "No persistence of reminder"
+            ]
+          },
+          "status": "BROKEN",
+          "priority": "High",
+          "fixRequired": true,
+          "fixInstructions": "Implement expo-notifications local scheduling with permission request flow"
+        },
+        {
+          "buttonLabel": "Calendar Icon (Add to Calendar)",
+          "purpose": "Add the event to user's device calendar",
+          "purposeConfidence": 90,
+          "plannedSteps": [
+            "1. Request calendar permissions",
+            "2. Create calendar event with title, time, description",
+            "3. Show success feedback"
+          ],
+          "actualImplementation": {
+            "hasOnPress": true,
+            "handlerActions": ["Triggers haptic selection feedback only"],
+            "deviations": [
+              "CRITICAL: No calendar integration",
+              "Button is non-functional"
+            ]
+          },
+          "status": "BROKEN",
+          "priority": "Medium",
+          "fixRequired": true,
+          "fixInstructions": "Implement expo-calendar integration to add events"
+        },
+        {
+          "buttonLabel": "See All (Recent Broadcasts)",
+          "purpose": "Navigate to a full list of past broadcast recordings",
+          "purposeConfidence": 85,
+          "plannedSteps": ["1. Navigate to broadcasts archive screen"],
+          "actualImplementation": {
+            "hasOnPress": true,
+            "handlerActions": ["Triggers haptic feedback only"],
+            "deviations": ["No navigation implemented", "Target screen may not exist"]
+          },
+          "status": "BROKEN",
+          "priority": "Medium",
+          "fixRequired": true,
+          "fixInstructions": "Create PastBroadcastsScreen and add navigation, or remove button if feature not in scope"
+        },
+        {
+          "buttonLabel": "Play Button (Past Broadcast Card)",
+          "purpose": "Play the recorded past broadcast/VOD content",
+          "purposeConfidence": 95,
+          "plannedSteps": [
+            "1. Navigate to video player with event data",
+            "2. Begin video playback",
+            "3. Track viewing progress"
+          ],
+          "actualImplementation": {
+            "hasOnPress": true,
+            "handlerActions": ["Triggers haptic feedback only"],
+            "deviations": ["CRITICAL: No video playback", "No navigation to player"]
+          },
+          "status": "BROKEN",
+          "priority": "High",
+          "fixRequired": true,
+          "fixInstructions": "Implement navigation to VideoScreen with event recording URL"
+        },
+        {
+          "buttonLabel": "Explore Videos (Empty State)",
+          "purpose": "Navigate user to Media tab to browse available video content when no live events exist",
+          "purposeConfidence": 95,
+          "plannedSteps": ["1. Navigate to Media tab"],
+          "actualImplementation": {
+            "hasOnPress": true,
+            "handlerActions": ["Triggers haptic feedback only"],
+            "deviations": ["No navigation implemented"]
+          },
+          "status": "BROKEN",
+          "priority": "Medium",
+          "fixRequired": true,
+          "fixInstructions": "Add navigation.navigate('Media') to button onPress"
+        }
+      ]
+    },
+    {
+      "screen": "AudioPlayer",
+      "filePath": "mobile/src/components/AudioPlayer.tsx",
+      "buttons": [
+        {
+          "buttonLabel": "Play/Pause Button",
+          "purpose": "Toggle live radio stream playback",
+          "purposeConfidence": 100,
+          "plannedSteps": [
+            "1. If playing: Pause audio stream",
+            "2. If paused: Resume/start audio stream",
+            "3. Update UI state"
+          ],
+          "actualImplementation": {
+            "hasOnPress": true,
+            "handlerActions": ["Calls togglePlayback from AudioContext"],
+            "deviations": []
+          },
+          "status": "WORKING",
+          "priority": null,
+          "fixRequired": false
+        },
+        {
+          "buttonLabel": "Heart/Like Button",
+          "purpose": "Save/favorite the current playing track for later access",
+          "purposeConfidence": 80,
+          "plannedSteps": [
+            "1. Toggle liked state",
+            "2. Save to user's favorites in database",
+            "3. Show visual feedback"
+          ],
+          "actualImplementation": {
+            "hasOnPress": true,
+            "handlerActions": [
+              "Triggers haptic feedback",
+              "Toggles local isLiked state"
+            ],
+            "deviations": [
+              "State is not persisted - resets on component remount",
+              "No database save",
+              "What does 'liking' a live radio stream mean? UX unclear"
+            ]
+          },
+          "status": "PARTIAL",
+          "priority": "Low",
+          "fixRequired": true,
+          "fixInstructions": "Either remove button (unclear UX for live radio) or implement saving current song to a 'liked songs' list in database"
+        }
+      ]
+    },
+    {
+      "screen": "HubScreen",
+      "filePath": "mobile/src/screens/HubScreen.tsx",
+      "buttons": [
+        {
+          "buttonLabel": "Liked Posts",
+          "purpose": "Navigate to view all posts the user has liked",
+          "purposeConfidence": 95,
+          "plannedSteps": ["1. Navigate to LikedPostsScreen with user's liked posts"],
+          "actualImplementation": {
+            "hasOnPress": true,
+            "handlerActions": ["Shows 'coming soon' alert"],
+            "deviations": ["Feature not implemented - shows placeholder alert"]
+          },
+          "status": "PARTIAL",
+          "priority": "Low",
+          "fixRequired": true,
+          "fixInstructions": "Create LikedPostsScreen that queries community_thread_likes and displays liked threads"
+        },
+        {
+          "buttonLabel": "Rate Us",
+          "purpose": "Open App Store/Play Store to rate the app",
+          "purposeConfidence": 100,
+          "plannedSteps": [
+            "1. Show confirmation dialog",
+            "2. On confirm: Open store review URL"
+          ],
+          "actualImplementation": {
+            "hasOnPress": true,
+            "handlerActions": ["Shows alert", "Haptic on 'Rate Now'"],
+            "deviations": ["Does not actually open App Store/Play Store"]
+          },
+          "status": "PARTIAL",
+          "priority": "Low",
+          "fixRequired": true,
+          "fixInstructions": "Use expo-store-review or Linking.openURL with app store URLs"
+        },
+        {
+          "buttonLabel": "Share App",
+          "purpose": "Share app download link with others via system share sheet",
+          "purposeConfidence": 100,
+          "plannedSteps": ["1. Open native share sheet with app link"],
+          "actualImplementation": {
+            "hasOnPress": true,
+            "handlerActions": ["Shows alert with download URL text"],
+            "deviations": ["Uses Alert instead of Share API", "Less user-friendly"]
+          },
+          "status": "PARTIAL",
+          "priority": "Low",
+          "fixRequired": true,
+          "fixInstructions": "Use Share.share() from react-native for native share sheet"
+        },
+        {
+          "buttonLabel": "Push Notifications Toggle",
+          "purpose": "Enable/disable push notification preferences",
+          "purposeConfidence": 100,
+          "plannedSteps": [
+            "1. Toggle preference",
+            "2. Persist to AsyncStorage",
+            "3. Update push token registration on backend"
+          ],
+          "actualImplementation": {
+            "hasOnPress": true,
+            "handlerActions": [
+              "Saves preference to AsyncStorage",
+              "Updates local state"
+            ],
+            "deviations": ["Does not update backend push token registration - preference is local only"]
+          },
+          "status": "PARTIAL",
+          "priority": "Medium",
+          "fixRequired": true,
+          "fixInstructions": "Implement expo-notifications token registration/deregistration when toggle changes"
+        },
+        {
+          "buttonLabel": "Dark Mode Toggle",
+          "purpose": "Toggle between light and dark app theme",
+          "purposeConfidence": 100,
+          "plannedSteps": ["1. Toggle theme state", "2. Persist preference"],
+          "actualImplementation": {
+            "hasOnPress": true,
+            "handlerActions": ["Calls toggleTheme from ThemeContext"],
+            "deviations": []
+          },
+          "status": "WORKING",
+          "priority": null,
+          "fixRequired": false
+        },
+        {
+          "buttonLabel": "Contact Support",
+          "purpose": "Open email client to contact support team",
+          "purposeConfidence": 100,
+          "plannedSteps": ["1. Open mailto link with pre-filled subject"],
+          "actualImplementation": {
+            "hasOnPress": true,
+            "handlerActions": ["Opens mailto:support@gkpradio.com"],
+            "deviations": []
+          },
+          "status": "WORKING",
+          "priority": null,
+          "fixRequired": false
+        },
+        {
+          "buttonLabel": "Send Feedback",
+          "purpose": "Open email client to send feedback",
+          "purposeConfidence": 100,
+          "plannedSteps": ["1. Open mailto link"],
+          "actualImplementation": {
+            "hasOnPress": true,
+            "handlerActions": ["Opens mailto:feedback@gkpradio.com"],
+            "deviations": []
+          },
+          "status": "WORKING",
+          "priority": null,
+          "fixRequired": false
+        },
+        {
+          "buttonLabel": "Visit Website",
+          "purpose": "Open GKP Radio website in browser",
+          "purposeConfidence": 100,
+          "plannedSteps": ["1. Open external URL"],
+          "actualImplementation": {
+            "hasOnPress": true,
+            "handlerActions": ["Opens https://gkpradio.com"],
+            "deviations": []
+          },
+          "status": "WORKING",
+          "priority": null,
+          "fixRequired": false
+        },
+        {
+          "buttonLabel": "Privacy Policy",
+          "purpose": "View privacy policy document",
+          "purposeConfidence": 100,
+          "plannedSteps": ["1. Open privacy policy URL"],
+          "actualImplementation": {
+            "hasOnPress": true,
+            "handlerActions": ["Opens https://gkpradio.com/privacy"],
+            "deviations": []
+          },
+          "status": "WORKING",
+          "priority": null,
+          "fixRequired": false
+        },
+        {
+          "buttonLabel": "Terms of Service",
+          "purpose": "View terms of service document",
+          "purposeConfidence": 100,
+          "plannedSteps": ["1. Open terms URL"],
+          "actualImplementation": {
+            "hasOnPress": true,
+            "handlerActions": ["Opens https://gkpradio.com/terms"],
+            "deviations": []
+          },
+          "status": "WORKING",
+          "priority": null,
+          "fixRequired": false
+        },
+        {
+          "buttonLabel": "Logout",
+          "purpose": "Sign out user and clear session",
+          "purposeConfidence": 100,
+          "plannedSteps": [
+            "1. Show confirmation dialog",
+            "2. On confirm: Call signOut",
+            "3. Clear local auth state"
+          ],
+          "actualImplementation": {
+            "hasOnPress": true,
+            "handlerActions": [
+              "Shows confirmation alert",
+              "Calls signOut from AuthContext",
+              "Error handling included"
+            ],
+            "deviations": []
+          },
+          "status": "WORKING",
+          "priority": null,
+          "fixRequired": false
+        },
+        {
+          "buttonLabel": "Sign In / Sign Up (Guest)",
+          "purpose": "Navigate guest users to authentication screens",
+          "purposeConfidence": 100,
+          "plannedSteps": ["1. Navigate to Profile screen (which shows login)"],
+          "actualImplementation": {
+            "hasOnPress": true,
+            "handlerActions": ["Navigates to Profile screen"],
+            "deviations": []
+          },
+          "status": "WORKING",
+          "priority": null,
+          "fixRequired": false
+        }
+      ]
+    },
+    {
+      "screen": "CommunityScreen",
+      "filePath": "mobile/src/screens/CommunityScreen.tsx",
+      "buttons": [
+        {
+          "buttonLabel": "New Post (+ icon in stats)",
+          "purpose": "Open modal to create a new community post",
+          "purposeConfidence": 100,
+          "plannedSteps": ["1. Open NewPostModal"],
+          "actualImplementation": {
+            "hasOnPress": true,
+            "handlerActions": ["Triggers haptic", "Sets showNewPostModal to true"],
+            "deviations": []
+          },
+          "status": "WORKING",
+          "priority": null,
+          "fixRequired": false
+        },
+        {
+          "buttonLabel": "Category Tabs",
+          "purpose": "Filter community posts by category",
+          "purposeConfidence": 100,
+          "plannedSteps": ["1. Update activeCategory state", "2. Filter displayed posts"],
+          "actualImplementation": {
+            "hasOnPress": true,
+            "handlerActions": ["Triggers haptic", "Updates activeCategory"],
+            "deviations": []
+          },
+          "status": "WORKING",
+          "priority": null,
+          "fixRequired": false
+        },
+        {
+          "buttonLabel": "Sort Button",
+          "purpose": "Change post sorting order",
+          "purposeConfidence": 100,
+          "plannedSteps": ["1. Toggle sort menu visibility"],
+          "actualImplementation": {
+            "hasOnPress": true,
+            "handlerActions": ["Toggles showSortMenu"],
+            "deviations": []
+          },
+          "status": "WORKING",
+          "priority": null,
+          "fixRequired": false
+        },
+        {
+          "buttonLabel": "Sort Menu Items",
+          "purpose": "Apply selected sort option",
+          "purposeConfidence": 100,
+          "plannedSteps": ["1. Update sortBy state", "2. Close menu", "3. Re-fetch sorted data"],
+          "actualImplementation": {
+            "hasOnPress": true,
+            "handlerActions": ["Updates sortBy", "Closes menu", "Triggers re-fetch via useEffect"],
+            "deviations": []
+          },
+          "status": "WORKING",
+          "priority": null,
+          "fixRequired": false
+        },
+        {
+          "buttonLabel": "Heart/Like Button (Post Card)",
+          "purpose": "Like or unlike a community post",
+          "purposeConfidence": 100,
+          "plannedSteps": [
+            "1. Optimistic UI update",
+            "2. Call API to toggle like",
+            "3. Rollback on error"
+          ],
+          "actualImplementation": {
+            "hasOnPress": true,
+            "handlerActions": [
+              "Optimistic state update",
+              "Haptic feedback",
+              "Supabase insert/delete",
+              "Error rollback"
+            ],
+            "deviations": []
+          },
+          "status": "WORKING",
+          "priority": null,
+          "fixRequired": false
+        },
+        {
+          "buttonLabel": "Report Button (Flag icon)",
+          "purpose": "Report inappropriate content to moderators",
+          "purposeConfidence": 100,
+          "plannedSteps": [
+            "1. Show confirmation dialog",
+            "2. Insert report to database",
+            "3. Show success feedback"
+          ],
+          "actualImplementation": {
+            "hasOnPress": true,
+            "handlerActions": [
+              "Auth check",
+              "Confirmation alert",
+              "Supabase insert to reports table",
+              "Success/error feedback"
+            ],
+            "deviations": []
+          },
+          "status": "WORKING",
+          "priority": null,
+          "fixRequired": false
+        },
+        {
+          "buttonLabel": "Block Button (Eye-off icon)",
+          "purpose": "Block a user to hide their content",
+          "purposeConfidence": 100,
+          "plannedSteps": [
+            "1. Show confirmation dialog",
+            "2. Insert block to database",
+            "3. Update local state",
+            "4. Refresh posts to exclude blocked user"
+          ],
+          "actualImplementation": {
+            "hasOnPress": true,
+            "handlerActions": [
+              "Auth check",
+              "Self-block prevention",
+              "Confirmation alert",
+              "Supabase insert",
+              "Updates blockedUserIds state",
+              "Refreshes data"
+            ],
+            "deviations": []
+          },
+          "status": "WORKING",
+          "priority": null,
+          "fixRequired": false
+        },
+        {
+          "buttonLabel": "Post Card (Navigate to Detail)",
+          "purpose": "View full post details and comments",
+          "purposeConfidence": 100,
+          "plannedSteps": ["1. Navigate to PostDetailScreen with thread data"],
+          "actualImplementation": {
+            "hasOnPress": true,
+            "handlerActions": ["Haptic feedback", "Navigation with thread data"],
+            "deviations": []
+          },
+          "status": "WORKING",
+          "priority": null,
+          "fixRequired": false
+        },
+        {
+          "buttonLabel": "Author Avatar/Name (Navigate to Profile)",
+          "purpose": "View the post author's profile",
+          "purposeConfidence": 100,
+          "plannedSteps": ["1. Navigate to UserProfileScreen if not anonymous"],
+          "actualImplementation": {
+            "hasOnPress": true,
+            "handlerActions": ["Stops propagation", "Checks not anonymous", "Navigates to UserProfile"],
+            "deviations": []
+          },
+          "status": "WORKING",
+          "priority": null,
+          "fixRequired": false
+        },
+        {
+          "buttonLabel": "Search Clear Button",
+          "purpose": "Clear the search input field",
+          "purposeConfidence": 100,
+          "plannedSteps": ["1. Clear searchQuery state"],
+          "actualImplementation": {
+            "hasOnPress": true,
+            "handlerActions": ["Sets searchQuery to empty string"],
+            "deviations": []
+          },
+          "status": "WORKING",
+          "priority": null,
+          "fixRequired": false
+        },
+        {
+          "buttonLabel": "Retry Button (Error State)",
+          "purpose": "Retry loading data after an error",
+          "purposeConfidence": 100,
+          "plannedSteps": ["1. Re-fetch data and stats"],
+          "actualImplementation": {
+            "hasOnPress": true,
+            "handlerActions": ["Calls fetchData() and fetchStats()"],
+            "deviations": []
+          },
+          "status": "WORKING",
+          "priority": null,
+          "fixRequired": false
+        },
+        {
+          "buttonLabel": "Create Post (Empty State)",
+          "purpose": "Open new post modal from empty state",
+          "purposeConfidence": 100,
+          "plannedSteps": ["1. Open NewPostModal"],
+          "actualImplementation": {
+            "hasOnPress": true,
+            "handlerActions": ["Sets showNewPostModal to true"],
+            "deviations": []
+          },
+          "status": "WORKING",
+          "priority": null,
+          "fixRequired": false
+        }
+      ]
+    },
+    {
+      "screen": "PostDetailScreen",
+      "filePath": "mobile/src/screens/PostDetailScreen.tsx",
+      "buttons": [
+        {
+          "buttonLabel": "Back Button",
+          "purpose": "Navigate back to previous screen",
+          "purposeConfidence": 100,
+          "plannedSteps": ["1. Call navigation.goBack()"],
+          "actualImplementation": {
+            "hasOnPress": true,
+            "handlerActions": ["Calls navigation.goBack()"],
+            "deviations": []
+          },
+          "status": "WORKING",
+          "priority": null,
+          "fixRequired": false
+        },
+        {
+          "buttonLabel": "Share Button",
+          "purpose": "Share post content via system share sheet",
+          "purposeConfidence": 100,
+          "plannedSteps": ["1. Open native share sheet with post content"],
+          "actualImplementation": {
+            "hasOnPress": true,
+            "handlerActions": ["Haptic feedback", "Uses Share.share()"],
+            "deviations": []
+          },
+          "status": "WORKING",
+          "priority": null,
+          "fixRequired": false
+        },
+        {
+          "buttonLabel": "Heart/Like Button",
+          "purpose": "Like or unlike the post",
+          "purposeConfidence": 100,
+          "plannedSteps": ["1. Optimistic update", "2. API call", "3. Rollback on error"],
+          "actualImplementation": {
+            "hasOnPress": true,
+            "handlerActions": ["Auth check", "Optimistic update", "Supabase toggle", "Error rollback"],
+            "deviations": []
+          },
+          "status": "WORKING",
+          "priority": null,
+          "fixRequired": false
+        },
+        {
+          "buttonLabel": "Pray Button",
+          "purpose": "Indicate user is praying for this request",
+          "purposeConfidence": 100,
+          "plannedSteps": ["1. Optimistic update", "2. Insert/delete prayer record", "3. Rollback on error"],
+          "actualImplementation": {
+            "hasOnPress": true,
+            "handlerActions": ["Full implementation with optimistic updates"],
+            "deviations": []
+          },
+          "status": "WORKING",
+          "priority": null,
+          "fixRequired": false
+        },
+        {
+          "buttonLabel": "Bookmark Button",
+          "purpose": "Save post to bookmarks for later",
+          "purposeConfidence": 100,
+          "plannedSteps": ["1. Toggle bookmark in database", "2. Update local state"],
+          "actualImplementation": {
+            "hasOnPress": true,
+            "handlerActions": ["Auth check", "Optimistic update", "Supabase insert/delete", "Error rollback"],
+            "deviations": ["Uses separate bookmarks table, not integrated with BookmarksContext"]
+          },
+          "status": "WORKING",
+          "priority": null,
+          "fixRequired": false,
+          "note": "Consider integrating with BookmarksContext for consistency"
+        },
+        {
+          "buttonLabel": "Send Comment Button",
+          "purpose": "Submit a new comment on the post",
+          "purposeConfidence": 100,
+          "plannedSteps": [
+            "1. Validate comment not empty",
+            "2. Show loading state",
+            "3. Insert comment to database",
+            "4. Refresh comments",
+            "5. Update comment count"
+          ],
+          "actualImplementation": {
+            "hasOnPress": true,
+            "handlerActions": [
+              "Auth check",
+              "Loading state",
+              "Supabase insert",
+              "Haptic success",
+              "Clears input",
+              "Refreshes comments",
+              "Updates count"
+            ],
+            "deviations": []
+          },
+          "status": "WORKING",
+          "priority": null,
+          "fixRequired": false
+        },
+        {
+          "buttonLabel": "Go Back (Error State)",
+          "purpose": "Navigate back when post not found",
+          "purposeConfidence": 100,
+          "plannedSteps": ["1. Navigate back"],
+          "actualImplementation": {
+            "hasOnPress": true,
+            "handlerActions": ["Calls navigation.goBack()"],
+            "deviations": []
+          },
+          "status": "WORKING",
+          "priority": null,
+          "fixRequired": false
+        }
+      ]
+    },
+    {
+      "screen": "NewPostModal",
+      "filePath": "mobile/src/components/NewPostModal.tsx",
+      "buttons": [
+        {
+          "buttonLabel": "Close Button (X)",
+          "purpose": "Close the modal and discard draft",
+          "purposeConfidence": 100,
+          "plannedSteps": ["1. Reset form", "2. Call onClose"],
+          "actualImplementation": {
+            "hasOnPress": true,
+            "handlerActions": ["Checks not loading", "Resets form", "Calls onClose"],
+            "deviations": []
+          },
+          "status": "WORKING",
+          "priority": null,
+          "fixRequired": false
+        },
+        {
+          "buttonLabel": "Category Buttons",
+          "purpose": "Select post category type",
+          "purposeConfidence": 100,
+          "plannedSteps": ["1. Update selectedCategory state"],
+          "actualImplementation": {
+            "hasOnPress": true,
+            "handlerActions": ["Haptic feedback", "Updates selectedCategory"],
+            "deviations": []
+          },
+          "status": "WORKING",
+          "priority": null,
+          "fixRequired": false
+        },
+        {
+          "buttonLabel": "Anonymous Toggle",
+          "purpose": "Toggle whether post is anonymous",
+          "purposeConfidence": 100,
+          "plannedSteps": ["1. Toggle isAnonymous state"],
+          "actualImplementation": {
+            "hasOnPress": true,
+            "handlerActions": ["Haptic feedback", "Toggles isAnonymous"],
+            "deviations": []
+          },
+          "status": "WORKING",
+          "priority": null,
+          "fixRequired": false
+        },
+        {
+          "buttonLabel": "Post [Category] (Submit)",
+          "purpose": "Submit the new post to the community",
+          "purposeConfidence": 100,
+          "plannedSteps": [
+            "1. Validate auth",
+            "2. Validate title (3-100 chars)",
+            "3. Validate content (10-1000 chars)",
+            "4. Show loading",
+            "5. Insert to database",
+            "6. Show success",
+            "7. Reset and close modal",
+            "8. Trigger parent refresh"
+          ],
+          "actualImplementation": {
+            "hasOnPress": true,
+            "handlerActions": [
+              "Full validation with specific error messages",
+              "Loading state",
+              "Supabase insert",
+              "Success haptic and alert",
+              "Error handling",
+              "Calls onSuccess and onClose"
+            ],
+            "deviations": []
+          },
+          "status": "WORKING",
+          "priority": null,
+          "fixRequired": false
+        }
+      ]
+    },
+    {
+      "screen": "ProfileScreen",
+      "filePath": "mobile/src/screens/ProfileScreen.tsx",
+      "buttons": [
+        {
+          "buttonLabel": "Edit Profile",
+          "purpose": "Enable editing mode for profile fields",
+          "purposeConfidence": 100,
+          "plannedSteps": ["1. Set editing state to true"],
+          "actualImplementation": {
+            "hasOnPress": true,
+            "handlerActions": ["Haptic feedback", "Sets editing to true"],
+            "deviations": []
+          },
+          "status": "WORKING",
+          "priority": null,
+          "fixRequired": false
+        },
+        {
+          "buttonLabel": "Cancel (Edit Mode)",
+          "purpose": "Cancel editing and restore original values",
+          "purposeConfidence": 100,
+          "plannedSteps": ["1. Restore original values", "2. Exit editing mode"],
+          "actualImplementation": {
+            "hasOnPress": true,
+            "handlerActions": ["Restores profile values", "Sets editing to false"],
+            "deviations": []
+          },
+          "status": "WORKING",
+          "priority": null,
+          "fixRequired": false
+        },
+        {
+          "buttonLabel": "Save Changes",
+          "purpose": "Persist edited profile data",
+          "purposeConfidence": 100,
+          "plannedSteps": ["1. Show loading", "2. Upsert to database", "3. Show success", "4. Exit editing"],
+          "actualImplementation": {
+            "hasOnPress": true,
+            "handlerActions": [
+              "Loading state",
+              "Supabase upsert",
+              "Success alert",
+              "Exit editing",
+              "Refresh profile"
+            ],
+            "deviations": []
+          },
+          "status": "WORKING",
+          "priority": null,
+          "fixRequired": false
+        },
+        {
+          "buttonLabel": "Saved Content Tabs (Episodes/Videos)",
+          "purpose": "Switch between viewing saved episodes or videos",
+          "purposeConfidence": 100,
+          "plannedSteps": ["1. Update savedTab state"],
+          "actualImplementation": {
+            "hasOnPress": true,
+            "handlerActions": ["Haptic feedback", "Updates savedTab"],
+            "deviations": []
+          },
+          "status": "WORKING",
+          "priority": null,
+          "fixRequired": false
+        },
+        {
+          "buttonLabel": "Remove Bookmark (Saved Items)",
+          "purpose": "Remove item from bookmarks",
+          "purposeConfidence": 100,
+          "plannedSteps": ["1. Optimistic removal", "2. Call toggle in context", "3. Rollback on error"],
+          "actualImplementation": {
+            "hasOnPress": true,
+            "handlerActions": ["Haptic feedback", "Optimistic local removal", "Calls toggleBookmark", "Error rollback with alert"],
+            "deviations": []
+          },
+          "status": "WORKING",
+          "priority": null,
+          "fixRequired": false
+        },
+        {
+          "buttonLabel": "Delete Account",
+          "purpose": "Permanently delete user account and all data",
+          "purposeConfidence": 100,
+          "plannedSteps": [
+            "1. Show warning dialog",
+            "2. Show final confirmation",
+            "3. Call Edge Function to delete",
+            "4. Sign out",
+            "5. Show confirmation"
+          ],
+          "actualImplementation": {
+            "hasOnPress": true,
+            "handlerActions": [
+              "Two-stage confirmation",
+              "Calls supabase.functions.invoke('delete-user')",
+              "Signs out",
+              "Shows success or error"
+            ],
+            "deviations": []
+          },
+          "status": "WORKING",
+          "priority": null,
+          "fixRequired": false
+        },
+        {
+          "buttonLabel": "Logout",
+          "purpose": "Sign out current user",
+          "purposeConfidence": 100,
+          "plannedSteps": ["1. Show confirmation", "2. Call signOut", "3. Handle errors"],
+          "actualImplementation": {
+            "hasOnPress": true,
+            "handlerActions": ["Confirmation alert", "Calls signOut", "Error handling"],
+            "deviations": []
+          },
+          "status": "WORKING",
+          "priority": null,
+          "fixRequired": false
+        }
+      ]
+    },
+    {
+      "screen": "MediaScreen",
+      "filePath": "mobile/src/screens/MediaScreen.tsx",
+      "buttons": [
+        {
+          "buttonLabel": "Tab Buttons (Podcasts/Videos)",
+          "purpose": "Switch between podcast and video content views",
+          "purposeConfidence": 100,
+          "plannedSteps": ["1. Animate tab indicator", "2. Update activeTab state"],
+          "actualImplementation": {
+            "hasOnPress": true,
+            "handlerActions": ["Haptic feedback", "Animated tab switch", "Updates activeTab"],
+            "deviations": []
+          },
+          "status": "WORKING",
+          "priority": null,
+          "fixRequired": false
+        },
+        {
+          "buttonLabel": "Category Filter Pills",
+          "purpose": "Filter content by category",
+          "purposeConfidence": 100,
+          "plannedSteps": ["1. Update selectedCategory state"],
+          "actualImplementation": {
+            "hasOnPress": true,
+            "handlerActions": ["Haptic feedback", "Updates selectedCategory"],
+            "deviations": []
+          },
+          "status": "WORKING",
+          "priority": null,
+          "fixRequired": false
+        },
+        {
+          "buttonLabel": "Bookmark Button (Episode Card)",
+          "purpose": "Save/unsave episode to bookmarks",
+          "purposeConfidence": 100,
+          "plannedSteps": ["1. Animate button", "2. Toggle bookmark via context"],
+          "actualImplementation": {
+            "hasOnPress": true,
+            "handlerActions": ["Auth check with haptic warning", "Haptic feedback", "Spring animation", "Calls toggleBookmark"],
+            "deviations": []
+          },
+          "status": "WORKING",
+          "priority": null,
+          "fixRequired": false
+        },
+        {
+          "buttonLabel": "Bookmark Button (Video Card)",
+          "purpose": "Save/unsave video to bookmarks",
+          "purposeConfidence": 100,
+          "plannedSteps": ["1. Stop event propagation", "2. Animate button", "3. Toggle bookmark"],
+          "actualImplementation": {
+            "hasOnPress": true,
+            "handlerActions": ["Stops propagation", "Haptic feedback", "Animation", "Calls toggleBookmark"],
+            "deviations": []
+          },
+          "status": "WORKING",
+          "priority": null,
+          "fixRequired": false
+        },
+        {
+          "buttonLabel": "Podcast Card",
+          "purpose": "Navigate to episode detail or start playback",
+          "purposeConfidence": 85,
+          "plannedSteps": ["1. Navigate to episode detail or start audio playback"],
+          "actualImplementation": {
+            "hasOnPress": true,
+            "handlerActions": ["Scale animation only"],
+            "deviations": ["No navigation or playback action implemented"]
+          },
+          "status": "PARTIAL",
+          "priority": "High",
+          "fixRequired": true,
+          "fixInstructions": "Implement navigation to EpisodeDetailScreen or start audio playback via AudioContext"
+        },
+        {
+          "buttonLabel": "Video Card",
+          "purpose": "Navigate to video player to watch video",
+          "purposeConfidence": 95,
+          "plannedSteps": ["1. Navigate to VideoScreen with video data"],
+          "actualImplementation": {
+            "hasOnPress": true,
+            "handlerActions": ["Haptic feedback only"],
+            "deviations": ["No navigation implemented"]
+          },
+          "status": "PARTIAL",
+          "priority": "High",
+          "fixRequired": true,
+          "fixInstructions": "Implement navigation to VideoScreen with video object"
+        }
+      ]
+    },
+    {
+      "screen": "HomeScreen",
+      "filePath": "mobile/src/screens/HomeScreen.tsx",
+      "buttons": [
+        {
+          "buttonLabel": "Profile Avatar",
+          "purpose": "Navigate to user profile screen",
+          "purposeConfidence": 100,
+          "plannedSteps": ["1. Navigate to Profile screen"],
+          "actualImplementation": {
+            "hasOnPress": true,
+            "handlerActions": ["Navigates to Profile"],
+            "deviations": []
+          },
+          "status": "WORKING",
+          "priority": null,
+          "fixRequired": false
+        },
+        {
+          "buttonLabel": "HeroPlayerCard",
+          "purpose": "Navigate to Live screen for full radio experience",
+          "purposeConfidence": 100,
+          "plannedSteps": ["1. Navigate to Live tab"],
+          "actualImplementation": {
+            "hasOnPress": true,
+            "handlerActions": ["Navigates to Live"],
+            "deviations": []
+          },
+          "status": "WORKING",
+          "priority": null,
+          "fixRequired": false
+        },
+        {
+          "buttonLabel": "HeroPlayerCard Play/Pause",
+          "purpose": "Toggle live radio playback",
+          "purposeConfidence": 100,
+          "plannedSteps": ["1. Toggle playback via AudioContext"],
+          "actualImplementation": {
+            "hasOnPress": true,
+            "handlerActions": ["Calls play/pause from AudioContext"],
+            "deviations": []
+          },
+          "status": "WORKING",
+          "priority": null,
+          "fixRequired": false
+        },
+        {
+          "buttonLabel": "Ministry Rail Items",
+          "purpose": "Navigate to Community tab",
+          "purposeConfidence": 80,
+          "plannedSteps": ["1. Navigate to Community"],
+          "actualImplementation": {
+            "hasOnPress": true,
+            "handlerActions": ["Navigates to Community"],
+            "deviations": ["All ministry items navigate to same screen - could be more specific"]
+          },
+          "status": "WORKING",
+          "priority": null,
+          "fixRequired": false
+        },
+        {
+          "buttonLabel": "MediaRail Items (Podcasts/Videos)",
+          "purpose": "Navigate to Media tab",
+          "purposeConfidence": 100,
+          "plannedSteps": ["1. Navigate to Media tab"],
+          "actualImplementation": {
+            "hasOnPress": true,
+            "handlerActions": ["Navigates to Media"],
+            "deviations": ["Navigates to tab, not to specific item"]
+          },
+          "status": "WORKING",
+          "priority": null,
+          "fixRequired": false,
+          "note": "Consider navigating to specific episode/video detail"
+        },
+        {
+          "buttonLabel": "View All (Media Rails)",
+          "purpose": "Navigate to Media tab to see all content",
+          "purposeConfidence": 100,
+          "plannedSteps": ["1. Navigate to Media"],
+          "actualImplementation": {
+            "hasOnPress": true,
+            "handlerActions": ["Navigates to Media"],
+            "deviations": []
+          },
+          "status": "WORKING",
+          "priority": null,
+          "fixRequired": false
+        }
+      ]
+    }
+  ],
+  "summary": {
+    "totalWorking": 51,
+    "totalPartial": 8,
+    "totalBroken": 8,
+    "criticalIssues": 2,
+    "highPriorityIssues": 4,
+    "mediumPriorityIssues": 4,
+    "lowPriorityIssues": 6
+  }
+}
