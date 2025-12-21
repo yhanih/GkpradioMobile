@@ -234,7 +234,10 @@ export function MediaScreen() {
           <Text style={[styles.title, { color: theme.colors.text }]}>Media</Text>
           <Pressable 
             style={[styles.searchButton, { backgroundColor: theme.colors.surface }]}
-            onPress={() => Haptics.selectionAsync()}
+            onPress={() => {
+              Haptics.selectionAsync();
+              navigation.navigate('Search' as any);
+            }}
           >
             <Ionicons name="search" size={20} color={theme.colors.textMuted} />
           </Pressable>
@@ -260,7 +263,14 @@ export function MediaScreen() {
         {featuredContent && (
           <Pressable
             style={styles.heroContainer}
-            onPress={() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium)}
+            onPress={() => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+              if (activeTab === 'podcasts') {
+                navigation.navigate('EpisodePlayer', { episode: featuredContent as Episode });
+              } else {
+                navigation.navigate('VideoPlayer', { video: featuredContent as Video });
+              }
+            }}
             onPressIn={() => {
               Animated.spring(heroScaleAnim, {
                 toValue: 0.98,
@@ -495,7 +505,10 @@ export function MediaScreen() {
                     styles.continueCard,
                     pressed && styles.continueCardPressed,
                   ]}
-                  onPress={() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)}
+                  onPress={() => {
+                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                    navigation.navigate('VideoPlayer', { video });
+                  }}
                 >
                   <Image
                     source={{
@@ -551,7 +564,10 @@ export function MediaScreen() {
                     styles.continueCard,
                     pressed && styles.continueCardPressed,
                   ]}
-                  onPress={() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)}
+                  onPress={() => {
+                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                    navigation.navigate('EpisodePlayer', { episode: podcast });
+                  }}
                 >
                   <Image
                     source={{

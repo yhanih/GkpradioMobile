@@ -8,6 +8,8 @@ import {
   ActivityIndicator,
   ScrollView,
   Dimensions,
+  Share,
+  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -26,6 +28,8 @@ type EpisodePlayerNavProp = NativeStackNavigationProp<RootStackParamList, 'Episo
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
+const PLAYBACK_SPEEDS = [0.5, 0.75, 1, 1.25, 1.5, 1.75, 2];
+
 export function EpisodePlayerScreen() {
   const navigation = useNavigation<EpisodePlayerNavProp>();
   const route = useRoute<EpisodePlayerRouteProp>();
@@ -36,6 +40,8 @@ export function EpisodePlayerScreen() {
   
   const { episode } = route.params;
   const isCurrentEpisode = currentEpisode?.id === episode.id;
+  
+  const [playbackSpeed, setPlaybackSpeed] = useState(1);
 
   useEffect(() => {
     if (episode.audio_url) {
@@ -61,6 +67,51 @@ export function EpisodePlayerScreen() {
     if (!user) return;
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     await toggleBookmark('episode', episode.id);
+  };
+
+  const handleSkipBack = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    // Skip back 15 seconds - would integrate with audio context
+    Alert.alert('Skip Back', 'Skipped back 15 seconds');
+  };
+
+  const handleSkipForward = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    // Skip forward 30 seconds - would integrate with audio context
+    Alert.alert('Skip Forward', 'Skipped forward 30 seconds');
+  };
+
+  const handleSpeedChange = () => {
+    Haptics.selectionAsync();
+    const currentIndex = PLAYBACK_SPEEDS.indexOf(playbackSpeed);
+    const nextIndex = (currentIndex + 1) % PLAYBACK_SPEEDS.length;
+    setPlaybackSpeed(PLAYBACK_SPEEDS[nextIndex]);
+  };
+
+  const handleTimer = () => {
+    Haptics.selectionAsync();
+    Alert.alert(
+      'Sleep Timer',
+      'Set a timer to stop playback',
+      [
+        { text: '15 minutes', onPress: () => Alert.alert('Timer Set', 'Playback will stop in 15 minutes') },
+        { text: '30 minutes', onPress: () => Alert.alert('Timer Set', 'Playback will stop in 30 minutes') },
+        { text: '1 hour', onPress: () => Alert.alert('Timer Set', 'Playback will stop in 1 hour') },
+        { text: 'Cancel', style: 'cancel' },
+      ]
+    );
+  };
+
+  const handleShare = async () => {
+    Haptics.selectionAsync();
+    try {
+      await Share.share({
+        title: episode.title,
+        message: `Check out "${episode.title}" on GKP Radio!${episode.author ? ` by ${episode.author}` : ''}`,
+      });
+    } catch (error) {
+      console.error('Error sharing:', error);
+    }
   };
 
   const formatDuration = (seconds: number | null) => {
@@ -176,14 +227,17 @@ export function EpisodePlayerScreen() {
           <View style={styles.mainControls}>
             <Pressable 
               style={styles.secondaryControl}
-              onPress={() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)}
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                Alert.alert('Previous', 'Go to previous episode');
+              }}
             >
               <Ionicons name="play-skip-back" size={28} color={theme.colors.textMuted} />
             </Pressable>
             
             <Pressable 
               style={styles.secondaryControl}
-              onPress={() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)}
+              onPress={handleSkipBack}
             >
               <Ionicons name="play-back" size={24} color={theme.colors.text} />
               <Text style={[styles.skipText, { color: theme.colors.text }]}>15</Text>
@@ -208,7 +262,7 @@ export function EpisodePlayerScreen() {
 
             <Pressable 
               style={styles.secondaryControl}
-              onPress={() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)}
+              onPress={handleSkipForward}
             >
               <Ionicons name="play-forward" size={24} color={theme.colors.text} />
               <Text style={[styles.skipText, { color: theme.colors.text }]}>30</Text>
@@ -216,7 +270,10 @@ export function EpisodePlayerScreen() {
 
             <Pressable 
               style={styles.secondaryControl}
-              onPress={() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)}
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                Alert.alert('Next', 'Go to next episode');
+              }}
             >
               <Ionicons name="play-skip-forward" size={28} color={theme.colors.textMuted} />
             </Pressable>
@@ -225,15 +282,15 @@ export function EpisodePlayerScreen() {
           <View style={styles.extraControls}>
             <Pressable 
               style={styles.extraButton}
-              onPress={() => Haptics.selectionAsync()}
+              onPress={handleSpeedChange}
             >
               <Ionicons name="speedometer-outline" size={22} color={theme.colors.textMuted} />
-              <Text style={[styles.extraButtonText, { color: theme.colors.textMuted }]}>1x</Text>
+              <Text style={[styles.extraButtonText, { color: theme.colors.textMuted }]}>{playbackSpeed}x</Text>
             </Pressable>
             
             <Pressable 
               style={styles.extraButton}
-              onPress={() => Haptics.selectionAsync()}
+              onPress={handleTimer}
             >
               <Ionicons name="timer-outline" size={22} color={theme.colors.textMuted} />
               <Text style={[styles.extraButtonText, { color: theme.colors.textMuted }]}>Timer</Text>
@@ -241,7 +298,7 @@ export function EpisodePlayerScreen() {
             
             <Pressable 
               style={styles.extraButton}
-              onPress={() => Haptics.selectionAsync()}
+              onPress={handleShare}
             >
               <Ionicons name="share-outline" size={22} color={theme.colors.textMuted} />
               <Text style={[styles.extraButtonText, { color: theme.colors.textMuted }]}>Share</Text>

@@ -7,6 +7,7 @@ import {
   ActivityIndicator,
   Dimensions,
   StatusBar,
+  Share,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useVideoPlayer, VideoView } from 'expo-video';
@@ -116,6 +117,18 @@ export function VideoPlayerScreen() {
     navigation.goBack();
   };
 
+  const handleShare = async () => {
+    Haptics.selectionAsync();
+    try {
+      await Share.share({
+        title: content?.title || 'GKP Radio Video',
+        message: `Check out "${content?.title}" on GKP Radio!`,
+      });
+    } catch (error) {
+      console.error('Error sharing:', error);
+    }
+  };
+
   const formatDuration = (seconds: number | null) => {
     if (!seconds) return '';
     const hours = Math.floor(seconds / 3600);
@@ -173,6 +186,9 @@ export function VideoPlayerScreen() {
               </Pressable>
               
               <View style={styles.topRight}>
+                <Pressable style={styles.controlButton} onPress={handleShare}>
+                  <Ionicons name="share-outline" size={24} color="#fff" />
+                </Pressable>
                 {video && user && (
                   <Pressable style={styles.controlButton} onPress={handleBookmark}>
                     <Ionicons 
