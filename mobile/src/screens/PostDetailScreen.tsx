@@ -21,6 +21,7 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import * as Haptics from 'expo-haptics';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
+import { useBookmarks } from '../contexts/BookmarksContext';
 import { CommunityThread, CommunityComment, User } from '../types/database.types';
 import { RootStackParamList } from '../types/navigation';
 import { getCategoryIcon, getCategoryLabel } from '../constants/categories';
@@ -44,6 +45,7 @@ export function PostDetailScreen() {
   const navigation = useNavigation<PostDetailNavProp>();
   const route = useRoute<PostDetailRouteProp>();
   const { user } = useAuth();
+  const { isBookmarked, toggleBookmark } = useBookmarks();
 
   const [thread, setThread] = useState<ThreadWithUser | null>(route.params.thread || null);
   const [comments, setComments] = useState<CommentWithUser[]>([]);
@@ -73,7 +75,7 @@ export function PostDetailScreen() {
       let threadData: ThreadWithUser = data;
 
       if (user) {
-        const [likesResult, prayersResult, bookmarksResult] = await Promise.all([
+        const [likesResult, prayersResult] = await Promise.all([
           supabase
             .from('community_thread_likes')
             .select('id')
@@ -86,20 +88,12 @@ export function PostDetailScreen() {
             .eq('thread_id', route.params.threadId)
             .eq('user_id', user.id)
             .maybeSingle(),
-          supabase
-            .from('bookmarks')
-            .select('id')
-            .eq('content_type', 'thread')
-            .eq('content_id', route.params.threadId)
-            .eq('userid', user.id)
-            .maybeSingle(),
         ]);
 
         threadData = {
           ...data,
           user_has_liked: !!likesResult.data,
           user_has_prayed: !!prayersResult.data,
-          user_has_bookmarked: !!bookmarksResult.data,
         };
       }
 
@@ -163,11 +157,13 @@ export function PostDetailScreen() {
     if (!thread) return;
 
     const currentlyLiked = thread.user_has_liked;
+    const currentCount = thread.like_count ?? 0;
+    const newCount = currentlyLiked ? Math.max(currentCount - 1, 0) : currentCount + 1;
     
     setThread(prev => prev ? {
       ...prev,
       user_has_liked: !currentlyLiked,
-      like_count: currentlyLiked ? prev.like_count - 1 : prev.like_count + 1
+      like_count: newCount
     } : null);
 
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -180,11 +176,23 @@ export function PostDetailScreen() {
           .eq('thread_id', thread.id)
           .eq('user_id', user.id);
         if (error) throw error;
+
+        // Update like_count in database
+        await supabase
+          .from('communitythreads')
+          .update({ like_count: newCount })
+          .eq('id', thread.id);
       } else {
         const { error } = await supabase
           .from('community_thread_likes')
           .upsert({ thread_id: thread.id, user_id: user.id }, { onConflict: 'thread_id,user_id' });
         if (error) throw error;
+
+        // Update like_count in database
+        await supabase
+          .from('communitythreads')
+          .update({ like_count: newCount })
+          .eq('id', thread.id);
       }
     } catch (error: any) {
       if (error?.code === '23505') return;
@@ -192,7 +200,7 @@ export function PostDetailScreen() {
       setThread(prev => prev ? {
         ...prev,
         user_has_liked: currentlyLiked,
-        like_count: currentlyLiked ? prev.like_count + 1 : prev.like_count - 1
+        like_count: currentCount
       } : null);
     }
   };
@@ -245,46 +253,19 @@ export function PostDetailScreen() {
 
   const handleBookmark = async () => {
     if (!user) {
-      Alert.alert('Sign In Required', 'Please sign in to bookmark posts.');
+      Alert.alert('Sign In Required', 'Please sign in to save posts.');
       return;
     }
     if (!thread) return;
 
-    const currentlyBookmarked = thread.user_has_bookmarked;
-
-    setThread(prev => prev ? {
-      ...prev,
-      user_has_bookmarked: !currentlyBookmarked
-    } : null);
-
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
 
     try {
-      if (currentlyBookmarked) {
-        const { error } = await supabase
-          .from('bookmarks')
-          .delete()
-          .eq('content_type', 'thread')
-          .eq('content_id', thread.id)
-          .eq('userid', user.id);
-        if (error) throw error;
-      } else {
-        const { error } = await supabase
-          .from('bookmarks')
-          .insert({ 
-            content_type: 'thread', 
-            content_id: thread.id, 
-            userid: user.id 
-          });
-        if (error && error.code !== '23505') throw error;
-      }
-    } catch (error: any) {
-      if (error?.code === '23505') return;
+      await toggleBookmark('thread', thread.id);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } catch (error) {
       console.error('Error toggling bookmark:', error);
-      setThread(prev => prev ? {
-        ...prev,
-        user_has_bookmarked: currentlyBookmarked
-      } : null);
+      Alert.alert('Error', 'Unable to save post. Please try again.');
     }
   };
 
@@ -323,13 +304,21 @@ export function PostDetailScreen() {
 
       if (error) throw error;
 
+      // Update comment_count in database
+      const currentCommentCount = thread.comment_count ?? 0;
+      const newCommentCount = currentCommentCount + 1;
+      await supabase
+        .from('communitythreads')
+        .update({ comment_count: newCommentCount })
+        .eq('id', thread.id);
+
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       setNewComment('');
       await fetchComments();
       
       setThread(prev => prev ? {
         ...prev,
-        comment_count: prev.comment_count + 1
+        comment_count: newCommentCount
       } : null);
     } catch (error) {
       console.error('Error submitting comment:', error);
@@ -368,12 +357,22 @@ export function PostDetailScreen() {
 
               if (error) throw error;
 
+              // Update comment_count in database
+              const currentCommentCount = thread?.comment_count ?? 0;
+              const newCommentCount = Math.max(currentCommentCount - 1, 0);
+              if (thread) {
+                await supabase
+                  .from('communitythreads')
+                  .update({ comment_count: newCommentCount })
+                  .eq('id', thread.id);
+              }
+
               Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
               await fetchComments();
               
               setThread(prev => prev ? {
                 ...prev,
-                comment_count: Math.max((prev.comment_count || 1) - 1, 0)
+                comment_count: newCommentCount
               } : null);
             } catch (error) {
               console.error('Error deleting comment:', error);
@@ -533,9 +532,9 @@ export function PostDetailScreen() {
 
               <Pressable style={styles.actionButton} onPress={handleBookmark}>
                 <Ionicons
-                  name={thread.user_has_bookmarked ? 'bookmark' : 'bookmark-outline'}
+                  name={isBookmarked('thread', thread.id) ? 'bookmark' : 'bookmark-outline'}
                   size={22}
-                  color={thread.user_has_bookmarked ? '#047857' : '#71717a'}
+                  color={isBookmarked('thread', thread.id) ? '#047857' : '#71717a'}
                 />
               </Pressable>
             </View>

@@ -8,6 +8,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { supabase } from '../lib/supabase';
 import { CommunityThread, User } from '../types/database.types';
 import { useAuth } from '../contexts/AuthContext';
+import { useBookmarks } from '../contexts/BookmarksContext';
 import * as Haptics from 'expo-haptics';
 import { NewPostModal } from '../components/NewPostModal';
 import { COMMUNITY_CATEGORIES, getCategoryIcon, getCategoryLabel, Category } from '../constants/categories';
@@ -26,6 +27,7 @@ type CommunityNavProp = NativeStackNavigationProp<RootStackParamList, 'MainTabs'
 export function CommunityScreen() {
   const navigation = useNavigation<CommunityNavProp>();
   const { user } = useAuth();
+  const { isBookmarked, toggleBookmark, refreshBookmarks } = useBookmarks();
   const [activeCategory, setActiveCategory] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [showSearch, setShowSearch] = useState(false);
@@ -36,7 +38,6 @@ export function CommunityScreen() {
   const [error, setError] = useState<string | null>(null);
   const [stats, setStats] = useState({ prayers: 0, testimonies: 0, total: 0 });
   const [blockedUserIds, setBlockedUserIds] = useState<string[]>([]);
-  const [bookmarkedThreadIds, setBookmarkedThreadIds] = useState<Set<string>>(new Set());
   const [showNewPostModal, setShowNewPostModal] = useState(false);
   const [showSortMenu, setShowSortMenu] = useState(false);
   const [likeAnimations] = useState<{[key: string]: Animated.Value}>({});
@@ -45,7 +46,6 @@ export function CommunityScreen() {
 
   useEffect(() => {
     fetchBlockedUsers();
-    fetchBookmarks();
     fetchData();
     fetchStats();
   }, [user, sortBy]);
@@ -54,28 +54,10 @@ export function CommunityScreen() {
     useCallback(() => {
       if (!loading) {
         fetchData();
-        fetchBookmarks();
+        refreshBookmarks();
       }
-    }, [sortBy])
+    }, [sortBy, refreshBookmarks])
   );
-
-  const fetchBookmarks = async () => {
-    if (!user) return;
-    try {
-      const { data, error } = await supabase
-        .from('bookmarks')
-        .select('content_id')
-        .eq('userid', user.id)
-        .eq('content_type', 'thread');
-
-      if (error) throw error;
-      if (data) {
-        setBookmarkedThreadIds(new Set(data.map(b => b.content_id)));
-      }
-    } catch (error) {
-      console.error('Error fetching bookmarks:', error);
-    }
-  };
 
   const fetchBlockedUsers = async () => {
     if (!user) return;
@@ -196,14 +178,20 @@ export function CommunityScreen() {
       return;
     }
 
+    // Capture current count before any updates
+    const currentThread = threads.find(t => t.id === threadId);
+    const currentCount = currentThread?.like_count ?? 0;
+    const newCount = currentlyLiked ? Math.max(currentCount - 1, 0) : currentCount + 1;
+
     animateLike(threadId);
 
+    // Optimistic update
     setThreads(prev => prev.map(t => {
       if (t.id === threadId) {
         return {
           ...t,
           user_has_liked: !currentlyLiked,
-          like_count: currentlyLiked ? t.like_count - 1 : t.like_count + 1
+          like_count: newCount
         };
       }
       return t;
@@ -219,23 +207,36 @@ export function CommunityScreen() {
           .eq('thread_id', threadId)
           .eq('user_id', user.id);
         if (error) throw error;
+
+        // Update like_count in communitythreads table
+        await supabase
+          .from('communitythreads')
+          .update({ like_count: newCount })
+          .eq('id', threadId);
       } else {
         const { error } = await supabase
           .from('community_thread_likes')
           .upsert({ thread_id: threadId, user_id: user.id }, { onConflict: 'thread_id,user_id' });
         if (error) throw error;
+
+        // Update like_count in communitythreads table
+        await supabase
+          .from('communitythreads')
+          .update({ like_count: newCount })
+          .eq('id', threadId);
       }
     } catch (error: any) {
       if (error?.code === '23505') {
         return;
       }
       console.error('Error toggling like:', error);
+      // Revert optimistic update on error
       setThreads(prev => prev.map(t => {
         if (t.id === threadId) {
           return {
             ...t,
             user_has_liked: currentlyLiked,
-            like_count: currentlyLiked ? t.like_count + 1 : t.like_count - 1
+            like_count: currentCount
           };
         }
         return t;
@@ -333,56 +334,26 @@ export function CommunityScreen() {
 
   const onRefresh = async () => {
     setRefreshing(true);
-    await Promise.all([fetchData(), fetchStats(), fetchBookmarks()]);
+    await Promise.all([fetchData(), fetchStats(), refreshBookmarks()]);
     setRefreshing(false);
   };
 
-  const handleBookmark = async (threadId: string, currentlyBookmarked: boolean) => {
+  const handleBookmarkToggle = async (threadId: string) => {
     if (!user) {
       Alert.alert('Sign In Required', 'Please sign in to save posts.');
       return;
     }
 
-    const newBookmarked = !currentlyBookmarked;
-    setBookmarkedThreadIds(prev => {
-      const newSet = new Set(prev);
-      if (newBookmarked) {
-        newSet.add(threadId);
-      } else {
-        newSet.delete(threadId);
-      }
-      return newSet;
-    });
-
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
 
     try {
-      if (currentlyBookmarked) {
-        const { error } = await supabase
-          .from('bookmarks')
-          .delete()
-          .eq('content_id', threadId)
-          .eq('userid', user.id)
-          .eq('content_type', 'thread');
-        if (error) throw error;
-      } else {
-        const { error } = await supabase
-          .from('bookmarks')
-          .insert({ content_id: threadId, userid: user.id, content_type: 'thread' });
-        if (error && error.code !== '23505') throw error;
+      const result = await toggleBookmark('thread', threadId);
+      if (result !== isBookmarked('thread', threadId)) {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       }
-    } catch (error: any) {
-      if (error?.code === '23505') return;
+    } catch (error) {
       console.error('Error toggling bookmark:', error);
-      setBookmarkedThreadIds(prev => {
-        const newSet = new Set(prev);
-        if (currentlyBookmarked) {
-          newSet.add(threadId);
-        } else {
-          newSet.delete(threadId);
-        }
-        return newSet;
-      });
+      Alert.alert('Error', 'Unable to save post. Please try again.');
     }
   };
 
@@ -605,13 +576,13 @@ export function CommunityScreen() {
           </View>
           <View style={styles.cardActions}>
             <Pressable 
-              onPress={() => handleBookmark(thread.id, bookmarkedThreadIds.has(thread.id))} 
+              onPress={() => handleBookmarkToggle(thread.id)} 
               style={styles.actionButton}
             >
               <Ionicons 
-                name={bookmarkedThreadIds.has(thread.id) ? "bookmark" : "bookmark-outline"} 
+                name={isBookmarked('thread', thread.id) ? "bookmark" : "bookmark-outline"} 
                 size={16} 
-                color={bookmarkedThreadIds.has(thread.id) ? "#047857" : "#a1a1aa"} 
+                color={isBookmarked('thread', thread.id) ? "#047857" : "#a1a1aa"} 
               />
             </Pressable>
             {user && user.id === thread.userid && (
