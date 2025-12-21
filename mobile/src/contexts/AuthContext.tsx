@@ -21,11 +21,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const ensureUserProfile = async (authUser: User) => {
     try {
-      await supabase.from('users').upsert({
+      console.log('Ensuring user profile for:', authUser.id, authUser.email);
+      const { data, error } = await supabase.from('users').upsert({
         id: authUser.id,
         email: authUser.email!,
         fullname: authUser.user_metadata?.full_name || null,
       }, { onConflict: 'id' });
+      
+      if (error) {
+        console.error('Error upserting user profile:', error);
+      } else {
+        console.log('User profile ensured successfully');
+      }
     } catch (error) {
       console.error('Error ensuring user profile:', error);
     }
