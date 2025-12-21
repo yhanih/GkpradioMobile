@@ -170,7 +170,12 @@ export function HomeScreen() {
               imageUrl: ep.thumbnail_url || 'https://images.unsplash.com/photo-1478737270239-2f02b77ac6d5?w=400&q=80',
               duration: ep.duration ? `${Math.floor(ep.duration / 60)}m` : undefined
             }))}
-            onPressItem={() => navigation.navigate('Media')}
+            onPressItem={(item) => {
+              const episode = featuredEpisodes.find(ep => ep.id === item.id);
+              if (episode) {
+                navigation.navigate('EpisodePlayer', { episode });
+              }
+            }}
             onPressViewAll={() => navigation.navigate('Media')}
           />
 
@@ -185,7 +190,12 @@ export function HomeScreen() {
               imageUrl: vid.thumbnail_url || 'https://images.unsplash.com/photo-1516280440614-6697288d5d38?w=400&q=80',
               duration: vid.duration ? `${Math.floor(vid.duration / 60)}m` : undefined
             }))}
-            onPressItem={() => navigation.navigate('Media')}
+            onPressItem={(item) => {
+              const video = recentVideos.find(vid => vid.id === item.id);
+              if (video) {
+                navigation.navigate('VideoPlayer', { video });
+              }
+            }}
             onPressViewAll={() => navigation.navigate('Media')}
           />
 
