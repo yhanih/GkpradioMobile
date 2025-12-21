@@ -9,12 +9,17 @@ import {
   ActivityIndicator,
   Alert,
   RefreshControl,
+  Image,
+  Animated,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../contexts/AuthContext';
+import { useBookmarks } from '../contexts/BookmarksContext';
+import { useTheme } from '../contexts/ThemeContext';
 import { supabase } from '../lib/supabase';
+import { Episode, Video } from '../types/database.types';
 import * as Haptics from 'expo-haptics';
 
 interface ProfileData {
@@ -24,13 +29,21 @@ interface ProfileData {
   created_at: string;
 }
 
+type SavedTab = 'episodes' | 'videos';
+
 export function ProfileScreen() {
   const { user, signOut } = useAuth();
+  const { theme, isDark } = useTheme();
+  const { bookmarks, refreshBookmarks, toggleBookmark, isBookmarked } = useBookmarks();
   const [profile, setProfile] = useState<ProfileData | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [editing, setEditing] = useState(false);
+  const [savedTab, setSavedTab] = useState<SavedTab>('episodes');
+  const [savedEpisodes, setSavedEpisodes] = useState<Episode[]>([]);
+  const [savedVideos, setSavedVideos] = useState<Video[]>([]);
+  const [loadingSaved, setLoadingSaved] = useState(false);
 
   const [fullName, setFullName] = useState('');
   const [bio, setBio] = useState('');
@@ -40,6 +53,62 @@ export function ProfileScreen() {
       fetchProfile();
     }
   }, [user]);
+
+  useEffect(() => {
+    if (user && bookmarks.length > 0) {
+      fetchSavedContent();
+    } else {
+      setSavedEpisodes([]);
+      setSavedVideos([]);
+    }
+  }, [user, bookmarks]);
+
+  const fetchSavedContent = async () => {
+    if (!user) return;
+    
+    try {
+      setLoadingSaved(true);
+      
+      const episodeIds = bookmarks
+        .filter(b => b.content_type === 'episode')
+        .map(b => b.content_id);
+      
+      const videoIds = bookmarks
+        .filter(b => b.content_type === 'video')
+        .map(b => b.content_id);
+
+      const [episodesResult, videosResult] = await Promise.all([
+        episodeIds.length > 0
+          ? supabase
+              .from('episodes')
+              .select('*')
+              .in('id', episodeIds)
+              .order('created_at', { ascending: false })
+          : Promise.resolve({ data: [], error: null }),
+        videoIds.length > 0
+          ? supabase
+              .from('videos')
+              .select('*')
+              .in('id', videoIds)
+              .order('created_at', { ascending: false })
+          : Promise.resolve({ data: [], error: null }),
+      ]);
+
+      if (episodesResult.error) {
+        console.error('Error fetching saved episodes:', episodesResult.error);
+      }
+      if (videosResult.error) {
+        console.error('Error fetching saved videos:', videosResult.error);
+      }
+
+      setSavedEpisodes(episodesResult.data || []);
+      setSavedVideos(videosResult.data || []);
+    } catch (error) {
+      console.error('Error fetching saved content:', error);
+    } finally {
+      setLoadingSaved(false);
+    }
+  };
 
   const fetchProfile = async () => {
     try {
@@ -72,9 +141,27 @@ export function ProfileScreen() {
     }
   };
 
-  const onRefresh = () => {
+  const onRefresh = async () => {
     setRefreshing(true);
-    fetchProfile();
+    await Promise.all([fetchProfile(), refreshBookmarks()]);
+    setRefreshing(false);
+  };
+
+  const handleRemoveBookmark = async (contentType: 'episode' | 'video', contentId: string) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    
+    if (contentType === 'episode') {
+      setSavedEpisodes(prev => prev.filter(ep => ep.id !== contentId));
+    } else {
+      setSavedVideos(prev => prev.filter(vid => vid.id !== contentId));
+    }
+    
+    try {
+      await toggleBookmark(contentType, contentId);
+    } catch (error) {
+      fetchSavedContent();
+      Alert.alert('Error', 'Could not remove bookmark. Please try again.');
+    }
   };
 
   const handleSave = async () => {
@@ -327,16 +414,161 @@ export function ProfileScreen() {
 
             {profile?.created_at && (
               <View style={styles.infoRow}>
-                <View style={styles.infoIconContainer}>
-                  <Ionicons name="calendar-outline" size={20} color="#71717a" />
+                <View style={[styles.infoIconContainer, { backgroundColor: isDark ? theme.colors.surfaceSecondary : '#f4f4f5' }]}>
+                  <Ionicons name="calendar-outline" size={20} color={theme.colors.textMuted} />
                 </View>
                 <View style={styles.infoContent}>
-                  <Text style={styles.infoLabel}>Member Since</Text>
-                  <Text style={styles.infoValue}>{formatDate(profile.created_at)}</Text>
+                  <Text style={[styles.infoLabel, { color: theme.colors.textMuted }]}>Member Since</Text>
+                  <Text style={[styles.infoValue, { color: theme.colors.text }]}>{formatDate(profile.created_at)}</Text>
                 </View>
               </View>
             )}
           </View>
+        </View>
+
+        {/* Saved Section */}
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>Saved</Text>
+            <View style={styles.savedBadge}>
+              <Text style={[styles.savedBadgeText, { color: theme.colors.primary }]}>
+                {savedEpisodes.length + savedVideos.length}
+              </Text>
+            </View>
+          </View>
+
+          {/* Saved Tabs */}
+          <View style={[styles.savedTabs, { backgroundColor: theme.colors.surface }]}>
+            <Pressable
+              style={[
+                styles.savedTab,
+                savedTab === 'episodes' && { backgroundColor: theme.colors.primary }
+              ]}
+              onPress={() => {
+                Haptics.selectionAsync();
+                setSavedTab('episodes');
+              }}
+            >
+              <Ionicons 
+                name="headset" 
+                size={18} 
+                color={savedTab === 'episodes' ? '#fff' : theme.colors.textMuted} 
+              />
+              <Text style={[
+                styles.savedTabText,
+                { color: savedTab === 'episodes' ? '#fff' : theme.colors.textMuted }
+              ]}>
+                Episodes ({savedEpisodes.length})
+              </Text>
+            </Pressable>
+            <Pressable
+              style={[
+                styles.savedTab,
+                savedTab === 'videos' && { backgroundColor: theme.colors.primary }
+              ]}
+              onPress={() => {
+                Haptics.selectionAsync();
+                setSavedTab('videos');
+              }}
+            >
+              <Ionicons 
+                name="videocam" 
+                size={18} 
+                color={savedTab === 'videos' ? '#fff' : theme.colors.textMuted} 
+              />
+              <Text style={[
+                styles.savedTabText,
+                { color: savedTab === 'videos' ? '#fff' : theme.colors.textMuted }
+              ]}>
+                Videos ({savedVideos.length})
+              </Text>
+            </Pressable>
+          </View>
+
+          {/* Saved Content */}
+          {loadingSaved ? (
+            <View style={styles.savedLoading}>
+              <ActivityIndicator size="small" color={theme.colors.primary} />
+            </View>
+          ) : savedTab === 'episodes' ? (
+            savedEpisodes.length === 0 ? (
+              <View style={[styles.savedEmpty, { backgroundColor: theme.colors.surface }]}>
+                <Ionicons name="bookmark-outline" size={40} color={theme.colors.textMuted} />
+                <Text style={[styles.savedEmptyTitle, { color: theme.colors.text }]}>No Saved Episodes</Text>
+                <Text style={[styles.savedEmptyText, { color: theme.colors.textMuted }]}>
+                  Tap the bookmark icon on episodes to save them here
+                </Text>
+              </View>
+            ) : (
+              <View style={styles.savedList}>
+                {savedEpisodes.map((episode) => (
+                  <View 
+                    key={episode.id} 
+                    style={[styles.savedCard, { backgroundColor: theme.colors.surface }]}
+                  >
+                    <Image
+                      source={{ uri: episode.thumbnail_url || 'https://via.placeholder.com/60' }}
+                      style={styles.savedCardImage}
+                    />
+                    <View style={styles.savedCardInfo}>
+                      <Text style={[styles.savedCardTitle, { color: theme.colors.text }]} numberOfLines={2}>
+                        {episode.title}
+                      </Text>
+                      <Text style={[styles.savedCardMeta, { color: theme.colors.textMuted }]}>
+                        {episode.category || 'Podcast'}
+                      </Text>
+                    </View>
+                    <Pressable
+                      style={styles.savedCardRemove}
+                      onPress={() => handleRemoveBookmark('episode', episode.id)}
+                      hitSlop={10}
+                    >
+                      <Ionicons name="bookmark" size={22} color={theme.colors.primary} />
+                    </Pressable>
+                  </View>
+                ))}
+              </View>
+            )
+          ) : (
+            savedVideos.length === 0 ? (
+              <View style={[styles.savedEmpty, { backgroundColor: theme.colors.surface }]}>
+                <Ionicons name="bookmark-outline" size={40} color={theme.colors.textMuted} />
+                <Text style={[styles.savedEmptyTitle, { color: theme.colors.text }]}>No Saved Videos</Text>
+                <Text style={[styles.savedEmptyText, { color: theme.colors.textMuted }]}>
+                  Tap the bookmark icon on videos to save them here
+                </Text>
+              </View>
+            ) : (
+              <View style={styles.savedList}>
+                {savedVideos.map((video) => (
+                  <View 
+                    key={video.id} 
+                    style={[styles.savedCard, { backgroundColor: theme.colors.surface }]}
+                  >
+                    <Image
+                      source={{ uri: video.thumbnail_url || 'https://via.placeholder.com/60' }}
+                      style={styles.savedCardImage}
+                    />
+                    <View style={styles.savedCardInfo}>
+                      <Text style={[styles.savedCardTitle, { color: theme.colors.text }]} numberOfLines={2}>
+                        {video.title}
+                      </Text>
+                      <Text style={[styles.savedCardMeta, { color: theme.colors.textMuted }]}>
+                        {video.category || 'Video'}
+                      </Text>
+                    </View>
+                    <Pressable
+                      style={styles.savedCardRemove}
+                      onPress={() => handleRemoveBookmark('video', video.id)}
+                      hitSlop={10}
+                    >
+                      <Ionicons name="bookmark" size={22} color={theme.colors.primary} />
+                    </Pressable>
+                  </View>
+                ))}
+              </View>
+            )
+          )}
         </View>
 
         {/* Settings Section */}
@@ -624,6 +856,89 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     color: '#ef4444',
+  },
+  savedBadge: {
+    backgroundColor: 'rgba(4, 120, 87, 0.1)',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  savedBadgeText: {
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  savedTabs: {
+    flexDirection: 'row',
+    borderRadius: 12,
+    padding: 4,
+    marginBottom: 16,
+  },
+  savedTab: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 10,
+    borderRadius: 8,
+    gap: 6,
+  },
+  savedTabText: {
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  savedLoading: {
+    paddingVertical: 40,
+    alignItems: 'center',
+  },
+  savedEmpty: {
+    padding: 32,
+    borderRadius: 16,
+    alignItems: 'center',
+  },
+  savedEmptyTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    marginTop: 12,
+    marginBottom: 4,
+  },
+  savedEmptyText: {
+    fontSize: 14,
+    textAlign: 'center',
+  },
+  savedList: {
+    gap: 12,
+  },
+  savedCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 12,
+    borderRadius: 14,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  savedCardImage: {
+    width: 56,
+    height: 56,
+    borderRadius: 10,
+    backgroundColor: '#e4e4e7',
+  },
+  savedCardInfo: {
+    flex: 1,
+    marginLeft: 12,
+  },
+  savedCardTitle: {
+    fontSize: 15,
+    fontWeight: '600',
+    marginBottom: 4,
+  },
+  savedCardMeta: {
+    fontSize: 13,
+  },
+  savedCardRemove: {
+    padding: 8,
   },
   bottomPadding: {
     height: 100,
