@@ -153,6 +153,14 @@ mobile/
 
 ## Recent Changes
 
+### Dec 21, 2025 - Column Name Fixes & Deprecation Updates
+- ✅ Fixed `avatar_url` → `avatarurl` column name mismatch in CommunityScreen query
+- ✅ Updated ProfileScreen interface to use correct `avatarurl` column name
+- ✅ Updated database.types.ts with correct `avatarurl` column throughout
+- ✅ Fixed TypeScript structure: moved `community_thread_likes` to correct hierarchy
+- ✅ Fixed SafeAreaView deprecation: HomeScreen now imports from 'react-native-safe-area-context'
+- ⚠️ Known: expo-av deprecation warning (migrate to expo-audio/expo-video when prioritized)
+
 ### Dec 18, 2025 - Database Schema Alignment & Navigation Update
 - ✅ Fixed critical table name mismatches between app code and Supabase schema
 - ✅ Mapped `podcasts` → `episodes` in all queries
