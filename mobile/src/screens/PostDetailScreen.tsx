@@ -336,6 +336,46 @@ export function PostDetailScreen() {
     navigation.navigate('UserProfile', { userId, user: userData || undefined });
   };
 
+  const handleDeleteComment = async (commentId: string, commentUserId: string) => {
+    if (!user || user.id !== commentUserId) {
+      Alert.alert('Not Allowed', 'You can only delete your own comments.');
+      return;
+    }
+
+    Alert.alert(
+      'Delete Comment',
+      'Are you sure you want to delete this comment?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              const { error } = await supabase
+                .from('communitycomments')
+                .delete()
+                .eq('id', commentId);
+
+              if (error) throw error;
+
+              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+              await fetchComments();
+              
+              setThread(prev => prev ? {
+                ...prev,
+                comment_count: Math.max((prev.comment_count || 1) - 1, 0)
+              } : null);
+            } catch (error) {
+              console.error('Error deleting comment:', error);
+              Alert.alert('Error', 'Unable to delete comment. Please try again.');
+            }
+          }
+        }
+      ]
+    );
+  };
+
   const formatTimeAgo = (dateString: string) => {
     const date = new Date(dateString);
     const now = new Date();
@@ -505,28 +545,39 @@ export function PostDetailScreen() {
               </View>
             ) : (
               comments.map(comment => (
-                <Pressable 
-                  key={comment.id} 
-                  style={styles.commentCard}
-                  onPress={() => comment.users && navigateToUserProfile(comment.userid, comment.users)}
-                >
-                  {comment.users?.avatarurl ? (
-                    <Image source={{ uri: comment.users.avatarurl }} style={styles.commentAvatar} />
-                  ) : (
-                    <View style={styles.commentAvatarPlaceholder}>
-                      <Ionicons name="person" size={14} color="#71717a" />
+                <View key={comment.id} style={styles.commentCard}>
+                  <Pressable 
+                    style={styles.commentRow}
+                    onPress={() => comment.users && navigateToUserProfile(comment.userid, comment.users)}
+                  >
+                    {comment.users?.avatarurl ? (
+                      <Image source={{ uri: comment.users.avatarurl }} style={styles.commentAvatar} />
+                    ) : (
+                      <View style={styles.commentAvatarPlaceholder}>
+                        <Ionicons name="person" size={14} color="#71717a" />
+                      </View>
+                    )}
+                    <View style={styles.commentContent}>
+                      <View style={styles.commentHeader}>
+                        <Text style={styles.commentAuthor}>
+                          {comment.users?.fullname || comment.users?.username || 'Member'}
+                        </Text>
+                        <View style={styles.commentActions}>
+                          <Text style={styles.commentTime}>{formatTimeAgo(comment.createdat)}</Text>
+                          {user && user.id === comment.userid && (
+                            <Pressable 
+                              onPress={() => handleDeleteComment(comment.id, comment.userid)}
+                              style={styles.deleteCommentButton}
+                            >
+                              <Ionicons name="trash-outline" size={14} color="#ef4444" />
+                            </Pressable>
+                          )}
+                        </View>
+                      </View>
+                      <Text style={styles.commentText}>{comment.content}</Text>
                     </View>
-                  )}
-                  <View style={styles.commentContent}>
-                    <View style={styles.commentHeader}>
-                      <Text style={styles.commentAuthor}>
-                        {comment.users?.fullname || comment.users?.username || 'Member'}
-                      </Text>
-                      <Text style={styles.commentTime}>{formatTimeAgo(comment.createdat)}</Text>
-                    </View>
-                    <Text style={styles.commentText}>{comment.content}</Text>
-                  </View>
-                </Pressable>
+                  </Pressable>
+                </View>
               ))
             )}
           </View>
@@ -755,8 +806,10 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   commentCard: {
-    flexDirection: 'row',
     marginBottom: 16,
+  },
+  commentRow: {
+    flexDirection: 'row',
   },
   commentAvatar: {
     width: 32,
@@ -792,6 +845,14 @@ const styles = StyleSheet.create({
   commentTime: {
     fontSize: 12,
     color: '#a1a1aa',
+  },
+  commentActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  deleteCommentButton: {
+    padding: 4,
   },
   commentText: {
     fontSize: 14,

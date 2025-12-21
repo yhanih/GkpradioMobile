@@ -112,7 +112,7 @@ export function UserProfileScreen() {
     return `${Math.floor(diffInSeconds / 86400)}d ago`;
   };
 
-  const formatJoinDate = (dateString: string | null) => {
+  const formatJoinDate = (dateString: string | null | undefined) => {
     if (!dateString) return 'Member';
     const date = new Date(dateString);
     return `Joined ${date.toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}`;
