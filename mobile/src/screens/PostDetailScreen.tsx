@@ -174,17 +174,20 @@ export function PostDetailScreen() {
 
     try {
       if (currentlyLiked) {
-        await supabase
+        const { error } = await supabase
           .from('community_thread_likes')
           .delete()
           .eq('thread_id', thread.id)
           .eq('user_id', user.id);
+        if (error) throw error;
       } else {
-        await supabase
+        const { error } = await supabase
           .from('community_thread_likes')
-          .insert({ thread_id: thread.id, user_id: user.id });
+          .upsert({ thread_id: thread.id, user_id: user.id }, { onConflict: 'thread_id,user_id' });
+        if (error) throw error;
       }
-    } catch (error) {
+    } catch (error: any) {
+      if (error?.code === '23505') return;
       console.error('Error toggling like:', error);
       setThread(prev => prev ? {
         ...prev,
@@ -215,17 +218,20 @@ export function PostDetailScreen() {
 
     try {
       if (currentlyPrayed) {
-        await supabase
+        const { error } = await supabase
           .from('thread_prayers')
           .delete()
           .eq('thread_id', thread.id)
           .eq('user_id', user.id);
+        if (error) throw error;
       } else {
-        await supabase
+        const { error } = await supabase
           .from('thread_prayers')
-          .insert({ thread_id: thread.id, user_id: user.id });
+          .upsert({ thread_id: thread.id, user_id: user.id }, { onConflict: 'thread_id,user_id' });
+        if (error) throw error;
       }
-    } catch (error) {
+    } catch (error: any) {
+      if (error?.code === '23505') return;
       console.error('Error toggling prayer:', error);
       setThread(prev => prev ? {
         ...prev,

@@ -183,17 +183,22 @@ export function CommunityScreen() {
 
     try {
       if (currentlyLiked) {
-        await supabase
+        const { error } = await supabase
           .from('community_thread_likes')
           .delete()
           .eq('thread_id', threadId)
           .eq('user_id', user.id);
+        if (error) throw error;
       } else {
-        await supabase
+        const { error } = await supabase
           .from('community_thread_likes')
-          .insert({ thread_id: threadId, user_id: user.id });
+          .upsert({ thread_id: threadId, user_id: user.id }, { onConflict: 'thread_id,user_id' });
+        if (error) throw error;
       }
-    } catch (error) {
+    } catch (error: any) {
+      if (error?.code === '23505') {
+        return;
+      }
       console.error('Error toggling like:', error);
       setThreads(prev => prev.map(t => {
         if (t.id === threadId) {
@@ -224,17 +229,21 @@ export function CommunityScreen() {
           style: 'destructive',
           onPress: async () => {
             try {
-              const { error } = await supabase.from('reports').insert({
+              const { error } = await supabase.from('reports').upsert({
                 reporter_id: user.id,
                 target_type: targetType,
                 target_id: targetId,
                 reason: 'Inappropriate content'
-              });
+              }, { onConflict: 'reporter_id,target_type,target_id' });
 
               if (error) throw error;
               Alert.alert('Success', 'Thank you for your report. We will review it shortly.');
               Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-            } catch (error) {
+            } catch (error: any) {
+              if (error?.code === '23505') {
+                Alert.alert('Already Reported', 'You have already reported this content.');
+                return;
+              }
               console.error('Error reporting content:', error);
               Alert.alert('Error', 'Unable to submit report. Please try again.');
             }
@@ -250,7 +259,10 @@ export function CommunityScreen() {
       return;
     }
 
-    if (user.id === blockedUserId) return;
+    if (user.id === blockedUserId) {
+      Alert.alert('Not Allowed', 'You cannot block yourself.');
+      return;
+    }
 
     Alert.alert(
       'Block User',
@@ -262,18 +274,24 @@ export function CommunityScreen() {
           style: 'destructive',
           onPress: async () => {
             try {
-              const { error } = await supabase.from('blocked_users').insert({
+              const { error } = await supabase.from('blocked_users').upsert({
                 blocker_id: user.id,
                 blocked_id: blockedUserId
-              });
+              }, { onConflict: 'blocker_id,blocked_id' });
 
               if (error) throw error;
 
-              setBlockedUserIds([...blockedUserIds, blockedUserId]);
+              if (!blockedUserIds.includes(blockedUserId)) {
+                setBlockedUserIds([...blockedUserIds, blockedUserId]);
+              }
               fetchData();
               Alert.alert('Success', 'User has been blocked.');
               Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-            } catch (error) {
+            } catch (error: any) {
+              if (error?.code === '23505') {
+                Alert.alert('Already Blocked', 'You have already blocked this user.');
+                return;
+              }
               console.error('Error blocking user:', error);
               Alert.alert('Error', 'Unable to block user. Please try again.');
             }
