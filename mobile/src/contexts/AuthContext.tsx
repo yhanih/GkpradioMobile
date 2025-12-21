@@ -19,16 +19,34 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
 
+  const ensureUserProfile = async (authUser: User) => {
+    try {
+      await supabase.from('users').upsert({
+        id: authUser.id,
+        email: authUser.email!,
+        fullname: authUser.user_metadata?.full_name || null,
+      }, { onConflict: 'id' });
+    } catch (error) {
+      console.error('Error ensuring user profile:', error);
+    }
+  };
+
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
       setSession(session);
       setUser(session?.user ?? null);
+      if (session?.user) {
+        await ensureUserProfile(session.user);
+      }
       setLoading(false);
     });
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
       setSession(session);
       setUser(session?.user ?? null);
+      if (session?.user && _event === 'SIGNED_IN') {
+        await ensureUserProfile(session.user);
+      }
     });
 
     return () => subscription.unsubscribe();
@@ -50,10 +68,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const signIn = async (email: string, password: string) => {
     try {
-      const { error } = await supabase.auth.signInWithPassword({
+      const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password,
       });
+      
+      if (!error && data.user) {
+        await ensureUserProfile(data.user);
+      }
+      
       return { error };
     } catch (error) {
       console.error('Error signing in:', error);
@@ -74,15 +97,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       });
 
       if (!error && data.user) {
-        try {
-          await supabase.from('users').upsert({
-            id: data.user.id,
-            email: data.user.email!,
-            fullname: fullName || null,
-          });
-        } catch (profileError) {
-          console.error('Error creating profile:', profileError);
-        }
+        await ensureUserProfile(data.user);
       }
 
       return { error };
