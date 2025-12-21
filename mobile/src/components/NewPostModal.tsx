@@ -18,8 +18,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
-
-type PostCategory = 'Prayers' | 'Testimonies';
+import { getPostableCategories, Category, getCategoryLabel } from '../constants/categories';
 
 interface NewPostModalProps {
     visible: boolean;
@@ -29,13 +28,14 @@ interface NewPostModalProps {
 
 export function NewPostModal({ visible, onClose, onSuccess }: NewPostModalProps) {
     const { user } = useAuth();
-    const [category, setCategory] = useState<PostCategory>('Prayers');
+    const categories = getPostableCategories();
+    const [selectedCategory, setSelectedCategory] = useState<Category>(categories[0]);
     const [title, setTitle] = useState('');
     const [content, setContent] = useState('');
     const [loading, setLoading] = useState(false);
 
     const resetForm = () => {
-        setCategory('Prayers');
+        setSelectedCategory(categories[0]);
         setTitle('');
         setContent('');
     };
@@ -53,7 +53,6 @@ export function NewPostModal({ visible, onClose, onSuccess }: NewPostModalProps)
             return;
         }
 
-        // Validation
         if (title.trim().length < 3) {
             Alert.alert('Invalid Title', 'Title must be at least 3 characters.');
             return;
@@ -81,7 +80,7 @@ export function NewPostModal({ visible, onClose, onSuccess }: NewPostModalProps)
                 userid: user.id,
                 title: title.trim(),
                 content: content.trim(),
-                category,
+                category: selectedCategory.id,
                 privacy_level: 'public',
                 is_anonymous: false,
             });
@@ -89,7 +88,7 @@ export function NewPostModal({ visible, onClose, onSuccess }: NewPostModalProps)
             if (error) throw error;
 
             Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-            Alert.alert('Success', `Your ${category === 'Prayers' ? 'prayer request' : 'testimony'} has been shared!`);
+            Alert.alert('Success', `Your ${selectedCategory.label.toLowerCase()} post has been shared!`);
 
             resetForm();
             onSuccess();
@@ -115,7 +114,6 @@ export function NewPostModal({ visible, onClose, onSuccess }: NewPostModalProps)
                     behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
                     style={styles.keyboardAvoid}
                 >
-                    {/* Header */}
                     <View style={styles.header}>
                         <Pressable onPress={handleClose} style={styles.closeButton} disabled={loading}>
                             <Ionicons name="close" size={28} color="#09090b" />
@@ -125,64 +123,52 @@ export function NewPostModal({ visible, onClose, onSuccess }: NewPostModalProps)
                     </View>
 
                     <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
-                        {/* Category Selector */}
                         <View style={styles.section}>
                             <Text style={styles.label}>Category</Text>
-                            <View style={styles.categoryContainer}>
-                                <Pressable
-                                    style={[styles.categoryButton, category === 'Prayers' && styles.categoryButtonActive]}
-                                    onPress={() => {
-                                        Haptics.selectionAsync();
-                                        setCategory('Prayers');
-                                    }}
-                                    disabled={loading}
-                                >
-                                    <Ionicons
-                                        name="hand-right"
-                                        size={20}
-                                        color={category === 'Prayers' ? '#fff' : '#047857'}
-                                    />
-                                    <Text
+                            <ScrollView 
+                                horizontal 
+                                showsHorizontalScrollIndicator={false}
+                                contentContainerStyle={styles.categoryScrollContent}
+                            >
+                                {categories.map(category => (
+                                    <Pressable
+                                        key={category.id}
                                         style={[
-                                            styles.categoryButtonText,
-                                            category === 'Prayers' && styles.categoryButtonTextActive,
+                                            styles.categoryButton,
+                                            selectedCategory.id === category.id && styles.categoryButtonActive
                                         ]}
+                                        onPress={() => {
+                                            Haptics.selectionAsync();
+                                            setSelectedCategory(category);
+                                        }}
+                                        disabled={loading}
                                     >
-                                        Prayer Request
-                                    </Text>
-                                </Pressable>
-
-                                <Pressable
-                                    style={[styles.categoryButton, category === 'Testimonies' && styles.categoryButtonActive]}
-                                    onPress={() => {
-                                        Haptics.selectionAsync();
-                                        setCategory('Testimonies');
-                                    }}
-                                    disabled={loading}
-                                >
-                                    <Ionicons
-                                        name="sparkles"
-                                        size={20}
-                                        color={category === 'Testimonies' ? '#fff' : '#047857'}
-                                    />
-                                    <Text
-                                        style={[
-                                            styles.categoryButtonText,
-                                            category === 'Testimonies' && styles.categoryButtonTextActive,
-                                        ]}
-                                    >
-                                        Testimony
-                                    </Text>
-                                </Pressable>
-                            </View>
+                                        <Ionicons
+                                            name={selectedCategory.id === category.id 
+                                                ? category.iconActive 
+                                                : category.icon}
+                                            size={18}
+                                            color={selectedCategory.id === category.id ? '#fff' : '#047857'}
+                                        />
+                                        <Text
+                                            style={[
+                                                styles.categoryButtonText,
+                                                selectedCategory.id === category.id && styles.categoryButtonTextActive,
+                                            ]}
+                                        >
+                                            {category.label}
+                                        </Text>
+                                    </Pressable>
+                                ))}
+                            </ScrollView>
+                            <Text style={styles.categoryDescription}>{selectedCategory.description}</Text>
                         </View>
 
-                        {/* Title Input */}
                         <View style={styles.section}>
                             <Text style={styles.label}>Title</Text>
                             <TextInput
                                 style={styles.titleInput}
-                                placeholder={category === 'Prayers' ? 'What can we pray for?' : 'Share your blessing'}
+                                placeholder={selectedCategory.placeholder.title}
                                 placeholderTextColor="#a1a1aa"
                                 value={title}
                                 onChangeText={setTitle}
@@ -192,16 +178,11 @@ export function NewPostModal({ visible, onClose, onSuccess }: NewPostModalProps)
                             <Text style={styles.charCount}>{title.length}/100</Text>
                         </View>
 
-                        {/* Content Input */}
                         <View style={styles.section}>
                             <Text style={styles.label}>Details</Text>
                             <TextInput
                                 style={styles.contentInput}
-                                placeholder={
-                                    category === 'Prayers'
-                                        ? 'Share your prayer request with the community...'
-                                        : 'Tell us how God has worked in your life...'
-                                }
+                                placeholder={selectedCategory.placeholder.content}
                                 placeholderTextColor="#a1a1aa"
                                 value={content}
                                 onChangeText={setContent}
@@ -214,18 +195,14 @@ export function NewPostModal({ visible, onClose, onSuccess }: NewPostModalProps)
                             <Text style={styles.charCount}>{content.length}/1000</Text>
                         </View>
 
-                        {/* Guidance */}
                         <View style={styles.guidanceContainer}>
                             <Ionicons name="information-circle" size={20} color="#047857" />
                             <Text style={styles.guidanceText}>
-                                {category === 'Prayers'
-                                    ? 'Your prayer request will be visible to the community. Others can pray for you and offer support.'
-                                    : 'Share how God has moved in your life to encourage and inspire others in their faith journey.'}
+                                Your post will be visible to the community. Others can interact, support, and pray with you.
                             </Text>
                         </View>
                     </ScrollView>
 
-                    {/* Submit Button */}
                     <View style={styles.footer}>
                         <Pressable
                             style={[styles.submitButton, loading && styles.submitButtonDisabled]}
@@ -242,7 +219,7 @@ export function NewPostModal({ visible, onClose, onSuccess }: NewPostModalProps)
                                     style={styles.submitGradient}
                                 >
                                     <Ionicons name="send" size={20} color="#fff" />
-                                    <Text style={styles.submitText}>Post {category === 'Prayers' ? 'Prayer' : 'Testimony'}</Text>
+                                    <Text style={styles.submitText}>Post {selectedCategory.label}</Text>
                                 </LinearGradient>
                             )}
                         </Pressable>
@@ -291,18 +268,16 @@ const styles = StyleSheet.create({
         color: '#09090b',
         marginBottom: 12,
     },
-    categoryContainer: {
-        flexDirection: 'row',
-        gap: 12,
+    categoryScrollContent: {
+        gap: 10,
     },
     categoryButton: {
-        flex: 1,
         flexDirection: 'row',
         alignItems: 'center',
-        justifyContent: 'center',
-        gap: 8,
-        paddingVertical: 14,
-        borderRadius: 12,
+        gap: 6,
+        paddingVertical: 10,
+        paddingHorizontal: 14,
+        borderRadius: 20,
         backgroundColor: '#f4f4f5',
         borderWidth: 2,
         borderColor: 'transparent',
@@ -312,12 +287,18 @@ const styles = StyleSheet.create({
         borderColor: '#047857',
     },
     categoryButtonText: {
-        fontSize: 14,
+        fontSize: 13,
         fontWeight: '600',
         color: '#047857',
     },
     categoryButtonTextActive: {
         color: '#fff',
+    },
+    categoryDescription: {
+        fontSize: 13,
+        color: '#71717a',
+        marginTop: 12,
+        fontStyle: 'italic',
     },
     titleInput: {
         backgroundColor: '#f4f4f5',

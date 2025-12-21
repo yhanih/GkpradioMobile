@@ -7,8 +7,9 @@ import { CommunityThread, User } from '../types/database.types';
 import { useAuth } from '../contexts/AuthContext';
 import * as Haptics from 'expo-haptics';
 import { NewPostModal } from '../components/NewPostModal';
+import { COMMUNITY_CATEGORIES, getCategoryIcon, getCategoryLabel, Category } from '../constants/categories';
 
-type TabType = 'prayers' | 'testimonies';
+type SortOption = 'newest' | 'popular' | 'discussed';
 
 interface ThreadWithUser extends CommunityThread {
   users?: User | null;
@@ -17,20 +18,22 @@ interface ThreadWithUser extends CommunityThread {
 
 export function CommunityScreen() {
   const { user } = useAuth();
-  const [activeTab, setActiveTab] = useState<TabType>('prayers');
+  const [activeCategory, setActiveCategory] = useState('all');
+  const [sortBy, setSortBy] = useState<SortOption>('newest');
   const [threads, setThreads] = useState<ThreadWithUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [stats, setStats] = useState({ prayers: 0, testimonies: 0, users: 0 });
+  const [stats, setStats] = useState({ prayers: 0, testimonies: 0, total: 0 });
   const [blockedUserIds, setBlockedUserIds] = useState<string[]>([]);
   const [showNewPostModal, setShowNewPostModal] = useState(false);
+  const [showSortMenu, setShowSortMenu] = useState(false);
 
   useEffect(() => {
     fetchBlockedUsers();
     fetchData();
     fetchStats();
-  }, [user]);
+  }, [user, sortBy]);
 
   const fetchBlockedUsers = async () => {
     if (!user) return;
@@ -57,13 +60,13 @@ export function CommunityScreen() {
 
       if (error) throw error;
 
-      const prayers = data?.filter(t => t.category === 'Prayers').length || 0;
+      const prayers = data?.filter(t => t.category === 'Prayer Requests').length || 0;
       const testimonies = data?.filter(t => t.category === 'Testimonies').length || 0;
 
       setStats({
         prayers,
         testimonies,
-        users: 0,
+        total: data?.length || 0,
       });
     } catch (error) {
       console.error('Error fetching stats:', error);
@@ -76,8 +79,7 @@ export function CommunityScreen() {
       setLoading(true);
       setError(null);
 
-      // Fetch threads with user information
-      const { data, error } = await supabase
+      let query = supabase
         .from('communitythreads')
         .select(`
           *,
@@ -87,15 +89,22 @@ export function CommunityScreen() {
             fullname,
             avatarurl
           )
-        `)
-        .order('createdat', { ascending: false })
-        .limit(50);
+        `);
+
+      if (sortBy === 'newest') {
+        query = query.order('createdat', { ascending: false });
+      } else if (sortBy === 'popular') {
+        query = query.order('like_count', { ascending: false });
+      } else if (sortBy === 'discussed') {
+        query = query.order('comment_count', { ascending: false });
+      }
+
+      const { data, error } = await query.limit(50);
 
       if (error) throw error;
 
       let threadsWithLikes: ThreadWithUser[] = data || [];
 
-      // Fetch user's likes if logged in
       if (user && threadsWithLikes.length > 0) {
         const { data: likesData } = await supabase
           .from('community_thread_likes')
@@ -111,7 +120,6 @@ export function CommunityScreen() {
         }));
       }
 
-      // Filter blocked users
       if (blockedUserIds.length > 0) {
         threadsWithLikes = threadsWithLikes.filter(t => !blockedUserIds.includes(t.userid));
       }
@@ -131,7 +139,6 @@ export function CommunityScreen() {
       return;
     }
 
-    // Optimistic UI update
     setThreads(prev => prev.map(t => {
       if (t.id === threadId) {
         return {
@@ -147,21 +154,18 @@ export function CommunityScreen() {
 
     try {
       if (currentlyLiked) {
-        // Unlike
         await supabase
           .from('community_thread_likes')
           .delete()
           .eq('thread_id', threadId)
           .eq('user_id', user.id);
       } else {
-        // Like
         await supabase
           .from('community_thread_likes')
           .insert({ thread_id: threadId, user_id: user.id });
       }
     } catch (error) {
       console.error('Error toggling like:', error);
-      // Revert optimistic update on error
       setThreads(prev => prev.map(t => {
         if (t.id === threadId) {
           return {
@@ -237,7 +241,7 @@ export function CommunityScreen() {
               if (error) throw error;
 
               setBlockedUserIds([...blockedUserIds, blockedUserId]);
-              fetchData(); // Refresh content
+              fetchData();
               Alert.alert('Success', 'User has been blocked.');
               Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
             } catch (error) {
@@ -267,41 +271,128 @@ export function CommunityScreen() {
     return `${Math.floor(diffInSeconds / 86400)}d ago`;
   };
 
-  const renderThread = (thread: CommunityThread) => (
-    <Pressable
-      key={thread.id}
-      style={styles.card}
-      onPress={() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)}
-    >
-      <View style={styles.cardHeader}>
+  const filteredThreads = activeCategory === 'all' 
+    ? threads 
+    : threads.filter(t => t.category === activeCategory);
+
+  const renderCategoryTab = (category: typeof COMMUNITY_CATEGORIES[0]) => {
+    const isActive = activeCategory === category.id;
+    const count = category.id === 'all' 
+      ? threads.length 
+      : threads.filter(t => t.category === category.id).length;
+
+    return (
+      <Pressable
+        key={category.id}
+        style={[styles.categoryTab, isActive && styles.categoryTabActive]}
+        onPress={() => {
+          Haptics.selectionAsync();
+          setActiveCategory(category.id);
+        }}
+      >
         <Ionicons
-          name={thread.category === 'Prayers' ? "hand-right" : "sparkles"}
-          size={20}
-          color="#047857"
+          name={isActive ? category.iconActive : category.icon}
+          size={18}
+          color={isActive ? '#fff' : '#71717a'}
         />
-        <Text style={styles.category}>{thread.category === 'Prayers' ? 'Prayer Request' : 'Testimony'}</Text>
-      </View>
-      <Text style={styles.cardTitle} numberOfLines={2}>
-        {thread.title}
-      </Text>
-      <Text style={styles.cardDescription} numberOfLines={3}>
-        {thread.content}
-      </Text>
-      <View style={styles.cardFooter}>
-        <Text style={styles.time}>{formatTimeAgo(thread.createdat)}</Text>
-        <View style={styles.cardActions}>
-          <Pressable onPress={() => handleReport('thread', thread.id)} style={styles.actionButton}>
-            <Ionicons name="flag-outline" size={18} color="#71717a" />
-          </Pressable>
-          <Pressable onPress={() => handleBlock(thread.userid)} style={styles.actionButton}>
-            <Ionicons name="eye-off-outline" size={18} color="#71717a" />
-          </Pressable>
-          <Ionicons name="heart-outline" size={18} color="#71717a" />
-          <Ionicons name="chatbubble-outline" size={18} color="#71717a" />
+        <Text style={[styles.categoryTabText, isActive && styles.categoryTabTextActive]}>
+          {category.label}
+        </Text>
+        {count > 0 && (
+          <View style={[styles.countBadge, isActive && styles.countBadgeActive]}>
+            <Text style={[styles.countBadgeText, isActive && styles.countBadgeTextActive]}>
+              {count}
+            </Text>
+          </View>
+        )}
+      </Pressable>
+    );
+  };
+
+  const renderThread = (thread: ThreadWithUser) => {
+    const authorName = thread.is_anonymous 
+      ? 'Anonymous' 
+      : thread.users?.fullname || thread.users?.username || 'Member';
+    const avatarUrl = thread.is_anonymous ? null : thread.users?.avatarurl;
+
+    return (
+      <Pressable
+        key={thread.id}
+        style={styles.card}
+        onPress={() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)}
+      >
+        <View style={styles.cardHeader}>
+          <View style={styles.authorInfo}>
+            {avatarUrl ? (
+              <Image source={{ uri: avatarUrl }} style={styles.avatar} />
+            ) : (
+              <View style={styles.avatarPlaceholder}>
+                <Ionicons name="person" size={14} color="#71717a" />
+              </View>
+            )}
+            <View style={styles.authorMeta}>
+              <Text style={styles.authorName}>{authorName}</Text>
+              <Text style={styles.time}>{formatTimeAgo(thread.createdat)}</Text>
+            </View>
+          </View>
+          <View style={styles.categoryBadge}>
+            <Ionicons
+              name={getCategoryIcon(thread.category)}
+              size={12}
+              color="#047857"
+            />
+            <Text style={styles.categoryBadgeText}>{getCategoryLabel(thread.category)}</Text>
+          </View>
         </View>
-      </View>
-    </Pressable>
-  );
+
+        <Text style={styles.cardTitle} numberOfLines={2}>
+          {thread.title}
+        </Text>
+        <Text style={styles.cardDescription} numberOfLines={3}>
+          {thread.content}
+        </Text>
+
+        <View style={styles.cardFooter}>
+          <View style={styles.engagementStats}>
+            <Pressable 
+              style={styles.statButton}
+              onPress={() => handleLike(thread.id, thread.user_has_liked || false)}
+            >
+              <Ionicons 
+                name={thread.user_has_liked ? "heart" : "heart-outline"} 
+                size={18} 
+                color={thread.user_has_liked ? "#ef4444" : "#71717a"} 
+              />
+              <Text style={[styles.statText, thread.user_has_liked && styles.statTextActive]}>
+                {thread.like_count || 0}
+              </Text>
+            </Pressable>
+            <View style={styles.statButton}>
+              <Ionicons name="chatbubble-outline" size={18} color="#71717a" />
+              <Text style={styles.statText}>{thread.comment_count || 0}</Text>
+            </View>
+          </View>
+          <View style={styles.cardActions}>
+            <Pressable onPress={() => handleReport('thread', thread.id)} style={styles.actionButton}>
+              <Ionicons name="flag-outline" size={16} color="#a1a1aa" />
+            </Pressable>
+            <Pressable onPress={() => handleBlock(thread.userid)} style={styles.actionButton}>
+              <Ionicons name="eye-off-outline" size={16} color="#a1a1aa" />
+            </Pressable>
+          </View>
+        </View>
+      </Pressable>
+    );
+  };
+
+  const getSortLabel = () => {
+    switch (sortBy) {
+      case 'newest': return 'Newest';
+      case 'popular': return 'Most Liked';
+      case 'discussed': return 'Most Discussed';
+      default: return 'Newest';
+    }
+  };
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -338,7 +429,7 @@ export function CommunityScreen() {
             style={styles.statBox}
             onPress={() => {
               Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-              // Handle new post logic here
+              setShowNewPostModal(true);
             }}
           >
             <View style={[styles.statIconContainer, { backgroundColor: 'rgba(4, 120, 87, 0.1)' }]}>
@@ -348,29 +439,48 @@ export function CommunityScreen() {
           </Pressable>
         </View>
 
-        <View style={styles.tabs}>
-          <Pressable
-            style={[styles.tab, activeTab === 'prayers' && styles.activeTab]}
+        <ScrollView 
+          horizontal 
+          showsHorizontalScrollIndicator={false}
+          style={styles.categoryScroll}
+          contentContainerStyle={styles.categoryScrollContent}
+        >
+          {COMMUNITY_CATEGORIES.map(renderCategoryTab)}
+        </ScrollView>
+
+        <View style={styles.sortContainer}>
+          <Pressable 
+            style={styles.sortButton}
             onPress={() => {
               Haptics.selectionAsync();
-              setActiveTab('prayers');
+              setShowSortMenu(!showSortMenu);
             }}
           >
-            <Text style={[styles.tabText, activeTab === 'prayers' && styles.activeTabText]}>
-              Prayer Requests
-            </Text>
+            <Ionicons name="funnel-outline" size={16} color="#71717a" />
+            <Text style={styles.sortButtonText}>{getSortLabel()}</Text>
+            <Ionicons name="chevron-down" size={14} color="#71717a" />
           </Pressable>
-          <Pressable
-            style={[styles.tab, activeTab === 'testimonies' && styles.activeTab]}
-            onPress={() => {
-              Haptics.selectionAsync();
-              setActiveTab('testimonies');
-            }}
-          >
-            <Text style={[styles.tabText, activeTab === 'testimonies' && styles.activeTabText]}>
-              Testimonies
-            </Text>
-          </Pressable>
+          
+          {showSortMenu && (
+            <View style={styles.sortMenu}>
+              {(['newest', 'popular', 'discussed'] as SortOption[]).map(option => (
+                <Pressable
+                  key={option}
+                  style={[styles.sortMenuItem, sortBy === option && styles.sortMenuItemActive]}
+                  onPress={() => {
+                    Haptics.selectionAsync();
+                    setSortBy(option);
+                    setShowSortMenu(false);
+                  }}
+                >
+                  <Text style={[styles.sortMenuItemText, sortBy === option && styles.sortMenuItemTextActive]}>
+                    {option === 'newest' ? 'Newest' : option === 'popular' ? 'Most Liked' : 'Most Discussed'}
+                  </Text>
+                  {sortBy === option && <Ionicons name="checkmark" size={16} color="#047857" />}
+                </Pressable>
+              ))}
+            </View>
+          )}
         </View>
 
         <View style={styles.content}>
@@ -387,45 +497,42 @@ export function CommunityScreen() {
               <ActivityIndicator size="large" color="#047857" />
               <Text style={styles.loadingText}>Loading...</Text>
             </View>
+          ) : filteredThreads.length === 0 ? (
+            <View style={styles.emptyState}>
+              <Ionicons 
+                name={getCategoryIcon(activeCategory)} 
+                size={48} 
+                color="#d4d4d8" 
+              />
+              <Text style={styles.emptyStateTitle}>
+                No {activeCategory === 'all' ? 'posts' : getCategoryLabel(activeCategory).toLowerCase()} yet
+              </Text>
+              <Text style={styles.emptyStateText}>
+                Be the first to share with the community
+              </Text>
+              <Pressable 
+                style={styles.emptyStateButton}
+                onPress={() => setShowNewPostModal(true)}
+              >
+                <Text style={styles.emptyStateButtonText}>Create Post</Text>
+              </Pressable>
+            </View>
           ) : (
-            <>
-              {activeTab === 'prayers' && (
-                <>
-                  {threads.filter(t => t.category === 'Prayers').length === 0 ? (
-                    <View style={styles.emptyState}>
-                      <Ionicons name="hand-right-outline" size={48} color="#d4d4d8" />
-                      <Text style={styles.emptyStateTitle}>No prayer requests yet</Text>
-                      <Text style={styles.emptyStateText}>
-                        Be the first to share a prayer request with the community
-                      </Text>
-                    </View>
-                  ) : (
-                    threads.filter(t => t.category === 'Prayers').map(renderThread)
-                  )}
-                </>
-              )}
-
-              {activeTab === 'testimonies' && (
-                <>
-                  {threads.filter(t => t.category === 'Testimonies').length === 0 ? (
-                    <View style={styles.emptyState}>
-                      <Ionicons name="sparkles-outline" size={48} color="#d4d4d8" />
-                      <Text style={styles.emptyStateTitle}>No testimonies yet</Text>
-                      <Text style={styles.emptyStateText}>
-                        Share how God has worked in your life
-                      </Text>
-                    </View>
-                  ) : (
-                    threads.filter(t => t.category === 'Testimonies').map(renderThread)
-                  )}
-                </>
-              )}
-            </>
+            filteredThreads.map(renderThread)
           )}
         </View>
 
         <View style={{ height: 120 }} />
       </ScrollView>
+
+      <NewPostModal
+        visible={showNewPostModal}
+        onClose={() => setShowNewPostModal(false)}
+        onSuccess={() => {
+          fetchData();
+          fetchStats();
+        }}
+      />
     </SafeAreaView>
   );
 }
@@ -457,7 +564,7 @@ const styles = StyleSheet.create({
   stats: {
     flexDirection: 'row',
     paddingHorizontal: 20,
-    marginBottom: 24,
+    marginBottom: 20,
     gap: 12,
   },
   statBox: {
@@ -497,29 +604,106 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     letterSpacing: 0.5,
   },
-  tabs: {
-    flexDirection: 'row',
-    paddingHorizontal: 20,
-    gap: 12,
-    marginBottom: 20,
+  categoryScroll: {
+    marginBottom: 16,
   },
-  tab: {
-    flex: 1,
-    paddingVertical: 12,
-    borderRadius: 8,
+  categoryScrollContent: {
+    paddingHorizontal: 20,
+    gap: 8,
+  },
+  categoryTab: {
+    flexDirection: 'row',
     alignItems: 'center',
+    gap: 6,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderRadius: 20,
     backgroundColor: '#f4f4f5',
   },
-  activeTab: {
+  categoryTabActive: {
     backgroundColor: '#047857',
   },
-  tabText: {
-    fontSize: 14,
+  categoryTabText: {
+    fontSize: 13,
     fontWeight: '600',
     color: '#71717a',
   },
-  activeTabText: {
+  categoryTabTextActive: {
     color: '#fff',
+  },
+  countBadge: {
+    backgroundColor: '#e4e4e7',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 10,
+    minWidth: 20,
+    alignItems: 'center',
+  },
+  countBadgeActive: {
+    backgroundColor: 'rgba(255,255,255,0.2)',
+  },
+  countBadgeText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#71717a',
+  },
+  countBadgeTextActive: {
+    color: '#fff',
+  },
+  sortContainer: {
+    paddingHorizontal: 20,
+    marginBottom: 16,
+    position: 'relative',
+    zIndex: 10,
+  },
+  sortButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    gap: 6,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    backgroundColor: '#f4f4f5',
+  },
+  sortButtonText: {
+    fontSize: 13,
+    fontWeight: '500',
+    color: '#71717a',
+  },
+  sortMenu: {
+    position: 'absolute',
+    top: 44,
+    left: 20,
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    paddingVertical: 4,
+    minWidth: 160,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.15,
+    shadowRadius: 16,
+    elevation: 8,
+    borderWidth: 1,
+    borderColor: '#e4e4e7',
+  },
+  sortMenuItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+  },
+  sortMenuItemActive: {
+    backgroundColor: '#f0fdf4',
+  },
+  sortMenuItemText: {
+    fontSize: 14,
+    color: '#09090b',
+  },
+  sortMenuItemTextActive: {
+    color: '#047857',
+    fontWeight: '600',
   },
   content: {
     paddingHorizontal: 20,
@@ -541,44 +725,63 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(228, 228, 231, 0.5)',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 16 },
-    shadowOpacity: 0.05,
-    shadowRadius: 24,
-    elevation: 3,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.04,
+    shadowRadius: 12,
+    elevation: 2,
   },
   cardHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    justifyContent: 'space-between',
     marginBottom: 12,
   },
-  category: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#047857',
+  authorInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
     flex: 1,
   },
-  badge: {
-    backgroundColor: '#dcfce7',
+  avatar: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#f4f4f5',
+  },
+  avatarPlaceholder: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#f4f4f5',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  authorMeta: {
+    flex: 1,
+  },
+  authorName: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#09090b',
+  },
+  time: {
+    fontSize: 12,
+    color: '#a1a1aa',
+    marginTop: 2,
+  },
+  categoryBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#f0fdf4',
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 6,
   },
-  badgeText: {
+  categoryBadgeText: {
     fontSize: 11,
     fontWeight: '600',
     color: '#047857',
-  },
-  featuredBadge: {
-    backgroundColor: '#fef3c7',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
-  },
-  featuredBadgeText: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: '#92400e',
   },
   cardTitle: {
     fontSize: 16,
@@ -596,15 +799,32 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#f4f4f5',
   },
-  time: {
+  engagementStats: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 16,
+  },
+  statButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  statText: {
     fontSize: 13,
-    color: '#a1a1aa',
+    color: '#71717a',
+    fontWeight: '500',
+  },
+  statTextActive: {
+    color: '#ef4444',
   },
   cardActions: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 16,
+    gap: 12,
   },
   actionButton: {
     padding: 4,
@@ -625,6 +845,18 @@ const styles = StyleSheet.create({
     color: '#71717a',
     textAlign: 'center',
     paddingHorizontal: 40,
+    marginBottom: 20,
+  },
+  emptyStateButton: {
+    backgroundColor: '#047857',
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 8,
+  },
+  emptyStateButtonText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '600',
   },
   errorContainer: {
     paddingVertical: 60,
