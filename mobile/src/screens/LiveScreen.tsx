@@ -51,6 +51,7 @@ export function LiveScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [reminders, setReminders] = useState<Set<string>>(new Set());
   const [countdownTick, setCountdownTick] = useState(0);
+  const [error, setError] = useState<string | null>(null);
   
   const scrollY = useRef(new Animated.Value(0)).current;
   const pulseAnim = useRef(new Animated.Value(1)).current;
@@ -65,6 +66,30 @@ export function LiveScreen() {
       }
     } catch (error) {
       console.error('Error loading reminders:', error);
+    }
+  };
+
+  const cleanupExpiredReminders = async (events: LiveEvent[]) => {
+    try {
+      const stored = await AsyncStorage.getItem('live_event_reminders');
+      if (!stored) return;
+      
+      const storedReminders: string[] = JSON.parse(stored);
+      const now = new Date();
+      const validEventIds = new Set(
+        events
+          .filter(e => new Date(e.scheduled_start) > now)
+          .map(e => e.id)
+      );
+      
+      const validReminders = storedReminders.filter(id => validEventIds.has(id));
+      
+      if (validReminders.length !== storedReminders.length) {
+        await AsyncStorage.setItem('live_event_reminders', JSON.stringify(validReminders));
+        setReminders(new Set(validReminders));
+      }
+    } catch (error) {
+      console.error('Error cleaning up reminders:', error);
     }
   };
 
@@ -283,16 +308,20 @@ export function LiveScreen() {
 
   const loadLiveEvents = async () => {
     try {
-      setLoading(true);
-      const { data, error } = await supabase
+      setError(null);
+      const { data, error: fetchError } = await supabase
         .from('live_events')
         .select('*')
         .order('scheduled_start', { ascending: true });
 
-      if (error) throw error;
-      if (data) setLiveEvents(data);
-    } catch (error) {
-      console.error('Error loading live events:', error);
+      if (fetchError) throw fetchError;
+      if (data) {
+        setLiveEvents(data);
+        cleanupExpiredReminders(data);
+      }
+    } catch (err) {
+      console.error('Error loading live events:', err);
+      setError('Unable to load events. Pull down to retry.');
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -721,8 +750,25 @@ export function LiveScreen() {
             </View>
           )}
 
+          {/* Error State */}
+          {error && (
+            <View style={styles.errorState}>
+              <Ionicons name="cloud-offline-outline" size={40} color={theme.colors.error || '#ef4444'} />
+              <Text style={[styles.errorText, { color: theme.colors.textMuted }]}>
+                {error}
+              </Text>
+              <Pressable 
+                style={[styles.retryButton, { backgroundColor: theme.colors.primary }]}
+                onPress={onRefresh}
+              >
+                <Ionicons name="refresh" size={18} color="#fff" />
+                <Text style={styles.retryButtonText}>Try Again</Text>
+              </Pressable>
+            </View>
+          )}
+
           {/* Empty State */}
-          {liveNow.length === 0 && upcoming.length === 0 && pastEvents.length === 0 && (
+          {!error && liveNow.length === 0 && upcoming.length === 0 && pastEvents.length === 0 && (
             <View style={styles.emptyState}>
               <View style={styles.emptyIconContainer}>
                 <LinearGradient
@@ -1136,6 +1182,32 @@ const styles = StyleSheet.create({
     height: '100%',
     backgroundColor: '#047857',
     borderRadius: 2,
+  },
+
+  // Error State
+  errorState: {
+    paddingVertical: 40,
+    paddingHorizontal: 40,
+    alignItems: 'center',
+  },
+  errorText: {
+    fontSize: 15,
+    textAlign: 'center',
+    marginTop: 16,
+    marginBottom: 20,
+  },
+  retryButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 12,
+  },
+  retryButtonText: {
+    color: '#fff',
+    fontSize: 15,
+    fontWeight: '600',
   },
 
   // Empty State
