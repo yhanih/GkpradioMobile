@@ -84,7 +84,7 @@ export function CommunityScreen() {
           users:userid (
             id,
             username,
-            full_name,
+            fullname,
             avatar_url
           )
         `)

@@ -18,7 +18,7 @@ import { supabase } from '../lib/supabase';
 import * as Haptics from 'expo-haptics';
 
 interface ProfileData {
-  full_name: string | null;
+  fullname: string | null;
   bio: string | null;
   avatar_url: string | null;
   created_at: string;
@@ -56,7 +56,7 @@ export function ProfileScreen() {
 
       if (data) {
         setProfile(data);
-        setFullName(data.full_name || '');
+        setFullName(data.fullname || '');
         setBio(data.bio || '');
       } else {
         setProfile(null);
@@ -86,7 +86,7 @@ export function ProfileScreen() {
         .from('users')
         .upsert({
           id: user.id,
-          full_name: fullName.trim() || null,
+          fullname: fullName.trim() || null,
           bio: bio.trim() || null,
           updated_at: new Date().toISOString(),
         });
@@ -105,7 +105,7 @@ export function ProfileScreen() {
   };
 
   const handleCancel = () => {
-    setFullName(profile?.full_name || '');
+    setFullName(profile?.fullname || '');
     setBio(profile?.bio || '');
     setEditing(false);
   };

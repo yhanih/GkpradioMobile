@@ -78,7 +78,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           await supabase.from('users').upsert({
             id: data.user.id,
             email: data.user.email!,
-            full_name: fullName || null,
+            fullname: fullName || null,
           });
         } catch (profileError) {
           console.error('Error creating profile:', profileError);
