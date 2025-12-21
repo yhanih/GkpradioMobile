@@ -207,24 +207,54 @@ export function HubScreen() {
     );
   };
 
+  const openExternalLink = async (url: string, errorMessage: string) => {
+    try {
+      const canOpen = await Linking.canOpenURL(url);
+      if (canOpen) {
+        await Linking.openURL(url);
+        Haptics.selectionAsync();
+      } else {
+        Alert.alert('Unable to Open', errorMessage);
+      }
+    } catch (error) {
+      console.error('Error opening URL:', error);
+      Alert.alert('Error', errorMessage);
+    }
+  };
+
   const handleContactSupport = () => {
-    Linking.openURL('mailto:support@gkpradio.com?subject=GKP%20Radio%20App%20Support');
+    openExternalLink(
+      'mailto:support@gkpradio.com?subject=GKP%20Radio%20App%20Support',
+      'Could not open email app. Please email support@gkpradio.com directly.'
+    );
   };
 
   const handleSendFeedback = () => {
-    Linking.openURL('mailto:feedback@gkpradio.com?subject=GKP%20Radio%20App%20Feedback');
+    openExternalLink(
+      'mailto:feedback@gkpradio.com?subject=GKP%20Radio%20App%20Feedback',
+      'Could not open email app. Please email feedback@gkpradio.com directly.'
+    );
   };
 
   const handleVisitWebsite = () => {
-    Linking.openURL('https://gkpradio.com');
+    openExternalLink(
+      'https://gkpradio.com',
+      'Could not open browser. Please visit gkpradio.com manually.'
+    );
   };
 
   const handlePrivacyPolicy = () => {
-    Linking.openURL('https://gkpradio.com/privacy');
+    openExternalLink(
+      'https://gkpradio.com/privacy',
+      'Could not open browser. Please visit gkpradio.com/privacy manually.'
+    );
   };
 
   const handleTermsOfService = () => {
-    Linking.openURL('https://gkpradio.com/terms');
+    openExternalLink(
+      'https://gkpradio.com/terms',
+      'Could not open browser. Please visit gkpradio.com/terms manually.'
+    );
   };
 
   const handleRateApp = async () => {
@@ -250,9 +280,13 @@ export function HubScreen() {
             { text: 'Not Now', style: 'cancel' },
             { 
               text: 'Open Store', 
-              onPress: () => {
-                Linking.openURL(storeUrl);
-                Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+              onPress: async () => {
+                try {
+                  await Linking.openURL(storeUrl);
+                  Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                } catch (err) {
+                  Alert.alert('Error', 'Could not open app store.');
+                }
               }
             },
           ]
