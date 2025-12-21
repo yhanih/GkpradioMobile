@@ -261,22 +261,25 @@ export function PostDetailScreen() {
 
     try {
       if (currentlyBookmarked) {
-        await supabase
+        const { error } = await supabase
           .from('bookmarks')
           .delete()
           .eq('content_type', 'thread')
           .eq('content_id', thread.id)
           .eq('userid', user.id);
+        if (error) throw error;
       } else {
-        await supabase
+        const { error } = await supabase
           .from('bookmarks')
           .insert({ 
             content_type: 'thread', 
             content_id: thread.id, 
             userid: user.id 
           });
+        if (error && error.code !== '23505') throw error;
       }
-    } catch (error) {
+    } catch (error: any) {
+      if (error?.code === '23505') return;
       console.error('Error toggling bookmark:', error);
       setThread(prev => prev ? {
         ...prev,

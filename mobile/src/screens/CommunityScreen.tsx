@@ -1,8 +1,8 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { View, Text, ScrollView, StyleSheet, Pressable, ActivityIndicator, RefreshControl, Alert, Image, TextInput, Animated, Share } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { LinearGradient } from 'expo-linear-gradient';
 import { supabase } from '../lib/supabase';
@@ -49,6 +49,15 @@ export function CommunityScreen() {
     fetchData();
     fetchStats();
   }, [user, sortBy]);
+
+  useFocusEffect(
+    useCallback(() => {
+      if (!loading) {
+        fetchData();
+        fetchBookmarks();
+      }
+    }, [sortBy])
+  );
 
   const fetchBookmarks = async () => {
     if (!user) return;
@@ -404,6 +413,8 @@ export function CommunityScreen() {
           text: 'Delete',
           style: 'destructive',
           onPress: async () => {
+            setThreads(prev => prev.filter(t => t.id !== threadId));
+            
             try {
               const { error } = await supabase
                 .from('communitythreads')
@@ -413,12 +424,11 @@ export function CommunityScreen() {
               if (error) throw error;
 
               Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-              Alert.alert('Deleted', 'Your post has been deleted.');
-              fetchData();
               fetchStats();
             } catch (error) {
               console.error('Error deleting post:', error);
               Alert.alert('Error', 'Unable to delete post. Please try again.');
+              fetchData();
             }
           }
         }
