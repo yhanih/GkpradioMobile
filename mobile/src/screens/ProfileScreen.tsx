@@ -11,15 +11,20 @@ import {
   RefreshControl,
   Image,
   Animated,
+  Switch,
+  Linking,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useNavigation } from '@react-navigation/native';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useAuth } from '../contexts/AuthContext';
 import { useBookmarks } from '../contexts/BookmarksContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { supabase } from '../lib/supabase';
 import { Episode, Video } from '../types/database.types';
+import { RootStackParamList } from '../types/navigation';
 import * as Haptics from 'expo-haptics';
 
 interface ProfileData {
@@ -31,9 +36,12 @@ interface ProfileData {
 
 type SavedTab = 'episodes' | 'videos';
 
+type ProfileNavigationProp = NativeStackNavigationProp<RootStackParamList>;
+
 export function ProfileScreen() {
+  const navigation = useNavigation<ProfileNavigationProp>();
   const { user, signOut } = useAuth();
-  const { theme, isDark } = useTheme();
+  const { theme, isDark, toggleTheme } = useTheme();
   const { bookmarks, refreshBookmarks, toggleBookmark, isBookmarked } = useBookmarks();
   const [profile, setProfile] = useState<ProfileData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -502,9 +510,13 @@ export function ProfileScreen() {
             ) : (
               <View style={styles.savedList}>
                 {savedEpisodes.map((episode) => (
-                  <View 
+                  <Pressable 
                     key={episode.id} 
                     style={[styles.savedCard, { backgroundColor: theme.colors.surface }]}
+                    onPress={() => {
+                      Haptics.selectionAsync();
+                      navigation.navigate('EpisodePlayer', { episode });
+                    }}
                   >
                     <Image
                       source={{ uri: episode.thumbnail_url || 'https://via.placeholder.com/60' }}
@@ -520,12 +532,15 @@ export function ProfileScreen() {
                     </View>
                     <Pressable
                       style={styles.savedCardRemove}
-                      onPress={() => handleRemoveBookmark('episode', episode.id)}
+                      onPress={(e) => {
+                        e.stopPropagation();
+                        handleRemoveBookmark('episode', episode.id);
+                      }}
                       hitSlop={10}
                     >
                       <Ionicons name="bookmark" size={22} color={theme.colors.primary} />
                     </Pressable>
-                  </View>
+                  </Pressable>
                 ))}
               </View>
             )
@@ -541,9 +556,13 @@ export function ProfileScreen() {
             ) : (
               <View style={styles.savedList}>
                 {savedVideos.map((video) => (
-                  <View 
+                  <Pressable 
                     key={video.id} 
                     style={[styles.savedCard, { backgroundColor: theme.colors.surface }]}
+                    onPress={() => {
+                      Haptics.selectionAsync();
+                      navigation.navigate('VideoPlayer', { video });
+                    }}
                   >
                     <Image
                       source={{ uri: video.thumbnail_url || 'https://via.placeholder.com/60' }}
@@ -559,12 +578,15 @@ export function ProfileScreen() {
                     </View>
                     <Pressable
                       style={styles.savedCardRemove}
-                      onPress={() => handleRemoveBookmark('video', video.id)}
+                      onPress={(e) => {
+                        e.stopPropagation();
+                        handleRemoveBookmark('video', video.id);
+                      }}
                       hitSlop={10}
                     >
                       <Ionicons name="bookmark" size={22} color={theme.colors.primary} />
                     </Pressable>
-                  </View>
+                  </Pressable>
                 ))}
               </View>
             )
@@ -573,47 +595,84 @@ export function ProfileScreen() {
 
         {/* Settings Section */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Settings</Text>
-          <View style={styles.card}>
-            <Pressable style={styles.settingItem}>
+          <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>Settings</Text>
+          <View style={[styles.card, { backgroundColor: theme.colors.surface }]}>
+            <Pressable 
+              style={styles.settingItem}
+              onPress={() => {
+                Haptics.selectionAsync();
+                Alert.alert(
+                  'Notifications',
+                  'Notification settings can be managed in your device settings.',
+                  [
+                    { text: 'Cancel', style: 'cancel' },
+                    { text: 'Open Settings', onPress: () => Linking.openSettings() }
+                  ]
+                );
+              }}
+            >
               <View style={styles.settingLeft}>
-                <Ionicons name="notifications-outline" size={24} color="#71717a" />
-                <Text style={styles.settingText}>Notifications</Text>
+                <Ionicons name="notifications-outline" size={24} color={theme.colors.textMuted} />
+                <Text style={[styles.settingText, { color: theme.colors.text }]}>Notifications</Text>
               </View>
-              <Ionicons name="chevron-forward" size={20} color="#d4d4d8" />
+              <Ionicons name="chevron-forward" size={20} color={theme.colors.border} />
             </Pressable>
 
-            <View style={styles.divider} />
+            <View style={[styles.divider, { backgroundColor: theme.colors.border }]} />
 
-            <Pressable style={styles.settingItem}>
+            <View style={styles.settingItem}>
               <View style={styles.settingLeft}>
-                <Ionicons name="moon-outline" size={24} color="#71717a" />
-                <Text style={styles.settingText}>Dark Mode</Text>
+                <Ionicons name="moon-outline" size={24} color={theme.colors.textMuted} />
+                <Text style={[styles.settingText, { color: theme.colors.text }]}>Dark Mode</Text>
               </View>
-              <Ionicons name="chevron-forward" size={20} color="#d4d4d8" />
+              <Switch
+                value={isDark}
+                onValueChange={() => {
+                  Haptics.selectionAsync();
+                  toggleTheme();
+                }}
+                trackColor={{ false: '#e4e4e7', true: '#047857' }}
+                thumbColor="#fff"
+              />
+            </View>
+
+            <View style={[styles.divider, { backgroundColor: theme.colors.border }]} />
+
+            <Pressable 
+              style={styles.settingItem}
+              onPress={() => {
+                Haptics.selectionAsync();
+                Linking.openURL('mailto:support@gkpradio.com?subject=Help%20Request');
+              }}
+            >
+              <View style={styles.settingLeft}>
+                <Ionicons name="help-circle-outline" size={24} color={theme.colors.textMuted} />
+                <Text style={[styles.settingText, { color: theme.colors.text }]}>Help & Support</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={20} color={theme.colors.border} />
             </Pressable>
 
-            <View style={styles.divider} />
+            <View style={[styles.divider, { backgroundColor: theme.colors.border }]} />
 
-            <Pressable style={styles.settingItem}>
+            <Pressable 
+              style={styles.settingItem}
+              onPress={() => {
+                Haptics.selectionAsync();
+                Alert.alert(
+                  'GKP Radio',
+                  'Version 1.0.0\n\nGod Kingdom Principles Radio\n\nSpread the Gospel through Faith, Prayer & Community.',
+                  [{ text: 'OK' }]
+                );
+              }}
+            >
               <View style={styles.settingLeft}>
-                <Ionicons name="help-circle-outline" size={24} color="#71717a" />
-                <Text style={styles.settingText}>Help & Support</Text>
+                <Ionicons name="information-circle-outline" size={24} color={theme.colors.textMuted} />
+                <Text style={[styles.settingText, { color: theme.colors.text }]}>About</Text>
               </View>
-              <Ionicons name="chevron-forward" size={20} color="#d4d4d8" />
+              <Ionicons name="chevron-forward" size={20} color={theme.colors.border} />
             </Pressable>
 
-            <View style={styles.divider} />
-
-            <Pressable style={styles.settingItem}>
-              <View style={styles.settingLeft}>
-                <Ionicons name="information-circle-outline" size={24} color="#71717a" />
-                <Text style={styles.settingText}>About</Text>
-              </View>
-              <Ionicons name="chevron-forward" size={20} color="#d4d4d8" />
-            </Pressable>
-
-            <View style={styles.divider} />
+            <View style={[styles.divider, { backgroundColor: theme.colors.border }]} />
 
             <Pressable style={styles.settingItem} onPress={handleDeleteAccount}>
               <View style={styles.settingLeft}>
