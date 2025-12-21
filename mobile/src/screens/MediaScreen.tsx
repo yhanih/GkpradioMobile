@@ -253,7 +253,11 @@ export function MediaScreen() {
             style={[styles.searchButton, { backgroundColor: theme.colors.surface }]}
             onPress={() => {
               Haptics.selectionAsync();
-              navigation.navigate('Search' as any);
+              Alert.alert(
+                'Search',
+                'Search functionality coming soon! For now, use the category filters to find content.',
+                [{ text: 'OK' }]
+              );
             }}
           >
             <Ionicons name="search" size={20} color={theme.colors.textMuted} />
@@ -497,17 +501,17 @@ export function MediaScreen() {
           ))}
         </ScrollView>
 
-        {/* Continue Section */}
+        {/* Quick Access Section - Recent Videos */}
         {activeTab === 'videos' && continueWatching.length > 0 && (
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
               <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>
-                Continue Watching
+                Recent Videos
               </Text>
               <Pressable 
                 onPress={() => {
                   Haptics.selectionAsync();
-                  setActiveTab('videos');
+                  setSelectedCategory('all');
                 }}
               >
                 <Text style={[styles.seeAllText, { color: theme.colors.primary }]}>
@@ -520,7 +524,7 @@ export function MediaScreen() {
               showsHorizontalScrollIndicator={false}
               contentContainerStyle={styles.continueScroll}
             >
-              {continueWatching.map((video, index) => (
+              {continueWatching.map((video) => (
                 <Pressable
                   key={video.id}
                   style={({ pressed }) => [
@@ -542,13 +546,10 @@ export function MediaScreen() {
                   <View style={styles.continuePlayIcon}>
                     <Ionicons name="play" size={16} color="#fff" />
                   </View>
-                  <View style={styles.continueProgress}>
-                    <View 
-                      style={[
-                        styles.continueProgressFill, 
-                        { width: `${30 + index * 15}%`, backgroundColor: theme.colors.primary }
-                      ]} 
-                    />
+                  <View style={styles.continueDuration}>
+                    <Text style={styles.continueDurationText}>
+                      {formatDuration(video.duration)}
+                    </Text>
                   </View>
                   <Text 
                     style={[styles.continueTitle, { color: theme.colors.text }]} 
@@ -562,16 +563,17 @@ export function MediaScreen() {
           </View>
         )}
 
+        {/* Quick Access Section - Recent Episodes */}
         {activeTab === 'podcasts' && continuePlaying.length > 0 && (
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
               <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>
-                Continue Listening
+                Recent Episodes
               </Text>
               <Pressable 
                 onPress={() => {
                   Haptics.selectionAsync();
-                  setActiveTab('podcasts');
+                  setSelectedCategory('all');
                 }}
               >
                 <Text style={[styles.seeAllText, { color: theme.colors.primary }]}>
@@ -584,7 +586,7 @@ export function MediaScreen() {
               showsHorizontalScrollIndicator={false}
               contentContainerStyle={styles.continueScroll}
             >
-              {continuePlaying.map((podcast, index) => (
+              {continuePlaying.map((podcast) => (
                 <Pressable
                   key={podcast.id}
                   style={({ pressed }) => [
@@ -606,13 +608,10 @@ export function MediaScreen() {
                   <View style={styles.continuePlayIcon}>
                     <Ionicons name="play" size={16} color="#fff" />
                   </View>
-                  <View style={styles.continueProgress}>
-                    <View 
-                      style={[
-                        styles.continueProgressFill, 
-                        { width: `${20 + index * 20}%`, backgroundColor: theme.colors.primary }
-                      ]} 
-                    />
+                  <View style={styles.continueDuration}>
+                    <Text style={styles.continueDurationText}>
+                      {formatDuration(podcast.duration)}
+                    </Text>
                   </View>
                   <Text 
                     style={[styles.continueTitle, { color: theme.colors.text }]} 
@@ -1093,15 +1092,19 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  continueProgress: {
-    height: 3,
-    backgroundColor: 'rgba(0,0,0,0.1)',
-    borderRadius: 2,
-    marginBottom: 8,
+  continueDuration: {
+    position: 'absolute',
+    bottom: 34,
+    right: 8,
+    backgroundColor: 'rgba(0,0,0,0.75)',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
   },
-  continueProgressFill: {
-    height: '100%',
-    borderRadius: 2,
+  continueDurationText: {
+    color: '#fff',
+    fontSize: 10,
+    fontWeight: '600',
   },
   continueTitle: {
     fontSize: 13,
