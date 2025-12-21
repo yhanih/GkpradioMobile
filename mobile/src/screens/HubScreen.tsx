@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -19,7 +19,7 @@ import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import * as StoreReview from 'expo-store-review';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../types/navigation';
 import { useAuth } from '../contexts/AuthContext';
@@ -124,6 +124,14 @@ export function HubScreen() {
     }
   }, [user]);
 
+  useFocusEffect(
+    useCallback(() => {
+      if (user && !loadingStats) {
+        fetchUserStats();
+      }
+    }, [user])
+  );
+
   const loadNotificationPreference = async () => {
     try {
       const value = await AsyncStorage.getItem(NOTIFICATION_KEY);
@@ -154,11 +162,11 @@ export function HubScreen() {
       
       const [postsResult, likesResult] = await Promise.all([
         supabase
-          .from('prayercircles')
+          .from('communitythreads')
           .select('id', { count: 'exact', head: true })
-          .eq('user_id', user.id),
+          .eq('userid', user.id),
         supabase
-          .from('threadlikes')
+          .from('community_thread_likes')
           .select('id', { count: 'exact', head: true })
           .eq('user_id', user.id),
       ]);
@@ -168,12 +176,7 @@ export function HubScreen() {
         likes: likesResult.count || 0,
       });
 
-      const savedResult = await supabase
-        .from('threadlikes')
-        .select('id', { count: 'exact', head: true })
-        .eq('user_id', user.id);
-      
-      setSavedPostsCount(savedResult.count || 0);
+      setSavedPostsCount(likesResult.count || 0);
     } catch (error) {
       console.error('Error fetching user stats:', error);
     } finally {
@@ -385,7 +388,8 @@ export function HubScreen() {
                 label="Liked Posts"
                 subtitle={`${savedPostsCount} posts you've liked`}
                 onPress={() => {
-                  Alert.alert('Liked Posts', 'This feature is coming soon!');
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  navigation.getParent()?.navigate('Community');
                 }}
                 theme={theme}
               />
