@@ -741,10 +741,6 @@ export function LiveScreen() {
                     </LinearGradient>
                   </ImageBackground>
 
-                  {/* Progress Indicator (mock - would be real progress) */}
-                  <View style={styles.progressBar}>
-                    <View style={[styles.progressFill, { width: `${(index + 1) * 20}%` }]} />
-                  </View>
                 </Pressable>
               ))}
             </View>
@@ -1173,15 +1169,6 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.25)',
     justifyContent: 'center',
     alignItems: 'center',
-  },
-  progressBar: {
-    height: 3,
-    backgroundColor: 'rgba(0,0,0,0.1)',
-  },
-  progressFill: {
-    height: '100%',
-    backgroundColor: '#047857',
-    borderRadius: 2,
   },
 
   // Error State
