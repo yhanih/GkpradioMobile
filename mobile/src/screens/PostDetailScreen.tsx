@@ -143,6 +143,89 @@ export function PostDetailScreen() {
     loadData();
   }, [loadData]);
 
+  useEffect(() => {
+    const threadId = route.params.threadId;
+    
+    const realtimeChannel = supabase
+      .channel(`post-detail-${threadId}`)
+      .on(
+        'postgres_changes',
+        { 
+          event: '*', 
+          schema: 'public', 
+          table: 'communitythreads',
+          filter: `id=eq.${threadId}`
+        },
+        (payload) => {
+          if (payload.eventType === 'UPDATE') {
+            setThread(prev => prev ? { ...prev, ...payload.new } : null);
+          }
+        }
+      )
+      .on(
+        'postgres_changes',
+        { 
+          event: '*', 
+          schema: 'public', 
+          table: 'communitycomments',
+          filter: `threadid=eq.${threadId}`
+        },
+        (payload) => {
+          if (payload.eventType === 'INSERT') {
+            fetchComments();
+          } else if (payload.eventType === 'DELETE') {
+            setComments(prev => prev.filter(c => c.id !== payload.old.id));
+          } else if (payload.eventType === 'UPDATE') {
+            setComments(prev => prev.map(c => 
+              c.id === payload.new.id ? { ...c, ...payload.new } : c
+            ));
+          }
+        }
+      )
+      .on(
+        'postgres_changes',
+        { 
+          event: '*', 
+          schema: 'public', 
+          table: 'community_thread_likes',
+          filter: `thread_id=eq.${threadId}`
+        },
+        async () => {
+          const { data } = await supabase
+            .from('communitythreads')
+            .select('like_count')
+            .eq('id', threadId)
+            .single();
+          
+          if (data) {
+            setThread(prev => prev ? { ...prev, like_count: data.like_count } : null);
+          }
+        }
+      )
+      .on(
+        'postgres_changes',
+        { 
+          event: '*', 
+          schema: 'public', 
+          table: 'thread_prayers',
+          filter: `thread_id=eq.${threadId}`
+        },
+        async () => {
+          const { count } = await supabase
+            .from('thread_prayers')
+            .select('*', { count: 'exact', head: true })
+            .eq('thread_id', threadId);
+          
+          setThread(prev => prev ? { ...prev, prayer_count: count || 0 } : null);
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(realtimeChannel);
+    };
+  }, [route.params.threadId, fetchComments]);
+
   const onRefresh = async () => {
     setRefreshing(true);
     await Promise.all([fetchThread(), fetchComments()]);

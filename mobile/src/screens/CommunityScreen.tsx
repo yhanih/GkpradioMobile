@@ -43,12 +43,84 @@ export function CommunityScreen() {
   const [likeAnimations] = useState<{[key: string]: Animated.Value}>({});
   const fabScale = useRef(new Animated.Value(1)).current;
   const scrollY = useRef(new Animated.Value(0)).current;
+  const sortByRef = useRef(sortBy);
+  
+  useEffect(() => {
+    sortByRef.current = sortBy;
+  }, [sortBy]);
 
   useEffect(() => {
     fetchBlockedUsers();
     fetchData();
     fetchStats();
   }, [user, sortBy]);
+
+  useEffect(() => {
+    const threadsChannel = supabase
+      .channel('community-threads-realtime')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'communitythreads' },
+        (payload: any) => {
+          if (payload.eventType === 'INSERT') {
+            setThreads(prev => {
+              const newThread = payload.new as ThreadWithUser;
+              const updated = [newThread, ...prev];
+              return updated;
+            });
+          } else if (payload.eventType === 'UPDATE') {
+            setThreads(prev => {
+              const updated = prev.map(t => 
+                t.id === payload.new.id 
+                  ? { ...t, ...payload.new }
+                  : t
+              );
+              if (sortByRef.current === 'popular') {
+                return [...updated].sort((a, b) => (b.like_count || 0) - (a.like_count || 0));
+              } else if (sortByRef.current === 'discussed') {
+                return [...updated].sort((a, b) => (b.comment_count || 0) - (a.comment_count || 0));
+              }
+              return updated;
+            });
+          } else if (payload.eventType === 'DELETE') {
+            setThreads(prev => prev.filter(t => t.id !== payload.old.id));
+          }
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'community_thread_likes' },
+        async (payload: any) => {
+          const threadId = payload.new?.thread_id || payload.old?.thread_id;
+          if (threadId) {
+            const { data } = await supabase
+              .from('communitythreads')
+              .select('like_count')
+              .eq('id', threadId)
+              .single();
+            
+            if (data) {
+              setThreads(prev => {
+                const updated = prev.map(t => 
+                  t.id === threadId 
+                    ? { ...t, like_count: data.like_count }
+                    : t
+                );
+                if (sortByRef.current === 'popular') {
+                  return [...updated].sort((a, b) => (b.like_count || 0) - (a.like_count || 0));
+                }
+                return updated;
+              });
+            }
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(threadsChannel);
+    };
+  }, []);
 
   useFocusEffect(
     useCallback(() => {
