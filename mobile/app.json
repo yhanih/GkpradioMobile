@@ -88,7 +88,8 @@
       "azuracastBaseUrl": "http://74.208.102.89:8080"
     },
     "plugins": [
-      "expo-font"
+      "expo-font",
+      "expo-video"
     ]
   }
 }
