@@ -14,6 +14,8 @@ import { HubScreen } from './src/screens/HubScreen';
 import { ProfileScreen } from './src/screens/ProfileScreen';
 import { PostDetailScreen } from './src/screens/PostDetailScreen';
 import { UserProfileScreen } from './src/screens/UserProfileScreen';
+import { VideoPlayerScreen } from './src/screens/VideoPlayerScreen';
+import { EpisodePlayerScreen } from './src/screens/EpisodePlayerScreen';
 import { AudioPlayer } from './src/components/AudioPlayer';
 import { AudioProvider } from './src/contexts/AudioContext';
 import { AuthProvider, useAuth } from './src/contexts/AuthContext';
@@ -137,6 +139,22 @@ function RootNavigator() {
           />
         )}
       </Stack.Screen>
+      <Stack.Screen 
+        name="VideoPlayer" 
+        component={VideoPlayerScreen}
+        options={{
+          animation: 'fade',
+          presentation: 'fullScreenModal',
+        }}
+      />
+      <Stack.Screen 
+        name="EpisodePlayer" 
+        component={EpisodePlayerScreen}
+        options={{
+          animation: 'slide_from_bottom',
+          presentation: 'modal',
+        }}
+      />
     </Stack.Navigator>
   );
 }

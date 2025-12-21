@@ -15,12 +15,17 @@ import {
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useNavigation } from '@react-navigation/native';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { supabase } from '../lib/supabase';
 import { Episode, Video } from '../types/database.types';
+import { RootStackParamList } from '../types/navigation';
 import { useTheme } from '../contexts/ThemeContext';
 import { useBookmarks } from '../contexts/BookmarksContext';
 import { useAuth } from '../contexts/AuthContext';
 import * as Haptics from 'expo-haptics';
+
+type MediaNavProp = NativeStackNavigationProp<RootStackParamList>;
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const HERO_HEIGHT = 280;
@@ -40,6 +45,7 @@ const HEADER_HEIGHT = 72;
 const AUDIO_PLAYER_HEIGHT = 100;
 
 export function MediaScreen() {
+  const navigation = useNavigation<MediaNavProp>();
   const { theme, isDark } = useTheme();
   const { user } = useAuth();
   const { isBookmarked, toggleBookmark } = useBookmarks();
@@ -626,7 +632,10 @@ export function MediaScreen() {
                         { backgroundColor: theme.colors.surface },
                         pressed && styles.cardPressed,
                       ]}
-                      onPress={() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)}
+                      onPress={() => {
+                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                        navigation.navigate('EpisodePlayer', { episode: podcast });
+                      }}
                     >
                       <View style={styles.podcastImageContainer}>
                         <Image
@@ -707,7 +716,10 @@ export function MediaScreen() {
                         styles.videoCard,
                         pressed && styles.cardPressed,
                       ]}
-                      onPress={() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)}
+                      onPress={() => {
+                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                        navigation.navigate('VideoPlayer', { video });
+                      }}
                     >
                       <View style={styles.videoThumbnailContainer}>
                         <Image

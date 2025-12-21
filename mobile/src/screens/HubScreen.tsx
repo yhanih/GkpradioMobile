@@ -10,11 +10,14 @@ import {
   Alert,
   ActivityIndicator,
   Image,
+  Share,
+  Platform,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
+import * as StoreReview from 'expo-store-review';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -221,28 +224,64 @@ export function HubScreen() {
     Linking.openURL('https://gkpradio.com/terms');
   };
 
-  const handleRateApp = () => {
-    Alert.alert(
-      'Rate GKP Radio',
-      'Would you like to rate our app on the App Store?',
-      [
-        { text: 'Not Now', style: 'cancel' },
-        { 
-          text: 'Rate Now', 
-          onPress: () => {
-            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-          }
-        },
-      ]
-    );
+  const handleRateApp = async () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    
+    try {
+      const isAvailable = await StoreReview.isAvailableAsync();
+      
+      if (isAvailable) {
+        await StoreReview.requestReview();
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      } else {
+        const storeUrl = Platform.select({
+          ios: 'https://apps.apple.com/app/gkp-radio/id123456789',
+          android: 'https://play.google.com/store/apps/details?id=com.gkpradio.app',
+          default: 'https://gkpradio.com/app',
+        });
+        
+        Alert.alert(
+          'Rate GKP Radio',
+          'Would you like to rate our app in the store?',
+          [
+            { text: 'Not Now', style: 'cancel' },
+            { 
+              text: 'Open Store', 
+              onPress: () => {
+                Linking.openURL(storeUrl);
+                Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+              }
+            },
+          ]
+        );
+      }
+    } catch (error) {
+      console.error('Error requesting review:', error);
+      Alert.alert('Error', 'Could not open app store. Please try again later.');
+    }
   };
 
   const handleShareApp = async () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    Alert.alert(
-      'Share GKP Radio',
-      'Share the app with friends and family!\n\nDownload at: gkpradio.com/app'
-    );
+    
+    try {
+      const result = await Share.share({
+        message: Platform.select({
+          ios: 'Check out GKP Radio - Faith-based content, live radio, and community!\n\nhttps://gkpradio.com/app',
+          android: 'Check out GKP Radio - Faith-based content, live radio, and community!\n\nhttps://gkpradio.com/app',
+          default: 'Check out GKP Radio!\n\nhttps://gkpradio.com/app',
+        }),
+        title: 'Share GKP Radio',
+        url: 'https://gkpradio.com/app',
+      });
+      
+      if (result.action === Share.sharedAction) {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      }
+    } catch (error) {
+      console.error('Error sharing:', error);
+      Alert.alert('Error', 'Could not share app. Please try again.');
+    }
   };
 
   const getUserInitials = () => {

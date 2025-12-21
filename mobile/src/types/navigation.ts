@@ -1,4 +1,4 @@
-import { CommunityThread, User } from './database.types';
+import { CommunityThread, User, Episode, Video, LiveEvent } from './database.types';
 
 export type RootStackParamList = {
   MainTabs: undefined;
@@ -11,6 +11,14 @@ export type RootStackParamList = {
     user?: User;
   };
   Profile: undefined;
+  VideoPlayer: {
+    video?: Video;
+    liveEvent?: LiveEvent;
+  };
+  EpisodePlayer: {
+    episode: Episode;
+  };
+  PastBroadcasts: undefined;
 };
 
 export type MainTabParamList = {

@@ -11,27 +11,154 @@ import {
   Animated,
   Dimensions,
   ImageBackground,
+  Alert,
+  Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
+import { useNavigation } from '@react-navigation/native';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import * as Haptics from 'expo-haptics';
+import * as Notifications from 'expo-notifications';
+import * as Calendar from 'expo-calendar';
 import { supabase } from '../lib/supabase';
 import { LiveEvent } from '../types/database.types';
+import { RootStackParamList, MainTabParamList } from '../types/navigation';
 import { useTheme } from '../contexts/ThemeContext';
+
+type LiveNavProp = NativeStackNavigationProp<RootStackParamList>;
+
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldShowAlert: true,
+    shouldPlaySound: true,
+    shouldSetBadge: false,
+  }),
+});
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 const HERO_HEIGHT = SCREEN_HEIGHT * 0.55;
 
 export function LiveScreen() {
+  const navigation = useNavigation<LiveNavProp>();
   const { theme, isDark } = useTheme();
   const [liveEvents, setLiveEvents] = useState<LiveEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [reminders, setReminders] = useState<Set<string>>(new Set());
   
   const scrollY = useRef(new Animated.Value(0)).current;
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const glowAnim = useRef(new Animated.Value(0.4)).current;
+
+  const scheduleReminder = async (event: LiveEvent) => {
+    try {
+      const { status: existingStatus } = await Notifications.getPermissionsAsync();
+      let finalStatus = existingStatus;
+      
+      if (existingStatus !== 'granted') {
+        const { status } = await Notifications.requestPermissionsAsync();
+        finalStatus = status;
+      }
+      
+      if (finalStatus !== 'granted') {
+        Alert.alert(
+          'Notifications Disabled',
+          'Please enable notifications in Settings to receive reminders.'
+        );
+        return;
+      }
+
+      const eventDate = new Date(event.scheduled_start);
+      const reminderDate = new Date(eventDate.getTime() - 15 * 60 * 1000);
+      
+      if (reminderDate <= new Date()) {
+        Alert.alert('Event Starting Soon', 'This event is about to start or has already started!');
+        return;
+      }
+
+      await Notifications.scheduleNotificationAsync({
+        content: {
+          title: 'GKP Radio - Starting Soon!',
+          body: `"${event.title}" starts in 15 minutes`,
+          sound: true,
+        },
+        trigger: {
+          type: Notifications.SchedulableTriggerInputTypes.DATE,
+          date: reminderDate,
+        },
+      });
+
+      setReminders(prev => new Set(prev).add(event.id));
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      Alert.alert('Reminder Set', `We'll remind you 15 minutes before "${event.title}" starts.`);
+    } catch (error) {
+      console.error('Error scheduling reminder:', error);
+      Alert.alert('Error', 'Could not set reminder. Please try again.');
+    }
+  };
+
+  const addToCalendar = async (event: LiveEvent) => {
+    try {
+      const { status } = await Calendar.requestCalendarPermissionsAsync();
+      
+      if (status !== 'granted') {
+        Alert.alert(
+          'Calendar Access Denied',
+          'Please enable calendar access in Settings to add events.'
+        );
+        return;
+      }
+
+      const calendars = await Calendar.getCalendarsAsync(Calendar.EntityTypes.EVENT);
+      const defaultCalendar = calendars.find(cal => cal.allowsModifications) || calendars[0];
+      
+      if (!defaultCalendar) {
+        Alert.alert('Error', 'No writable calendar found on your device.');
+        return;
+      }
+
+      const startDate = new Date(event.scheduled_start);
+      const endDate = event.scheduled_end 
+        ? new Date(event.scheduled_end) 
+        : new Date(startDate.getTime() + 60 * 60 * 1000);
+
+      await Calendar.createEventAsync(defaultCalendar.id, {
+        title: event.title,
+        notes: event.description || 'GKP Radio Live Event',
+        startDate,
+        endDate,
+        alarms: [{ relativeOffset: -15 }],
+      });
+
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      Alert.alert('Added to Calendar', `"${event.title}" has been added to your calendar.`);
+    } catch (error) {
+      console.error('Error adding to calendar:', error);
+      Alert.alert('Error', 'Could not add to calendar. Please try again.');
+    }
+  };
+
+  const handleHeroAction = (event: LiveEvent | undefined, isLive: boolean) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+    
+    if (isLive && event) {
+      navigation.navigate('VideoPlayer', { liveEvent: event });
+    } else if (event) {
+      scheduleReminder(event);
+    }
+  };
+
+  const handlePastBroadcastPlay = (event: LiveEvent) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    navigation.navigate('VideoPlayer', { liveEvent: event });
+  };
+
+  const navigateToMedia = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    navigation.getParent()?.navigate('Media');
+  };
 
   useEffect(() => {
     loadLiveEvents();
@@ -280,9 +407,7 @@ export function LiveScreen() {
                   isLive && styles.heroButtonLive,
                   pressed && styles.heroButtonPressed,
                 ]}
-                onPress={() => {
-                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
-                }}
+                onPress={() => handleHeroAction(heroEvent, isLive)}
               >
                 <LinearGradient
                   colors={isLive ? ['#ef4444', '#dc2626'] : [theme.colors.primary, '#059669']}
@@ -370,17 +495,27 @@ export function LiveScreen() {
                       
                       <View style={styles.timelineActions}>
                         <Pressable 
-                          style={[styles.reminderBtn, { backgroundColor: theme.colors.primaryLight }]}
-                          onPress={() => Haptics.selectionAsync()}
+                          style={[
+                            styles.reminderBtn, 
+                            { backgroundColor: reminders.has(event.id) ? theme.colors.primary : theme.colors.primaryLight }
+                          ]}
+                          onPress={() => scheduleReminder(event)}
                         >
-                          <Ionicons name="notifications-outline" size={16} color={theme.colors.primary} />
-                          <Text style={[styles.reminderBtnText, { color: theme.colors.primary }]}>
-                            Remind Me
+                          <Ionicons 
+                            name={reminders.has(event.id) ? 'notifications' : 'notifications-outline'} 
+                            size={16} 
+                            color={reminders.has(event.id) ? '#fff' : theme.colors.primary} 
+                          />
+                          <Text style={[
+                            styles.reminderBtnText, 
+                            { color: reminders.has(event.id) ? '#fff' : theme.colors.primary }
+                          ]}>
+                            {reminders.has(event.id) ? 'Reminder Set' : 'Remind Me'}
                           </Text>
                         </Pressable>
                         <Pressable 
                           style={styles.calendarBtn}
-                          onPress={() => Haptics.selectionAsync()}
+                          onPress={() => addToCalendar(event)}
                         >
                           <Ionicons name="calendar-outline" size={18} color={theme.colors.textMuted} />
                         </Pressable>
@@ -399,7 +534,7 @@ export function LiveScreen() {
                 <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>
                   Recent Broadcasts
                 </Text>
-                <Pressable onPress={() => Haptics.selectionAsync()}>
+                <Pressable onPress={navigateToMedia}>
                   <Text style={[styles.seeAllText, { color: theme.colors.primary }]}>
                     See All
                   </Text>
@@ -457,7 +592,7 @@ export function LiveScreen() {
                       <View style={styles.storyCardActions}>
                         <Pressable 
                           style={styles.storyPlayBtn}
-                          onPress={() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium)}
+                          onPress={() => handlePastBroadcastPlay(event)}
                         >
                           <Ionicons name="play" size={20} color="#fff" />
                         </Pressable>
@@ -492,7 +627,7 @@ export function LiveScreen() {
               </Text>
               <Pressable 
                 style={styles.emptyButton}
-                onPress={() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium)}
+                onPress={navigateToMedia}
               >
                 <LinearGradient
                   colors={[theme.colors.primary, '#059669']}

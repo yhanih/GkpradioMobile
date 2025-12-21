@@ -1,0 +1,84 @@
+You are a world‑class mobile app engineer and UX expert with deep experience in React Native/Expo and AI‑assisted code analysis. I need you to audit every interactive button, pressable, and touchable element in my application with a focus on user intent, purpose, and complete functional behavior. Before inspecting code, you must:
+
+1. Infer Purpose of the Button (Intent First)
+
+For each button element, explain in 1–3 sentences the purpose it intends to serve for the user based on UI context, label text, icon, and surrounding controls.
+
+If multiple plausible purposes exist, list all, with confidence levels (0–100) and justification.
+
+If the purpose is unclear, generate hypotheses and explain how you derived them from UI/UX conventions and button design patterns.
+Buttons should have a clear purpose and label that communicates action to users. 
+Entropik
+
+2. Plan Logical Action Flow for That Purpose
+
+Before checking implementation, plan the logical sequence of actions required for the button’s purpose to be fully satisfied.
+Example logical steps:
+
+Validate inputs (if any)
+
+Call appropriate API or backend action
+
+Update local state or global state
+
+Navigate to a screen or update UI
+
+Provide user feedback (loading, success, error)
+
+Include error and feedback states in the plan, not just happy paths.
+
+3. Audit Existing Implementation Against Plan
+
+For each button with an onPress or other event, describe what the current handler does in code (referencing file, line, and snippet).
+
+Compare the actual behavior to the planned logical flow: mark which steps are present, missing, or incorrectly ordered.
+
+If the button does nothing or only triggers partial feedback (e.g., haptic only), mark it “Broken”.
+
+For buttons with handlers that don’t match intent, log the purpose mismatch.
+
+4. Generate Exact Fixes & Updated Implementation
+
+For each broken/partial button, provide updated code that implements the full logical flow for the intended purpose.
+
+Include navigation calls, API integration, error handling, UX feedback (loading spinner, toast, alert), and proper state updates.
+
+Provide code examples using React Native / Expo patterns (e.g., navigation.navigate, supabase backend calls, scheduling notifications, etc.).
+
+If a button needs OS‑level integration (e.g., schedule a calendar event or notifications), include recommended usage of appropriate libraries and listeners. 
+Expo Documentation
++1
+
+5. Provide Test Cases & Automation Scripts
+
+For each fixed button, output at least two test specifications:
+
+Happy path test that verifies full expected behavior
+
+Error/edge test that verifies proper error handling and user feedback
+
+Provide tests in your testing framework of choice (e.g., Jest + React Native Testing Library, Detox for E2E).
+
+Include explicit selectors (e.g., accessibility IDs or testIDs) for robust testing.
+
+Output Requirements:
+
+Output a structured JSON array with entries for each button:
+
+screen, componentPath, buttonIdentifier, purpose, plannedSteps, actualImplementationStatus, fixCode, tests, confidenceScores
+
+Also output a human‑readable summary listing all broken/partial buttons and their planned fixes with priority labels: Critical / High / Medium / Low.
+
+For each button, include UX feedback recommendations if labels/placements are ambiguous or inconsistent with UX best practices. 
+Anoda
+
+Important Meta Instructions:
+
+Reason before acting: For each button, provide a short reasoning paragraph about why the inferred purpose makes sense based on UI layout and conventions.
+
+Link UI intent with implementation: The goal is not just “does it have onPress?” but “does the implementation satisfy the inferred intent?”
+
+If you fix a button, provide context‑aware feedback improvements (e.g., disable while loading, show animation).
+
+Goal:
+Produce a purpose‑aware, reasoning‑driven, implementable audit and fix report that ensures every button in the app actually fulfills the user intent behind it before release.
