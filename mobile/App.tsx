@@ -18,6 +18,7 @@ import { AudioPlayer } from './src/components/AudioPlayer';
 import { AudioProvider } from './src/contexts/AudioContext';
 import { AuthProvider, useAuth } from './src/contexts/AuthContext';
 import { ThemeProvider, useTheme } from './src/contexts/ThemeContext';
+import { BookmarksProvider } from './src/contexts/BookmarksContext';
 import { LoginScreen } from './src/screens/auth/LoginScreen';
 import { SignupScreen } from './src/screens/auth/SignupScreen';
 import { OnboardingScreen, checkOnboardingComplete } from './src/screens/OnboardingScreen';
@@ -202,9 +203,11 @@ export default function App() {
     <SafeAreaProvider>
       <ThemeProvider>
         <AuthProvider>
-          <AudioProvider>
-            <AppWithTheme />
-          </AudioProvider>
+          <BookmarksProvider>
+            <AudioProvider>
+              <AppWithTheme />
+            </AudioProvider>
+          </BookmarksProvider>
         </AuthProvider>
       </ThemeProvider>
     </SafeAreaProvider>

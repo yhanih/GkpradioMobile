@@ -18,6 +18,8 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { supabase } from '../lib/supabase';
 import { Episode, Video } from '../types/database.types';
 import { useTheme } from '../contexts/ThemeContext';
+import { useBookmarks } from '../contexts/BookmarksContext';
+import { useAuth } from '../contexts/AuthContext';
 import * as Haptics from 'expo-haptics';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -39,6 +41,8 @@ const AUDIO_PLAYER_HEIGHT = 100;
 
 export function MediaScreen() {
   const { theme, isDark } = useTheme();
+  const { user } = useAuth();
+  const { isBookmarked, toggleBookmark } = useBookmarks();
   const insets = useSafeAreaInsets();
   const [activeTab, setActiveTab] = useState<TabType>('podcasts');
   const [selectedCategory, setSelectedCategory] = useState('all');
@@ -47,6 +51,7 @@ export function MediaScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [bookmarkAnimations, setBookmarkAnimations] = useState<{ [key: string]: Animated.Value }>({});
 
   const tabIndicatorAnim = useRef(new Animated.Value(0)).current;
   const heroScaleAnim = useRef(new Animated.Value(1)).current;
@@ -149,6 +154,42 @@ export function MediaScreen() {
     return items.filter(item => 
       item.category?.toLowerCase().includes(selectedCategory.toLowerCase())
     );
+  };
+
+  const getBookmarkAnimation = (id: string) => {
+    if (!bookmarkAnimations[id]) {
+      const anim = new Animated.Value(1);
+      setBookmarkAnimations(prev => ({ ...prev, [id]: anim }));
+      return anim;
+    }
+    return bookmarkAnimations[id];
+  };
+
+  const handleBookmarkToggle = async (contentType: 'episode' | 'video', contentId: string) => {
+    if (!user) {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+      return;
+    }
+    
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    
+    const anim = getBookmarkAnimation(contentId);
+    Animated.sequence([
+      Animated.spring(anim, {
+        toValue: 1.3,
+        useNativeDriver: true,
+        tension: 300,
+        friction: 10,
+      }),
+      Animated.spring(anim, {
+        toValue: 1,
+        useNativeDriver: true,
+        tension: 300,
+        friction: 10,
+      }),
+    ]).start();
+    
+    await toggleBookmark(contentType, contentId);
   };
 
   const filteredPodcasts = filterByCategory(podcasts);
@@ -626,10 +667,17 @@ export function MediaScreen() {
                         </View>
                       </View>
                       <Pressable 
-                        style={styles.moreButton}
-                        onPress={() => Haptics.selectionAsync()}
+                        style={styles.bookmarkButton}
+                        onPress={() => handleBookmarkToggle('episode', podcast.id)}
+                        hitSlop={10}
                       >
-                        <Ionicons name="ellipsis-vertical" size={18} color={theme.colors.textMuted} />
+                        <Animated.View style={{ transform: [{ scale: bookmarkAnimations[podcast.id] || 1 }] }}>
+                          <Ionicons 
+                            name={isBookmarked('episode', podcast.id) ? 'bookmark' : 'bookmark-outline'} 
+                            size={22} 
+                            color={isBookmarked('episode', podcast.id) ? theme.colors.primary : theme.colors.textMuted} 
+                          />
+                        </Animated.View>
                       </Pressable>
                     </Pressable>
                   ))
@@ -689,9 +737,27 @@ export function MediaScreen() {
                         )}
                       </View>
                       <View style={[styles.videoInfo, { backgroundColor: theme.colors.surface }]}>
-                        <Text style={[styles.videoTitle, { color: theme.colors.text }]} numberOfLines={2}>
-                          {video.title}
-                        </Text>
+                        <View style={styles.videoInfoHeader}>
+                          <Text style={[styles.videoTitle, { color: theme.colors.text, flex: 1 }]} numberOfLines={2}>
+                            {video.title}
+                          </Text>
+                          <Pressable 
+                            style={styles.videoBookmarkButton}
+                            onPress={(e) => {
+                              e.stopPropagation();
+                              handleBookmarkToggle('video', video.id);
+                            }}
+                            hitSlop={10}
+                          >
+                            <Animated.View style={{ transform: [{ scale: bookmarkAnimations[video.id] || 1 }] }}>
+                              <Ionicons 
+                                name={isBookmarked('video', video.id) ? 'bookmark' : 'bookmark-outline'} 
+                                size={20} 
+                                color={isBookmarked('video', video.id) ? theme.colors.primary : theme.colors.textMuted} 
+                              />
+                            </Animated.View>
+                          </Pressable>
+                        </View>
                         <View style={styles.videoMetaRow}>
                           {video.category && (
                             <Text style={[styles.videoCategory, { color: theme.colors.primary }]}>
@@ -1083,6 +1149,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     alignSelf: 'center',
   },
+  bookmarkButton: {
+    width: 40,
+    height: 40,
+    justifyContent: 'center',
+    alignItems: 'center',
+    alignSelf: 'center',
+  },
 
   // Video Cards
   videoCard: {
@@ -1156,10 +1229,18 @@ const styles = StyleSheet.create({
   videoInfo: {
     padding: 16,
   },
+  videoInfoHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    marginBottom: 8,
+  },
+  videoBookmarkButton: {
+    padding: 4,
+    marginLeft: 8,
+  },
   videoTitle: {
     fontSize: 17,
     fontWeight: '700',
-    marginBottom: 8,
     lineHeight: 22,
   },
   videoMetaRow: {
