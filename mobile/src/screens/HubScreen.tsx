@@ -423,7 +423,7 @@ export function HubScreen() {
                 subtitle={`${savedPostsCount} posts you've liked`}
                 onPress={() => {
                   Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                  navigation.getParent()?.navigate('Community');
+                  navigation.navigate('LikedPosts');
                 }}
                 theme={theme}
               />

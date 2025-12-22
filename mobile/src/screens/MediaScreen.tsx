@@ -12,6 +12,7 @@ import {
   Dimensions,
   ImageBackground,
   Alert,
+  TextInput,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -59,6 +60,8 @@ export function MediaScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [bookmarkAnimations, setBookmarkAnimations] = useState<{ [key: string]: Animated.Value }>({});
+  const [searchQuery, setSearchQuery] = useState('');
+  const [showSearch, setShowSearch] = useState(false);
 
   const tabIndicatorAnim = useRef(new Animated.Value(0)).current;
   const heroScaleAnim = useRef(new Animated.Value(1)).current;
@@ -218,12 +221,28 @@ export function MediaScreen() {
   const filteredPodcasts = filterByCategory(podcasts);
   const filteredVideos = filterByCategory(videos);
 
-  const featuredContent = activeTab === 'podcasts' 
-    ? filteredPodcasts.find(p => p.is_featured) || filteredPodcasts[0]
-    : filteredVideos.find(v => v.is_featured) || filteredVideos[0];
+  // Apply search filter if search query exists
+  const searchFilteredPodcasts = searchQuery.trim()
+    ? filteredPodcasts.filter(p => 
+        p.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (p.description && p.description.toLowerCase().includes(searchQuery.toLowerCase())) ||
+        (p.author && p.author.toLowerCase().includes(searchQuery.toLowerCase()))
+      )
+    : filteredPodcasts;
 
-  const continueWatching = filteredVideos.slice(0, 4);
-  const continuePlaying = filteredPodcasts.slice(0, 4);
+  const searchFilteredVideos = searchQuery.trim()
+    ? filteredVideos.filter(v => 
+        v.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (v.description && v.description.toLowerCase().includes(searchQuery.toLowerCase()))
+      )
+    : filteredVideos;
+
+  const featuredContent = activeTab === 'podcasts' 
+    ? searchFilteredPodcasts.find(p => p.is_featured) || searchFilteredPodcasts[0]
+    : searchFilteredVideos.find(v => v.is_featured) || searchFilteredVideos[0];
+
+  const continueWatching = searchFilteredVideos.slice(0, 4);
+  const continuePlaying = searchFilteredPodcasts.slice(0, 4);
 
   const tabIndicatorTranslate = tabIndicatorAnim.interpolate({
     inputRange: [0, 1],
@@ -249,19 +268,50 @@ export function MediaScreen() {
       <View style={[styles.headerContainer, { paddingTop: insets.top, backgroundColor: theme.colors.background }]}>
         <View style={styles.header}>
           <Text style={[styles.title, { color: theme.colors.text }]}>Media</Text>
-          <Pressable 
-            style={[styles.searchButton, { backgroundColor: theme.colors.surface }]}
-            onPress={() => {
-              Haptics.selectionAsync();
-              Alert.alert(
-                'Search',
-                'Search functionality coming soon! For now, use the category filters to find content.',
-                [{ text: 'OK' }]
-              );
-            }}
-          >
-            <Ionicons name="search" size={20} color={theme.colors.textMuted} />
-          </Pressable>
+          {showSearch ? (
+            <View style={[styles.searchInputContainer, { backgroundColor: theme.colors.surface }]}>
+              <Ionicons name="search" size={18} color={theme.colors.textMuted} style={styles.searchIcon} />
+              <TextInput
+                style={[styles.searchInput, { color: theme.colors.text }]}
+                placeholder="Search..."
+                placeholderTextColor={theme.colors.textMuted}
+                value={searchQuery}
+                onChangeText={setSearchQuery}
+                autoFocus
+              />
+              {searchQuery.length > 0 && (
+                <Pressable
+                  onPress={() => {
+                    setSearchQuery('');
+                    Haptics.selectionAsync();
+                  }}
+                  style={styles.clearSearchButton}
+                >
+                  <Ionicons name="close-circle" size={18} color={theme.colors.textMuted} />
+                </Pressable>
+              )}
+              <Pressable
+                onPress={() => {
+                  setShowSearch(false);
+                  setSearchQuery('');
+                  Haptics.selectionAsync();
+                }}
+                style={styles.closeSearchButton}
+              >
+                <Ionicons name="close" size={20} color={theme.colors.textMuted} />
+              </Pressable>
+            </View>
+          ) : (
+            <Pressable 
+              style={[styles.searchButton, { backgroundColor: theme.colors.surface }]}
+              onPress={() => {
+                Haptics.selectionAsync();
+                setShowSearch(true);
+              }}
+            >
+              <Ionicons name="search" size={20} color={theme.colors.textMuted} />
+            </Pressable>
+          )}
         </View>
       </View>
 
@@ -647,13 +697,13 @@ export function MediaScreen() {
                 {activeTab === 'podcasts' ? 'All Episodes' : 'All Videos'}
               </Text>
               <Text style={[styles.countText, { color: theme.colors.textMuted }]}>
-                {activeTab === 'podcasts' ? filteredPodcasts.length : filteredVideos.length} items
+                {activeTab === 'podcasts' ? searchFilteredPodcasts.length : searchFilteredVideos.length} items
               </Text>
             </View>
 
             {activeTab === 'podcasts' && (
               <>
-                {filteredPodcasts.length === 0 ? (
+                {searchFilteredPodcasts.length === 0 ? (
                   <View style={styles.emptyState}>
                     <View style={[styles.emptyIconBg, { backgroundColor: theme.colors.primaryLight }]}>
                       <Ionicons name="mic-outline" size={32} color={theme.colors.primary} />
@@ -666,7 +716,7 @@ export function MediaScreen() {
                     </Text>
                   </View>
                 ) : (
-                  filteredPodcasts.map((podcast, index) => (
+                  searchFilteredPodcasts.map((podcast, index) => (
                     <Pressable
                       key={podcast.id}
                       style={({ pressed }) => [
@@ -738,7 +788,7 @@ export function MediaScreen() {
 
             {activeTab === 'videos' && (
               <>
-                {filteredVideos.length === 0 ? (
+                {searchFilteredVideos.length === 0 ? (
                   <View style={styles.emptyState}>
                     <View style={[styles.emptyIconBg, { backgroundColor: theme.colors.primaryLight }]}>
                       <Ionicons name="videocam-outline" size={32} color={theme.colors.primary} />
@@ -751,7 +801,7 @@ export function MediaScreen() {
                     </Text>
                   </View>
                 ) : (
-                  filteredVideos.map((video) => (
+                  searchFilteredVideos.map((video) => (
                     <Pressable
                       key={video.id}
                       style={({ pressed }) => [
@@ -879,6 +929,31 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  searchInputContainer: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    height: 40,
+    borderRadius: 20,
+    paddingHorizontal: 12,
+    marginLeft: 12,
+  },
+  searchIcon: {
+    marginRight: 8,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 15,
+    height: '100%',
+  },
+  clearSearchButton: {
+    padding: 4,
+    marginLeft: 4,
+  },
+  closeSearchButton: {
+    padding: 4,
+    marginLeft: 8,
   },
 
   // Hero Styles

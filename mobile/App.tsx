@@ -16,6 +16,7 @@ import { PostDetailScreen } from './src/screens/PostDetailScreen';
 import { UserProfileScreen } from './src/screens/UserProfileScreen';
 import { VideoPlayerScreen } from './src/screens/VideoPlayerScreen';
 import { EpisodePlayerScreen } from './src/screens/EpisodePlayerScreen';
+import { LikedPostsScreen } from './src/screens/LikedPostsScreen';
 import { AudioPlayer } from './src/components/AudioPlayer';
 import { AudioProvider } from './src/contexts/AudioContext';
 import { AuthProvider, useAuth } from './src/contexts/AuthContext';
@@ -23,6 +24,7 @@ import { ThemeProvider, useTheme } from './src/contexts/ThemeContext';
 import { BookmarksProvider } from './src/contexts/BookmarksContext';
 import { LoginScreen } from './src/screens/auth/LoginScreen';
 import { SignupScreen } from './src/screens/auth/SignupScreen';
+import { ForgotPasswordScreen } from './src/screens/auth/ForgotPasswordScreen';
 import { OnboardingScreen, checkOnboardingComplete } from './src/screens/OnboardingScreen';
 import { RootStackParamList, MainTabParamList } from './src/types/navigation';
 
@@ -31,18 +33,28 @@ const Tab = createBottomTabNavigator<MainTabParamList>();
 
 function ProfileScreenWrapper({
   showSignup,
-  setShowSignup
+  setShowSignup,
+  showForgotPassword,
+  setShowForgotPassword
 }: {
   showSignup: boolean;
   setShowSignup: (show: boolean) => void;
+  showForgotPassword: boolean;
+  setShowForgotPassword: (show: boolean) => void;
 }) {
   const { user } = useAuth();
 
   if (!user) {
+    if (showForgotPassword) {
+      return <ForgotPasswordScreen onNavigateToLogin={() => setShowForgotPassword(false)} />;
+    }
     if (showSignup) {
       return <SignupScreen onNavigateToLogin={() => setShowSignup(false)} />;
     }
-    return <LoginScreen onNavigateToSignup={() => setShowSignup(true)} />;
+    return <LoginScreen 
+      onNavigateToSignup={() => setShowSignup(true)} 
+      onNavigateToForgotPassword={() => setShowForgotPassword(true)}
+    />;
   }
 
   return <ProfileScreen />;
@@ -108,6 +120,7 @@ function MainTabs() {
 
 function RootNavigator() {
   const [showSignup, setShowSignup] = useState(false);
+  const [showForgotPassword, setShowForgotPassword] = useState(false);
 
   return (
     <Stack.Navigator screenOptions={{ headerShown: false }}>
@@ -136,6 +149,8 @@ function RootNavigator() {
           <ProfileScreenWrapper
             showSignup={showSignup}
             setShowSignup={setShowSignup}
+            showForgotPassword={showForgotPassword}
+            setShowForgotPassword={setShowForgotPassword}
           />
         )}
       </Stack.Screen>
@@ -153,6 +168,13 @@ function RootNavigator() {
         options={{
           animation: 'slide_from_bottom',
           presentation: 'modal',
+        }}
+      />
+      <Stack.Screen 
+        name="LikedPosts" 
+        component={LikedPostsScreen}
+        options={{
+          animation: 'slide_from_right',
         }}
       />
     </Stack.Navigator>

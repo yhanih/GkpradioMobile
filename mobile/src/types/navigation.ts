@@ -19,6 +19,7 @@ export type RootStackParamList = {
     episode: Episode;
   };
   PastBroadcasts: undefined;
+  LikedPosts: undefined;
 };
 
 export type MainTabParamList = {

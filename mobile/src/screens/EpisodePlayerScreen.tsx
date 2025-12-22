@@ -36,12 +36,14 @@ export function EpisodePlayerScreen() {
   const { theme, isDark } = useTheme();
   const { user } = useAuth();
   const { isBookmarked, toggleBookmark } = useBookmarks();
-  const { playEpisode, isPlaying, isLoading, pause, resume, currentEpisode } = useAudio();
+  const { playEpisode, isPlaying, isLoading, pause, resume, currentEpisode, skipForward, skipBackward, getCurrentPosition } = useAudio();
   
   const { episode } = route.params;
   const isCurrentEpisode = currentEpisode?.id === episode.id;
   
   const [playbackSpeed, setPlaybackSpeed] = useState(1);
+  const [currentPosition, setCurrentPosition] = useState(0);
+  const [duration, setDuration] = useState(episode.duration || 0);
 
   useEffect(() => {
     if (episode.audio_url) {
@@ -51,6 +53,20 @@ export function EpisodePlayerScreen() {
       }
     }
   }, [episode.id, episode.audio_url]);
+
+  // Update position periodically
+  useEffect(() => {
+    if (!isCurrentEpisode || !isPlaying) return;
+
+    const interval = setInterval(async () => {
+      const position = await getCurrentPosition();
+      if (position !== null) {
+        setCurrentPosition(position);
+      }
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [isCurrentEpisode, isPlaying, getCurrentPosition]);
 
   const handlePlayPause = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
@@ -69,16 +85,14 @@ export function EpisodePlayerScreen() {
     await toggleBookmark('episode', episode.id);
   };
 
-  const handleSkipBack = () => {
+  const handleSkipBack = async () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    // Skip back 15 seconds - would integrate with audio context
-    Alert.alert('Skip Back', 'Skipped back 15 seconds');
+    await skipBackward(15);
   };
 
-  const handleSkipForward = () => {
+  const handleSkipForward = async () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    // Skip forward 30 seconds - would integrate with audio context
-    Alert.alert('Skip Forward', 'Skipped forward 30 seconds');
+    await skipForward(30);
   };
 
   const handleSpeedChange = () => {
@@ -212,12 +226,17 @@ export function EpisodePlayerScreen() {
               <View 
                 style={[
                   styles.progressFill, 
-                  { backgroundColor: theme.colors.primary, width: '0%' }
+                  { 
+                    backgroundColor: theme.colors.primary, 
+                    width: duration > 0 ? `${(currentPosition / duration) * 100}%` : '0%' 
+                  }
                 ]} 
               />
             </View>
             <View style={styles.timeRow}>
-              <Text style={[styles.timeText, { color: theme.colors.textMuted }]}>0:00</Text>
+              <Text style={[styles.timeText, { color: theme.colors.textMuted }]}>
+                {formatDuration(currentPosition)}
+              </Text>
               <Text style={[styles.timeText, { color: theme.colors.textMuted }]}>
                 {formatDuration(episode.duration)}
               </Text>

@@ -41,6 +41,7 @@ export function VideoPlayerScreen() {
   const controlsTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   
   const videoSource = video?.video_url || liveEvent?.video_url || '';
+  const [playbackError, setPlaybackError] = useState<string | null>(null);
   
   if (!videoSource) {
     return (
@@ -58,13 +59,21 @@ export function VideoPlayerScreen() {
   
   const player = useVideoPlayer(videoSource, (player) => {
     player.loop = false;
-    player.play();
+    if (liveEvent?.status === 'live') {
+      // For live streams, start playing immediately
+      player.play();
+    }
   });
 
   useEffect(() => {
     if (player) {
       const subscription = player.addListener('statusChange', (payload) => {
         setIsLoading(payload.status === 'loading');
+        if (payload.status === 'error') {
+          setPlaybackError('Failed to load video. Please check your connection and try again.');
+        } else {
+          setPlaybackError(null);
+        }
       });
       return () => subscription.remove();
     }
@@ -166,9 +175,28 @@ export function VideoPlayerScreen() {
           nativeControls={false}
         />
         
-        {isLoading && (
+        {isLoading && !playbackError && (
           <View style={styles.loadingOverlay}>
             <ActivityIndicator size="large" color="#fff" />
+            {liveEvent?.status === 'live' && (
+              <Text style={styles.loadingText}>Connecting to live stream...</Text>
+            )}
+          </View>
+        )}
+        
+        {playbackError && (
+          <View style={styles.errorOverlay}>
+            <Ionicons name="alert-circle-outline" size={48} color="#ef4444" />
+            <Text style={styles.errorOverlayText}>{playbackError}</Text>
+            <Pressable 
+              style={styles.retryButton}
+              onPress={() => {
+                setPlaybackError(null);
+                player.replay();
+              }}
+            >
+              <Text style={styles.retryButtonText}>Retry</Text>
+            </Pressable>
           </View>
         )}
         
@@ -259,7 +287,37 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFillObject,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: 'rgba(0,0,0,0.5)',
+    backgroundColor: 'rgba(0,0,0,0.7)',
+  },
+  loadingText: {
+    color: '#fff',
+    marginTop: 16,
+    fontSize: 14,
+  },
+  errorOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0,0,0,0.9)',
+    padding: 40,
+  },
+  errorOverlayText: {
+    color: '#fff',
+    fontSize: 16,
+    textAlign: 'center',
+    marginTop: 16,
+    marginBottom: 24,
+  },
+  retryButton: {
+    backgroundColor: '#047857',
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 8,
+  },
+  retryButtonText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '600',
   },
   controlsOverlay: {
     ...StyleSheet.absoluteFillObject,

@@ -15,6 +15,9 @@ interface AudioContextType {
     togglePlayback: () => Promise<void>;
     playEpisode: (episode: Episode) => Promise<void>;
     clearEpisode: () => Promise<void>;
+    skipForward: (seconds?: number) => Promise<void>;
+    skipBackward: (seconds?: number) => Promise<void>;
+    getCurrentPosition: () => Promise<number | null>;
 }
 
 const AudioContext = createContext<AudioContextType | undefined>(undefined);
@@ -179,6 +182,52 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
         }
     };
 
+    const getCurrentPosition = async (): Promise<number | null> => {
+        try {
+            if (soundRef.current) {
+                const status = await soundRef.current.getStatusAsync();
+                if (status.isLoaded) {
+                    return status.positionMillis / 1000; // Convert to seconds
+                }
+            }
+            return null;
+        } catch (error) {
+            console.error('Error getting position:', error);
+            return null;
+        }
+    };
+
+    const skipForward = async (seconds: number = 30) => {
+        try {
+            if (soundRef.current && currentEpisode) {
+                const status = await soundRef.current.getStatusAsync();
+                if (status.isLoaded) {
+                    const currentPosition = status.positionMillis;
+                    const duration = status.durationMillis || 0;
+                    const newPosition = Math.min(currentPosition + (seconds * 1000), duration);
+                    await soundRef.current.setPositionAsync(newPosition);
+                }
+            }
+        } catch (error) {
+            console.error('Error skipping forward:', error);
+        }
+    };
+
+    const skipBackward = async (seconds: number = 15) => {
+        try {
+            if (soundRef.current && currentEpisode) {
+                const status = await soundRef.current.getStatusAsync();
+                if (status.isLoaded) {
+                    const currentPosition = status.positionMillis;
+                    const newPosition = Math.max(currentPosition - (seconds * 1000), 0);
+                    await soundRef.current.setPositionAsync(newPosition);
+                }
+            }
+        } catch (error) {
+            console.error('Error skipping backward:', error);
+        }
+    };
+
     return (
         <AudioContext.Provider value={{ 
             isPlaying, 
@@ -190,7 +239,10 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
             resume,
             togglePlayback,
             playEpisode,
-            clearEpisode 
+            clearEpisode,
+            skipForward,
+            skipBackward,
+            getCurrentPosition
         }}>
             {children}
         </AudioContext.Provider>

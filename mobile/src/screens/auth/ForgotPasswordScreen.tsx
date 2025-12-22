@@ -16,32 +16,88 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../contexts/AuthContext';
 
-interface LoginScreenProps {
-  onNavigateToSignup: () => void;
-  onNavigateToForgotPassword?: () => void;
+interface ForgotPasswordScreenProps {
+  onNavigateToLogin: () => void;
 }
 
-export function LoginScreen({ onNavigateToSignup, onNavigateToForgotPassword }: LoginScreenProps) {
+export function ForgotPasswordScreen({ onNavigateToLogin }: ForgotPasswordScreenProps) {
   const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
-  const [showPassword, setShowPassword] = useState(false);
-  const { signIn } = useAuth();
+  const [emailSent, setEmailSent] = useState(false);
+  const { resetPassword } = useAuth();
 
-  const handleLogin = async () => {
-    if (!email || !password) {
-      Alert.alert('Error', 'Please fill in all fields');
+  const handleResetPassword = async () => {
+    if (!email) {
+      Alert.alert('Error', 'Please enter your email address');
+      return;
+    }
+
+    // Basic email validation
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      Alert.alert('Error', 'Please enter a valid email address');
       return;
     }
 
     setLoading(true);
-    const { error } = await signIn(email, password);
+    const { error } = await resetPassword(email);
     setLoading(false);
 
     if (error) {
-      Alert.alert('Login Failed', error.message);
+      Alert.alert('Error', error.message || 'Failed to send password reset email. Please try again.');
+    } else {
+      setEmailSent(true);
     }
   };
+
+  if (emailSent) {
+    return (
+      <SafeAreaView style={styles.container} edges={['top']}>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={styles.keyboardView}
+        >
+          <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+            <LinearGradient
+              colors={['#047857', '#059669', '#0d9488']}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={styles.header}
+            >
+              <View style={styles.logoContainer}>
+                <Ionicons name="mail-outline" size={40} color="#fff" />
+              </View>
+              <Text style={styles.title}>Check Your Email</Text>
+              <Text style={styles.subtitle}>We've sent you a password reset link</Text>
+            </LinearGradient>
+
+            <View style={styles.formContainer}>
+              <View style={styles.successContainer}>
+                <View style={styles.successIconContainer}>
+                  <Ionicons name="checkmark-circle" size={64} color="#047857" />
+                </View>
+                <Text style={styles.successTitle}>Email Sent!</Text>
+                <Text style={styles.successMessage}>
+                  We've sent a password reset link to{'\n'}
+                  <Text style={styles.emailText}>{email}</Text>
+                </Text>
+                <Text style={styles.instructions}>
+                  Please check your email and click the link to reset your password. The link will expire in 1 hour.
+                </Text>
+              </View>
+
+              <Pressable
+                style={styles.backButton}
+                onPress={onNavigateToLogin}
+              >
+                <Text style={styles.backButtonText}>Back to Login</Text>
+              </Pressable>
+            </View>
+          </ScrollView>
+        </KeyboardAvoidingView>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -57,10 +113,10 @@ export function LoginScreen({ onNavigateToSignup, onNavigateToForgotPassword }: 
             style={styles.header}
           >
             <View style={styles.logoContainer}>
-              <Text style={styles.logoText}>GKP</Text>
+              <Ionicons name="lock-closed-outline" size={40} color="#fff" />
             </View>
-            <Text style={styles.title}>Welcome Back</Text>
-            <Text style={styles.subtitle}>Sign in to continue</Text>
+            <Text style={styles.title}>Forgot Password?</Text>
+            <Text style={styles.subtitle}>Enter your email to reset it</Text>
           </LinearGradient>
 
           <View style={styles.formContainer}>
@@ -81,46 +137,16 @@ export function LoginScreen({ onNavigateToSignup, onNavigateToForgotPassword }: 
               </View>
             </View>
 
-            <View style={styles.inputGroup}>
-              <View style={styles.passwordHeader}>
-                <Text style={styles.label}>Password</Text>
-                {onNavigateToForgotPassword && (
-                  <Pressable onPress={onNavigateToForgotPassword} disabled={loading}>
-                    <Text style={styles.forgotPasswordText}>Forgot Password?</Text>
-                  </Pressable>
-                )}
-              </View>
-              <View style={styles.inputWrapper}>
-                <Ionicons name="lock-closed-outline" size={20} color="#71717a" style={styles.inputIcon} />
-                <TextInput
-                  style={[styles.input, { flex: 1 }]}
-                  placeholder="Enter your password"
-                  value={password}
-                  onChangeText={setPassword}
-                  secureTextEntry={!showPassword}
-                  autoCapitalize="none"
-                  editable={!loading}
-                />
-                <Pressable onPress={() => setShowPassword(!showPassword)} style={styles.eyeIcon}>
-                  <Ionicons
-                    name={showPassword ? 'eye-outline' : 'eye-off-outline'}
-                    size={20}
-                    color="#71717a"
-                  />
-                </Pressable>
-              </View>
-            </View>
-
             <Pressable
-              style={[styles.loginButton, loading && styles.loginButtonDisabled]}
-              onPress={handleLogin}
+              style={[styles.resetButton, loading && styles.resetButtonDisabled]}
+              onPress={handleResetPassword}
               disabled={loading}
             >
               {loading ? (
                 <ActivityIndicator color="#fff" />
               ) : (
                 <>
-                  <Text style={styles.loginButtonText}>Sign In</Text>
+                  <Text style={styles.resetButtonText}>Send Reset Link</Text>
                   <Ionicons name="arrow-forward" size={20} color="#fff" />
                 </>
               )}
@@ -132,10 +158,10 @@ export function LoginScreen({ onNavigateToSignup, onNavigateToForgotPassword }: 
               <View style={styles.dividerLine} />
             </View>
 
-            <Pressable style={styles.signupPrompt} onPress={onNavigateToSignup}>
-              <Text style={styles.signupPromptText}>
-                Don't have an account?{' '}
-                <Text style={styles.signupLink}>Sign up</Text>
+            <Pressable style={styles.loginPrompt} onPress={onNavigateToLogin}>
+              <Text style={styles.loginPromptText}>
+                Remember your password?{' '}
+                <Text style={styles.loginLink}>Sign in</Text>
               </Text>
             </Pressable>
           </View>
@@ -171,11 +197,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 20,
   },
-  logoText: {
-    fontSize: 32,
-    fontWeight: 'bold',
-    color: '#fff',
-  },
   title: {
     fontSize: 28,
     fontWeight: 'bold',
@@ -198,21 +219,11 @@ const styles = StyleSheet.create({
   inputGroup: {
     marginBottom: 20,
   },
-  passwordHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
   label: {
     fontSize: 14,
     fontWeight: '600',
     color: '#18181b',
-  },
-  forgotPasswordText: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#047857',
+    marginBottom: 8,
   },
   inputWrapper: {
     flexDirection: 'row',
@@ -232,10 +243,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#18181b',
   },
-  eyeIcon: {
-    padding: 8,
-  },
-  loginButton: {
+  resetButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -250,10 +258,10 @@ const styles = StyleSheet.create({
     shadowRadius: 12,
     elevation: 6,
   },
-  loginButtonDisabled: {
+  resetButtonDisabled: {
     opacity: 0.6,
   },
-  loginButtonText: {
+  resetButtonText: {
     fontSize: 16,
     fontWeight: '600',
     color: '#fff',
@@ -273,16 +281,59 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#71717a',
   },
-  signupPrompt: {
+  loginPrompt: {
     alignItems: 'center',
     paddingVertical: 16,
   },
-  signupPromptText: {
+  loginPromptText: {
     fontSize: 14,
     color: '#71717a',
   },
-  signupLink: {
+  loginLink: {
     color: '#047857',
     fontWeight: '600',
   },
+  successContainer: {
+    alignItems: 'center',
+    paddingVertical: 20,
+  },
+  successIconContainer: {
+    marginBottom: 24,
+  },
+  successTitle: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: '#18181b',
+    marginBottom: 12,
+  },
+  successMessage: {
+    fontSize: 16,
+    color: '#52525b',
+    textAlign: 'center',
+    marginBottom: 8,
+    lineHeight: 24,
+  },
+  emailText: {
+    fontWeight: '600',
+    color: '#047857',
+  },
+  instructions: {
+    fontSize: 14,
+    color: '#71717a',
+    textAlign: 'center',
+    lineHeight: 20,
+    marginTop: 16,
+    paddingHorizontal: 20,
+  },
+  backButton: {
+    marginTop: 32,
+    alignItems: 'center',
+    paddingVertical: 16,
+  },
+  backButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#047857',
+  },
 });
+
