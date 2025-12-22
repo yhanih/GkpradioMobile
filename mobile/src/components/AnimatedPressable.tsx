@@ -67,6 +67,9 @@ export function AnimatedPressable({
       onPressOut={handlePressOut}
       onPress={handlePress}
       disabled={disabled}
+      accessible
+      accessibilityRole="button"
+      accessibilityState={{ disabled }}
       {...props}
     >
       <Animated.View
@@ -97,6 +100,8 @@ export function AnimatedCard({
       scaleValue={0.98}
       haptic="light"
       onPress={onPress}
+      accessible
+      accessibilityRole="button"
       {...props}
     >
       {children}
@@ -124,6 +129,8 @@ export function AnimatedButton({
       scaleValue={0.96}
       haptic="medium"
       onPress={onPress}
+      accessible
+      accessibilityRole="button"
       {...props}
     >
       {children}

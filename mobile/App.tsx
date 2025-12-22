@@ -5,6 +5,15 @@ import { NavigationContainer } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
+import * as Sentry from '@sentry/react-native';
+
+// Initialize Sentry for crash reporting
+Sentry.init({
+  dsn: 'https://placeholder-sentry-dsn@sentry.io/placeholder',
+  environment: __DEV__ ? 'development' : 'production',
+  tracesSampleRate: 1.0,
+  enableAutoPerformanceTracing: true,
+});
 
 import { HomeScreen } from './src/screens/HomeScreen';
 import { CommunityScreen } from './src/screens/CommunityScreen';
