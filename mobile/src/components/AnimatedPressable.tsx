@@ -69,7 +69,7 @@ export function AnimatedPressable({
       disabled={disabled}
       accessible
       accessibilityRole="button"
-      accessibilityState={{ disabled }}
+      accessibilityState={{ disabled: disabled ?? false }}
       {...props}
     >
       <Animated.View
