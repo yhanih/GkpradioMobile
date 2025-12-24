@@ -9,6 +9,8 @@ interface ProfileAvatarProps {
   onPress?: () => void;
   showBorder?: boolean;
   isAnonymous?: boolean;
+  accessibilityLabel?: string;
+  accessibilityRole?: string;
 }
 
 const SIZES = {
@@ -25,12 +27,14 @@ const ICON_SIZES = {
   xlarge: 48,
 };
 
-export function ProfileAvatar({ 
-  uri, 
-  size = 'medium', 
-  onPress, 
+export function ProfileAvatar({
+  uri,
+  size = 'medium',
+  onPress,
   showBorder = false,
-  isAnonymous = false 
+  isAnonymous = false,
+  accessibilityLabel,
+  accessibilityRole
 }: ProfileAvatarProps) {
   const dimension = SIZES[size];
   const iconSize = ICON_SIZES[size];
@@ -104,7 +108,12 @@ export function ProfileAvatar({
 
   if (onPress) {
     return (
-      <Pressable onPress={onPress} style={({ pressed }) => pressed && styles.pressed}>
+      <Pressable
+        onPress={onPress}
+        style={({ pressed }) => pressed && styles.pressed}
+        accessibilityLabel={accessibilityLabel}
+        accessibilityRole={accessibilityRole as any || 'button'}
+      >
         {avatarContent()}
       </Pressable>
     );

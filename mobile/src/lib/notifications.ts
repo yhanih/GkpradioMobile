@@ -1,5 +1,6 @@
 import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
+import Constants from 'expo-constants';
 
 // Configure notification behavior
 Notifications.setNotificationHandler({
@@ -29,8 +30,13 @@ export async function registerForPushNotifications(): Promise<string | null> {
     }
 
     // Get the push token
+    const projectId = Constants.expoConfig?.extra?.expoProjectId || 
+                      process.env.EXPO_PUBLIC_EXPO_PROJECT_ID || 
+                      Constants.expoConfig?.extra?.eas?.projectId ||
+                      '3cc18e67-a1d7-4f5a-bcc5-48e3dde78f96'; // Fallback to current value
+    
     const token = await Notifications.getExpoPushTokenAsync({
-      projectId: '3cc18e67-a1d7-4f5a-bcc5-48e3dde78f96', // Replace with your Expo project ID
+      projectId: projectId,
     });
 
     return token.data;

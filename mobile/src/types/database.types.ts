@@ -31,6 +31,7 @@ export interface Database {
           bio: string | null;
           role: string | null;
           is_email_verified: boolean | null;
+          push_token: string | null;
           created_at: string | null;
           updated_at: string | null;
         };
@@ -43,6 +44,7 @@ export interface Database {
           bio?: string | null;
           role?: string | null;
           is_email_verified?: boolean | null;
+          push_token?: string | null;
           created_at?: string | null;
           updated_at?: string | null;
         };
@@ -54,6 +56,7 @@ export interface Database {
           bio?: string | null;
           role?: string | null;
           is_email_verified?: boolean | null;
+          push_token?: string | null;
           updated_at?: string | null;
         };
       };

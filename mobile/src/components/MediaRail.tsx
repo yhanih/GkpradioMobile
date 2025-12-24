@@ -1,7 +1,8 @@
 import React from 'react';
-import { View, Text, ScrollView, StyleSheet, Pressable, Image, Dimensions } from 'react-native';
+import { View, Text, ScrollView, StyleSheet, Pressable, Dimensions } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
+import { OptimisticImage } from './OptimisticImage';
 
 interface MediaItem {
     id: string;
@@ -52,12 +53,16 @@ export function MediaRail({ title, items, type, onPressItem, onPressViewAll }: M
                             Haptics.selectionAsync();
                             onPressItem(item);
                         }}
+                        accessibilityRole="button"
+                        accessibilityLabel={`${type === 'video' ? 'Watch' : 'Listen to'} ${item.title}`}
+                        accessibilityHint={`${type === 'video' ? 'Plays' : 'Plays'} ${item.title}`}
                     >
                         <View style={[styles.imageContainer, type === 'video' && styles.videoImageContainer]}>
-                            <Image
-                                source={{ uri: item.imageUrl }}
+                            <OptimisticImage
+                                source={{ uri: item.imageUrl || '' }}
                                 style={styles.image}
                                 resizeMode="cover"
+                                fallbackIcon={type === 'video' ? 'videocam-outline' : 'musical-notes-outline'}
                             />
                             {/* Play Overlay */}
                             <View style={styles.playOverlay}>

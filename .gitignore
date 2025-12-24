@@ -4,7 +4,8 @@ node_modules/
 mobile/node_modules/
 
 # Expo
-mobile/.expo/
+.expo/
+# mobile/.expo/ - deprecated, root .expo/ is used
 mobile/dist/
 mobile/npm-debug.*
 mobile/*.jks

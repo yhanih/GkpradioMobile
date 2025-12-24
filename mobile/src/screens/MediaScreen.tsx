@@ -169,7 +169,7 @@ export function MediaScreen() {
 
   const filterByCategory = <T extends { category?: string | null }>(items: T[]): T[] => {
     if (selectedCategory === 'all') return items;
-    return items.filter(item => 
+    return items.filter(item =>
       item.category?.toLowerCase().includes(selectedCategory.toLowerCase())
     );
   };
@@ -191,14 +191,14 @@ export function MediaScreen() {
         'Please sign in to save bookmarks.',
         [
           { text: 'Cancel', style: 'cancel' },
-          { text: 'Sign In', onPress: () => navigation.navigate('Login' as any) }
+          { text: 'Sign In', onPress: () => navigation.navigate('Profile') }
         ]
       );
       return;
     }
-    
+
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    
+
     const anim = getBookmarkAnimation(contentId);
     Animated.sequence([
       Animated.spring(anim, {
@@ -214,7 +214,7 @@ export function MediaScreen() {
         friction: 10,
       }),
     ]).start();
-    
+
     await toggleBookmark(contentType, contentId);
   };
 
@@ -223,21 +223,21 @@ export function MediaScreen() {
 
   // Apply search filter if search query exists
   const searchFilteredPodcasts = searchQuery.trim()
-    ? filteredPodcasts.filter(p => 
-        p.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        (p.description && p.description.toLowerCase().includes(searchQuery.toLowerCase())) ||
-        (p.author && p.author.toLowerCase().includes(searchQuery.toLowerCase()))
-      )
+    ? filteredPodcasts.filter(p =>
+      p.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (p.description && p.description.toLowerCase().includes(searchQuery.toLowerCase())) ||
+      (p.author && p.author.toLowerCase().includes(searchQuery.toLowerCase()))
+    )
     : filteredPodcasts;
 
   const searchFilteredVideos = searchQuery.trim()
-    ? filteredVideos.filter(v => 
-        v.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        (v.description && v.description.toLowerCase().includes(searchQuery.toLowerCase()))
-      )
+    ? filteredVideos.filter(v =>
+      v.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (v.description && v.description.toLowerCase().includes(searchQuery.toLowerCase()))
+    )
     : filteredVideos;
 
-  const featuredContent = activeTab === 'podcasts' 
+  const featuredContent = activeTab === 'podcasts'
     ? searchFilteredPodcasts.find(p => p.is_featured) || searchFilteredPodcasts[0]
     : searchFilteredVideos.find(v => v.is_featured) || searchFilteredVideos[0];
 
@@ -302,7 +302,7 @@ export function MediaScreen() {
               </Pressable>
             </View>
           ) : (
-            <Pressable 
+            <Pressable
               style={[styles.searchButton, { backgroundColor: theme.colors.surface }]}
               onPress={() => {
                 Haptics.selectionAsync();
@@ -318,15 +318,15 @@ export function MediaScreen() {
       <ScrollView
         style={styles.scrollView}
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={{ 
+        contentContainerStyle={{
           paddingTop: contentTopPadding,
-          paddingBottom: contentBottomPadding 
+          paddingBottom: contentBottomPadding
         }}
         refreshControl={
-          <RefreshControl 
-            refreshing={refreshing} 
-            onRefresh={onRefresh} 
-            tintColor={theme.colors.primary} 
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor={theme.colors.primary}
           />
         }
       >
@@ -371,24 +371,24 @@ export function MediaScreen() {
                 >
                   <View style={styles.heroContent}>
                     <View style={styles.heroBadge}>
-                      <Ionicons 
-                        name={activeTab === 'podcasts' ? 'mic' : 'videocam'} 
-                        size={12} 
-                        color="#fff" 
+                      <Ionicons
+                        name={activeTab === 'podcasts' ? 'mic' : 'videocam'}
+                        size={12}
+                        color="#fff"
                       />
                       <Text style={styles.heroBadgeText}>
                         {activeTab === 'podcasts' ? 'FEATURED EPISODE' : 'FEATURED VIDEO'}
                       </Text>
                     </View>
-                    
+
                     <Text style={styles.heroTitle} numberOfLines={2}>
                       {featuredContent.title}
                     </Text>
-                    
+
                     {'author' in featuredContent && featuredContent.author && (
                       <Text style={styles.heroAuthor}>{featuredContent.author}</Text>
                     )}
-                    
+
                     <View style={styles.heroMeta}>
                       <View style={styles.heroMetaItem}>
                         <Ionicons name="time-outline" size={14} color="rgba(255,255,255,0.7)" />
@@ -406,7 +406,7 @@ export function MediaScreen() {
                   </View>
 
                   {/* Play Button */}
-                  <Animated.View 
+                  <Animated.View
                     style={[
                       styles.heroPlayButton,
                       { transform: [{ scale: playButtonPulse }] }
@@ -431,7 +431,7 @@ export function MediaScreen() {
             <Animated.View
               style={[
                 styles.tabIndicator,
-                { 
+                {
                   backgroundColor: theme.colors.primary,
                   transform: [{ translateX: tabIndicatorTranslate }],
                 },
@@ -558,7 +558,7 @@ export function MediaScreen() {
               <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>
                 Recent Videos
               </Text>
-              <Pressable 
+              <Pressable
                 onPress={() => {
                   Haptics.selectionAsync();
                   setSelectedCategory('all');
@@ -601,8 +601,8 @@ export function MediaScreen() {
                       {formatDuration(video.duration)}
                     </Text>
                   </View>
-                  <Text 
-                    style={[styles.continueTitle, { color: theme.colors.text }]} 
+                  <Text
+                    style={[styles.continueTitle, { color: theme.colors.text }]}
                     numberOfLines={2}
                   >
                     {video.title}
@@ -620,7 +620,7 @@ export function MediaScreen() {
               <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>
                 Recent Episodes
               </Text>
-              <Pressable 
+              <Pressable
                 onPress={() => {
                   Haptics.selectionAsync();
                   setSelectedCategory('all');
@@ -663,8 +663,8 @@ export function MediaScreen() {
                       {formatDuration(podcast.duration)}
                     </Text>
                   </View>
-                  <Text 
-                    style={[styles.continueTitle, { color: theme.colors.text }]} 
+                  <Text
+                    style={[styles.continueTitle, { color: theme.colors.text }]}
                     numberOfLines={2}
                   >
                     {podcast.title}
@@ -680,8 +680,8 @@ export function MediaScreen() {
           <View style={styles.errorContainer}>
             <Ionicons name="alert-circle-outline" size={48} color={theme.colors.error} />
             <Text style={[styles.errorText, { color: theme.colors.error }]}>{error}</Text>
-            <Pressable 
-              style={[styles.retryButton, { backgroundColor: theme.colors.primary }]} 
+            <Pressable
+              style={[styles.retryButton, { backgroundColor: theme.colors.primary }]}
               onPress={fetchData}
             >
               <Text style={styles.retryButtonText}>Retry</Text>
@@ -767,16 +767,16 @@ export function MediaScreen() {
                           </Text>
                         </View>
                       </View>
-                      <Pressable 
+                      <Pressable
                         style={styles.bookmarkButton}
                         onPress={() => handleBookmarkToggle('episode', podcast.id)}
                         hitSlop={10}
                       >
                         <Animated.View style={{ transform: [{ scale: bookmarkAnimations[podcast.id] || 1 }] }}>
-                          <Ionicons 
-                            name={isBookmarked('episode', podcast.id) ? 'bookmark' : 'bookmark-outline'} 
-                            size={22} 
-                            color={isBookmarked('episode', podcast.id) ? theme.colors.primary : theme.colors.textMuted} 
+                          <Ionicons
+                            name={isBookmarked('episode', podcast.id) ? 'bookmark' : 'bookmark-outline'}
+                            size={22}
+                            color={isBookmarked('episode', podcast.id) ? theme.colors.primary : theme.colors.textMuted}
                           />
                         </Animated.View>
                       </Pressable>
@@ -845,7 +845,7 @@ export function MediaScreen() {
                           <Text style={[styles.videoTitle, { color: theme.colors.text, flex: 1 }]} numberOfLines={2}>
                             {video.title}
                           </Text>
-                          <Pressable 
+                          <Pressable
                             style={styles.videoBookmarkButton}
                             onPress={(e) => {
                               e.stopPropagation();
@@ -854,10 +854,10 @@ export function MediaScreen() {
                             hitSlop={10}
                           >
                             <Animated.View style={{ transform: [{ scale: bookmarkAnimations[video.id] || 1 }] }}>
-                              <Ionicons 
-                                name={isBookmarked('video', video.id) ? 'bookmark' : 'bookmark-outline'} 
-                                size={20} 
-                                color={isBookmarked('video', video.id) ? theme.colors.primary : theme.colors.textMuted} 
+                              <Ionicons
+                                name={isBookmarked('video', video.id) ? 'bookmark' : 'bookmark-outline'}
+                                size={20}
+                                color={isBookmarked('video', video.id) ? theme.colors.primary : theme.colors.textMuted}
                               />
                             </Animated.View>
                           </Pressable>

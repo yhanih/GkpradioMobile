@@ -10,9 +10,11 @@ import { CommunityThread, User } from '../types/database.types';
 import { useAuth } from '../contexts/AuthContext';
 import { useBookmarks } from '../contexts/BookmarksContext';
 import * as Haptics from 'expo-haptics';
+import { OfflineQueue } from '../lib/offlineQueue';
 import { NewPostModal } from '../components/NewPostModal';
 import { COMMUNITY_CATEGORIES, getCategoryIcon, getCategoryLabel, Category } from '../constants/categories';
 import { RootStackParamList } from '../types/navigation';
+import { useToast } from '../components/Toast';
 
 type SortOption = 'newest' | 'popular' | 'discussed';
 
@@ -28,6 +30,7 @@ export function CommunityScreen() {
   const navigation = useNavigation<CommunityNavProp>();
   const { user } = useAuth();
   const { isBookmarked, toggleBookmark, refreshBookmarks } = useBookmarks();
+  const { showToast } = useToast();
   const [activeCategory, setActiveCategory] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [showSearch, setShowSearch] = useState(false);
@@ -40,11 +43,11 @@ export function CommunityScreen() {
   const [blockedUserIds, setBlockedUserIds] = useState<string[]>([]);
   const [showNewPostModal, setShowNewPostModal] = useState(false);
   const [showSortMenu, setShowSortMenu] = useState(false);
-  const [likeAnimations] = useState<{[key: string]: Animated.Value}>({});
+  const [likeAnimations] = useState<{ [key: string]: Animated.Value }>({});
   const fabScale = useRef(new Animated.Value(1)).current;
   const scrollY = useRef(new Animated.Value(0)).current;
   const sortByRef = useRef(sortBy);
-  
+
   useEffect(() => {
     sortByRef.current = sortBy;
   }, [sortBy]);
@@ -53,7 +56,73 @@ export function CommunityScreen() {
     fetchBlockedUsers();
     fetchData();
     fetchStats();
+    processOfflineQueue();
   }, [user, sortBy]);
+
+  const processOfflineQueue = async () => {
+    if (!user) return;
+
+    try {
+      await OfflineQueue.processQueue(async (action) => {
+        try {
+          if (action.type === 'like') {
+            const { thread_id, action: likeAction } = action.payload;
+            if (likeAction === 'like') {
+              const { error } = await supabase
+                .from('community_thread_likes')
+                .upsert({ thread_id, user_id: user.id }, { onConflict: 'thread_id,user_id' });
+              if (error) throw error;
+
+              // Update like count
+              const { data: thread } = await supabase
+                .from('communitythreads')
+                .select('like_count')
+                .eq('id', thread_id)
+                .single();
+
+              if (thread) {
+                await supabase
+                  .from('communitythreads')
+                  .update({ like_count: (thread.like_count || 0) + 1 })
+                  .eq('id', thread_id);
+              }
+            } else {
+              await supabase
+                .from('community_thread_likes')
+                .delete()
+                .eq('thread_id', thread_id)
+                .eq('user_id', user.id);
+
+              // Update like count
+              const { data: thread } = await supabase
+                .from('communitythreads')
+                .select('like_count')
+                .eq('id', thread_id)
+                .single();
+
+              if (thread) {
+                await supabase
+                  .from('communitythreads')
+                  .update({ like_count: Math.max((thread.like_count || 0) - 1, 0) })
+                  .eq('id', thread_id);
+              }
+            }
+            return true;
+          } else if (action.type === 'bookmark') {
+            // Bookmarks are handled by BookmarksContext, so we'll just mark as processed
+            // The context will handle sync on its own
+            return true;
+          }
+          return false;
+        } catch (error) {
+          console.error('Error processing queued action:', error);
+          return false;
+        }
+      });
+    } catch (error) {
+      console.error('Error processing offline queue:', error);
+    }
+  };
 
   useEffect(() => {
     const threadsChannel = supabase
@@ -70,8 +139,8 @@ export function CommunityScreen() {
             });
           } else if (payload.eventType === 'UPDATE') {
             setThreads(prev => {
-              const updated = prev.map(t => 
-                t.id === payload.new.id 
+              const updated = prev.map(t =>
+                t.id === payload.new.id
                   ? { ...t, ...payload.new }
                   : t
               );
@@ -98,11 +167,11 @@ export function CommunityScreen() {
               .select('like_count')
               .eq('id', threadId)
               .single();
-            
+
             if (data) {
               setThreads(prev => {
-                const updated = prev.map(t => 
-                  t.id === threadId 
+                const updated = prev.map(t =>
+                  t.id === threadId
                     ? { ...t, like_count: data.like_count }
                     : t
                 );
@@ -246,7 +315,7 @@ export function CommunityScreen() {
 
   const handleLike = async (threadId: string, currentlyLiked: boolean) => {
     if (!user) {
-      Alert.alert('Authentication Required', 'Please sign in to like posts.');
+      showToast('Please sign in to like posts', 'info');
       return;
     }
 
@@ -279,12 +348,6 @@ export function CommunityScreen() {
           .eq('thread_id', threadId)
           .eq('user_id', user.id);
         if (error) throw error;
-
-        // Update like_count in communitythreads table
-        await supabase
-          .from('communitythreads')
-          .update({ like_count: newCount })
-          .eq('id', threadId);
       } else {
         const { error } = await supabase
           .from('community_thread_likes')
@@ -302,7 +365,21 @@ export function CommunityScreen() {
         return;
       }
       console.error('Error toggling like:', error);
-      // Revert optimistic update on error
+
+      // If it's a network error, queue for offline sync
+      const isNetworkError = !error?.code || error?.message?.includes('network') || error?.message?.includes('fetch');
+      if (isNetworkError && user) {
+        // Queue action for when connection is restored
+        await OfflineQueue.addAction('like', {
+          thread_id: threadId,
+          user_id: user.id,
+          action: currentlyLiked ? 'unlike' : 'like',
+        });
+        // Keep optimistic update - will sync when online
+        return;
+      }
+
+      // Revert optimistic update on error (validation errors, etc.)
       setThreads(prev => prev.map(t => {
         if (t.id === threadId) {
           return {
@@ -313,12 +390,13 @@ export function CommunityScreen() {
         }
         return t;
       }));
+      showToast('Unable to update like. Please try again.', 'error');
     }
   };
 
   const handleReport = async (targetType: 'thread' | 'comment', targetId: string) => {
     if (!user) {
-      Alert.alert('Authentication Required', 'Please sign in to report content.');
+      showToast('Please sign in to report content', 'info');
       return;
     }
 
@@ -340,15 +418,15 @@ export function CommunityScreen() {
               }, { onConflict: 'reporter_id,target_type,target_id' });
 
               if (error) throw error;
-              Alert.alert('Success', 'Thank you for your report. We will review it shortly.');
+              showToast('Thank you for your report. We will review it shortly.', 'success');
               Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
             } catch (error: any) {
               if (error?.code === '23505') {
-                Alert.alert('Already Reported', 'You have already reported this content.');
+                showToast('You have already reported this content', 'info');
                 return;
               }
               console.error('Error reporting content:', error);
-              Alert.alert('Error', 'Unable to submit report. Please try again.');
+              showToast('Unable to submit report. Please try again.', 'error');
             }
           }
         }
@@ -388,15 +466,15 @@ export function CommunityScreen() {
                 setBlockedUserIds([...blockedUserIds, blockedUserId]);
               }
               fetchData();
-              Alert.alert('Success', 'User has been blocked.');
+              showToast('User has been blocked', 'success');
               Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
             } catch (error: any) {
               if (error?.code === '23505') {
-                Alert.alert('Already Blocked', 'You have already blocked this user.');
+                showToast('You have already blocked this user', 'info');
                 return;
               }
               console.error('Error blocking user:', error);
-              Alert.alert('Error', 'Unable to block user. Please try again.');
+              showToast('Unable to block user. Please try again.', 'error');
             }
           }
         }
@@ -412,7 +490,7 @@ export function CommunityScreen() {
 
   const handleBookmarkToggle = async (threadId: string) => {
     if (!user) {
-      Alert.alert('Sign In Required', 'Please sign in to save posts.');
+      showToast('Please sign in to save posts', 'info');
       return;
     }
 
@@ -420,12 +498,28 @@ export function CommunityScreen() {
 
     try {
       const result = await toggleBookmark('thread', threadId);
-      if (result !== isBookmarked('thread', threadId)) {
+      // toggleBookmark returns the NEW state
+      showToast(result ? 'Post saved' : 'Post removed from bookmarks', 'success', 2000);
+      if (result) {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error toggling bookmark:', error);
-      Alert.alert('Error', 'Unable to save post. Please try again.');
+
+      // If it's a network error, queue for offline sync
+      const isNetworkError = !error?.code || error?.message?.includes('network') || error?.message?.includes('fetch');
+      if (isNetworkError && user) {
+        const currentlyBookmarked = isBookmarked('thread', threadId);
+        await OfflineQueue.addAction('bookmark', {
+          thread_id: threadId,
+          user_id: user.id,
+          action: currentlyBookmarked ? 'remove' : 'add',
+        });
+        showToast('Action saved offline', 'info');
+        return;
+      }
+
+      showToast('Unable to save post. Please try again.', 'error');
     }
   };
 
@@ -443,7 +537,7 @@ export function CommunityScreen() {
 
   const handleDeletePost = async (threadId: string, threadUserId: string) => {
     if (!user || user.id !== threadUserId) {
-      Alert.alert('Not Allowed', 'You can only delete your own posts.');
+      showToast('You can only delete your own posts', 'warning');
       return;
     }
 
@@ -456,8 +550,9 @@ export function CommunityScreen() {
           text: 'Delete',
           style: 'destructive',
           onPress: async () => {
+            // Optimistic update
             setThreads(prev => prev.filter(t => t.id !== threadId));
-            
+
             try {
               const { error } = await supabase
                 .from('communitythreads')
@@ -466,12 +561,13 @@ export function CommunityScreen() {
 
               if (error) throw error;
 
+              showToast('Post deleted successfully', 'success');
               Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
               fetchStats();
             } catch (error) {
               console.error('Error deleting post:', error);
-              Alert.alert('Error', 'Unable to delete post. Please try again.');
-              fetchData();
+              showToast('Unable to delete post. Please try again.', 'error');
+              fetchData(); // Restore the post
             }
           }
         }
@@ -500,14 +596,14 @@ export function CommunityScreen() {
     return `${Math.floor(diffInSeconds / 86400)}d ago`;
   };
 
-  const filteredThreads = activeCategory === 'all' 
-    ? threads 
+  const filteredThreads = activeCategory === 'all'
+    ? threads
     : threads.filter(t => t.category === activeCategory);
 
   const renderCategoryTab = (category: typeof COMMUNITY_CATEGORIES[0]) => {
     const isActive = activeCategory === category.id;
-    const count = category.id === 'all' 
-      ? threads.length 
+    const count = category.id === 'all'
+      ? threads.length
       : threads.filter(t => t.category === category.id).length;
 
     return (
@@ -549,19 +645,19 @@ export function CommunityScreen() {
     navigation.navigate('UserProfile', { userId, user: userData || undefined });
   };
 
-  const filteredBySearch = searchQuery.trim() 
-    ? filteredThreads.filter(t => 
-        t.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        t.content.toLowerCase().includes(searchQuery.toLowerCase())
-      )
+  const filteredBySearch = searchQuery.trim()
+    ? filteredThreads.filter(t =>
+      t.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      t.content.toLowerCase().includes(searchQuery.toLowerCase())
+    )
     : filteredThreads;
 
   const pinnedThreads = filteredBySearch.filter(t => t.ispinned);
   const regularThreads = filteredBySearch.filter(t => !t.ispinned);
 
   const renderThread = (thread: ThreadWithUser, isPinned = false) => {
-    const authorName = thread.is_anonymous 
-      ? 'Anonymous' 
+    const authorName = thread.is_anonymous
+      ? 'Anonymous'
       : thread.users?.fullname || thread.users?.username || 'Member';
     const avatarUrl = thread.is_anonymous ? null : thread.users?.avatarurl;
 
@@ -578,7 +674,7 @@ export function CommunityScreen() {
           </View>
         )}
         <View style={styles.cardHeader}>
-          <Pressable 
+          <Pressable
             style={styles.authorInfo}
             onPress={(e) => {
               e.stopPropagation();
@@ -620,15 +716,15 @@ export function CommunityScreen() {
 
         <View style={styles.cardFooter}>
           <View style={styles.engagementStats}>
-            <Pressable 
+            <Pressable
               style={styles.statButton}
               onPress={() => handleLike(thread.id, thread.user_has_liked || false)}
             >
               <Animated.View style={{ transform: [{ scale: getLikeAnimation(thread.id) }] }}>
-                <Ionicons 
-                  name={thread.user_has_liked ? "heart" : "heart-outline"} 
-                  size={18} 
-                  color={thread.user_has_liked ? "#ef4444" : "#71717a"} 
+                <Ionicons
+                  name={thread.user_has_liked ? "heart" : "heart-outline"}
+                  size={18}
+                  color={thread.user_has_liked ? "#ef4444" : "#71717a"}
                 />
               </Animated.View>
               <Text style={[styles.statText, thread.user_has_liked && styles.statTextActive]}>
@@ -639,7 +735,7 @@ export function CommunityScreen() {
               <Ionicons name="chatbubble-outline" size={18} color="#71717a" />
               <Text style={styles.statText}>{thread.comment_count || 0}</Text>
             </View>
-            <Pressable 
+            <Pressable
               style={styles.statButton}
               onPress={() => handleSharePost(thread)}
             >
@@ -647,14 +743,14 @@ export function CommunityScreen() {
             </Pressable>
           </View>
           <View style={styles.cardActions}>
-            <Pressable 
-              onPress={() => handleBookmarkToggle(thread.id)} 
+            <Pressable
+              onPress={() => handleBookmarkToggle(thread.id)}
               style={styles.actionButton}
             >
-              <Ionicons 
-                name={isBookmarked('thread', thread.id) ? "bookmark" : "bookmark-outline"} 
-                size={16} 
-                color={isBookmarked('thread', thread.id) ? "#047857" : "#a1a1aa"} 
+              <Ionicons
+                name={isBookmarked('thread', thread.id) ? "bookmark" : "bookmark-outline"}
+                size={16}
+                color={isBookmarked('thread', thread.id) ? "#047857" : "#a1a1aa"}
               />
             </Pressable>
             {user && user.id === thread.userid && (
@@ -708,7 +804,7 @@ export function CommunityScreen() {
             onChangeText={setSearchQuery}
           />
           {searchQuery.length > 0 && (
-            <Pressable 
+            <Pressable
               onPress={() => setSearchQuery('')}
               style={styles.searchButton}
             >
@@ -746,8 +842,8 @@ export function CommunityScreen() {
           </Pressable>
         </View>
 
-        <ScrollView 
-          horizontal 
+        <ScrollView
+          horizontal
           showsHorizontalScrollIndicator={false}
           style={styles.categoryScroll}
           contentContainerStyle={styles.categoryScrollContent}
@@ -756,7 +852,7 @@ export function CommunityScreen() {
         </ScrollView>
 
         <View style={styles.sortContainer}>
-          <Pressable 
+          <Pressable
             style={styles.sortButton}
             onPress={() => {
               Haptics.selectionAsync();
@@ -767,7 +863,7 @@ export function CommunityScreen() {
             <Text style={styles.sortButtonText}>{getSortLabel()}</Text>
             <Ionicons name="chevron-down" size={14} color="#71717a" />
           </Pressable>
-          
+
           {showSortMenu && (
             <View style={styles.sortMenu}>
               {(['newest', 'popular', 'discussed'] as SortOption[]).map(option => (
@@ -806,10 +902,10 @@ export function CommunityScreen() {
             </View>
           ) : filteredBySearch.length === 0 ? (
             <View style={styles.emptyState}>
-              <Ionicons 
-                name={getCategoryIcon(activeCategory)} 
-                size={48} 
-                color="#d4d4d8" 
+              <Ionicons
+                name={getCategoryIcon(activeCategory)}
+                size={48}
+                color="#d4d4d8"
               />
               <Text style={styles.emptyStateTitle}>
                 No {activeCategory === 'all' ? 'posts' : getCategoryLabel(activeCategory).toLowerCase()} yet
@@ -817,7 +913,7 @@ export function CommunityScreen() {
               <Text style={styles.emptyStateText}>
                 Be the first to share with the community
               </Text>
-              <Pressable 
+              <Pressable
                 style={styles.emptyStateButton}
                 onPress={() => setShowNewPostModal(true)}
               >
@@ -849,9 +945,13 @@ export function CommunityScreen() {
       <NewPostModal
         visible={showNewPostModal}
         onClose={() => setShowNewPostModal(false)}
-        onSuccess={() => {
-          fetchData();
-          fetchStats();
+        onSuccess={async () => {
+          try {
+            await Promise.all([fetchData(), fetchStats()]);
+            showToast('Post shared successfully!', 'success');
+          } catch (error) {
+            showToast('Post created but failed to refresh. Pull down to refresh.', 'warning');
+          }
         }}
       />
     </SafeAreaView>

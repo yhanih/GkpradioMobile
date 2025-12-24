@@ -90,15 +90,15 @@ export function NewPostModal({ visible, onClose, onSuccess }: NewPostModalProps)
             if (error) throw error;
 
             Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-            Alert.alert('Success', `Your ${selectedCategory.label.toLowerCase()} post has been shared!`);
+            // Success will be shown via toast from parent component
 
             resetForm();
             onSuccess();
             onClose();
         } catch (error) {
             console.error('Error creating post:', error);
-            Alert.alert('Error', 'Unable to create post. Please try again.');
             Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+            throw error; // Let parent handle error display
         } finally {
             setLoading(false);
         }

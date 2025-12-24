@@ -27,6 +27,7 @@ import { HeroPlayerCard } from '../components/HeroPlayerCard';
 import { MediaRail } from '../components/MediaRail';
 import { StatsStrip } from '../components/StatsStrip';
 import { MinistryRail } from '../components/MinistryRail';
+import { SkeletonList } from '../components/SkeletonLoader';
 
 type HomeNavigationProp = CompositeNavigationProp<
   BottomTabNavigationProp<MainTabParamList, 'Home'>,
@@ -121,6 +122,8 @@ export function HomeScreen() {
           <ProfileAvatar 
             size="medium"
             onPress={() => navigation.navigate('Profile')}
+            accessibilityLabel="Open profile"
+            accessibilityRole="button"
           />
         </View>
 
@@ -133,71 +136,107 @@ export function HomeScreen() {
         >
           <View style={{ height: 12 }} />
 
-          {/* Welcome Text */}
-          <Animated.View style={[styles.welcomeSection, { opacity: fadeAnim, transform: [{ translateY: fadeAnim.interpolate({ inputRange: [0, 1], outputRange: [20, 0] }) }] }]}>
-            <Text style={styles.welcomeTitle}>Welcome to</Text>
-            <Text style={styles.welcomeBrand}>God Kingdom Principles</Text>
-            <Text style={styles.welcomeBrandSuffix}>Radio.</Text>
-            <Text style={styles.welcomeSubtitle}>
-              Join our community of believers in daily inspiration, powerful testimonies, and life-changing conversations.
-            </Text>
-          </Animated.View>
+          {loading ? (
+            <>
+              {/* Welcome Text Skeleton */}
+              <View style={styles.welcomeSection}>
+                <View style={{ height: 28, width: '60%', backgroundColor: '#e4e4e7', borderRadius: 8, marginBottom: 8 }} />
+                <View style={{ height: 28, width: '80%', backgroundColor: '#e4e4e7', borderRadius: 8, marginBottom: 8 }} />
+                <View style={{ height: 22, width: '100%', backgroundColor: '#e4e4e7', borderRadius: 8, marginBottom: 12 }} />
+              </View>
 
-          {/* Hero Section - The Radio */}
-          <HeroPlayerCard
-            isPlaying={isPlaying}
-            onTogglePlay={handleTogglePlay}
-            currentShowTitle="Praise & Worship Music"
-            currentShowHost="10:00 PM - 12:00 AM • Auto-DJ"
-            schedule={schedule}
-            onPress={() => navigation.navigate('Live')}
-          />
+              {/* Hero Section Skeleton */}
+              <View style={{ marginHorizontal: 20, marginBottom: 24 }}>
+                <View style={{ height: 200, backgroundColor: '#e4e4e7', borderRadius: 16 }} />
+              </View>
 
-          {/* Brand Stats */}
-          <StatsStrip />
+              {/* Stats Skeleton */}
+              <View style={{ flexDirection: 'row', justifyContent: 'space-around', marginHorizontal: 20, marginBottom: 32 }}>
+                {[1, 2, 3].map((i) => (
+                  <View key={i} style={{ alignItems: 'center' }}>
+                    <View style={{ height: 40, width: 40, backgroundColor: '#e4e4e7', borderRadius: 20, marginBottom: 8 }} />
+                    <View style={{ height: 12, width: 60, backgroundColor: '#e4e4e7', borderRadius: 6 }} />
+                  </View>
+                ))}
+              </View>
 
-          {/* Ministry Fields (Brand Element from Web) */}
-          <MinistryRail onPressItem={(item) => navigation.navigate('Community')} />
+              {/* Media Rails Skeleton */}
+              <SkeletonList count={1} type="media" />
+              <SkeletonList count={1} type="media" />
+            </>
+          ) : (
+            <>
+              {/* Welcome Text */}
+              <Animated.View style={[styles.welcomeSection, { opacity: fadeAnim, transform: [{ translateY: fadeAnim.interpolate({ inputRange: [0, 1], outputRange: [20, 0] }) }] }]}>
+                <Text style={styles.welcomeTitle}>Welcome to</Text>
+                <Text style={styles.welcomeBrand}>God Kingdom Principles</Text>
+                <Text style={styles.welcomeBrandSuffix}>Radio.</Text>
+                <Text style={styles.welcomeSubtitle}>
+                  Join our community of believers in daily inspiration, powerful testimonies, and life-changing conversations.
+                </Text>
+              </Animated.View>
 
-          {/* Podcast Rail */}
-          <MediaRail
-            title="Faith on Demand"
-            type="podcast"
-            items={featuredEpisodes.map(ep => ({
-              id: ep.id,
-              title: ep.title,
-              subtitle: new Date(ep.created_at || new Date().toISOString()).toLocaleDateString(),
-              imageUrl: ep.thumbnail_url || 'https://images.unsplash.com/photo-1478737270239-2f02b77ac6d5?w=400&q=80',
-              duration: ep.duration ? `${Math.floor(ep.duration / 60)}m` : undefined
-            }))}
-            onPressItem={(item) => {
-              const episode = featuredEpisodes.find(ep => ep.id === item.id);
-              if (episode) {
-                navigation.navigate('EpisodePlayer', { episode });
-              }
-            }}
-            onPressViewAll={() => navigation.navigate('Media')}
-          />
+              {/* Hero Section - The Radio */}
+              <HeroPlayerCard
+                isPlaying={isPlaying}
+                onTogglePlay={handleTogglePlay}
+                currentShowTitle="Praise & Worship Music"
+                currentShowHost="10:00 PM - 12:00 AM • Auto-DJ"
+                schedule={schedule}
+                onPress={() => navigation.navigate('Live')}
+              />
 
-          {/* Video Rail */}
-          <MediaRail
-            title="Watch & Learn"
-            type="video"
-            items={recentVideos.map(vid => ({
-              id: vid.id,
-              title: vid.title,
-              subtitle: 'GKP TV',
-              imageUrl: vid.thumbnail_url || 'https://images.unsplash.com/photo-1516280440614-6697288d5d38?w=400&q=80',
-              duration: vid.duration ? `${Math.floor(vid.duration / 60)}m` : undefined
-            }))}
-            onPressItem={(item) => {
-              const video = recentVideos.find(vid => vid.id === item.id);
-              if (video) {
-                navigation.navigate('VideoPlayer', { video });
-              }
-            }}
-            onPressViewAll={() => navigation.navigate('Media')}
-          />
+              {/* Brand Stats */}
+              <StatsStrip />
+
+              {/* Ministry Fields (Brand Element from Web) */}
+              <MinistryRail onPressItem={(item) => navigation.navigate('Community')} />
+
+              {/* Podcast Rail */}
+              {featuredEpisodes.length > 0 ? (
+                <MediaRail
+                  title="Faith on Demand"
+                  type="podcast"
+                  items={featuredEpisodes.map(ep => ({
+                    id: ep.id,
+                    title: ep.title,
+                    subtitle: new Date(ep.created_at || new Date().toISOString()).toLocaleDateString(),
+                    imageUrl: ep.thumbnail_url || undefined,
+                    duration: ep.duration ? `${Math.floor(ep.duration / 60)}m` : undefined
+                  }))}
+                  onPressItem={(item) => {
+                    const episode = featuredEpisodes.find(ep => ep.id === item.id);
+                    if (episode) {
+                      navigation.navigate('EpisodePlayer', { episode });
+                    }
+                  }}
+                  onPressViewAll={() => navigation.navigate('Media')}
+                />
+              ) : null}
+
+              {/* Video Rail */}
+              {recentVideos.length > 0 ? (
+                <MediaRail
+                  title="Watch & Learn"
+                  type="video"
+                  items={recentVideos.map(vid => ({
+                    id: vid.id,
+                    title: vid.title,
+                    subtitle: 'GKP TV',
+                    imageUrl: vid.thumbnail_url || undefined,
+                    duration: vid.duration ? `${Math.floor(vid.duration / 60)}m` : undefined
+                  }))}
+                  onPressItem={(item) => {
+                    const video = recentVideos.find(vid => vid.id === item.id);
+                    if (video) {
+                      navigation.navigate('VideoPlayer', { video });
+                    }
+                  }}
+                  onPressViewAll={() => navigation.navigate('Media')}
+                />
+              ) : null}
+            </>
+          )}
 
         </ScrollView>
       </SafeAreaView>

@@ -6,14 +6,20 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
 import * as Sentry from '@sentry/react-native';
+import Constants from 'expo-constants';
 
-// Initialize Sentry for crash reporting
-Sentry.init({
-  dsn: 'https://placeholder-sentry-dsn@sentry.io/placeholder',
-  environment: __DEV__ ? 'development' : 'production',
-  tracesSampleRate: 1.0,
-  enableAutoPerformanceTracing: true,
-});
+// Initialize Sentry for crash reporting (only if DSN is configured)
+const sentryDsn = Constants.expoConfig?.extra?.sentryDsn || process.env.EXPO_PUBLIC_SENTRY_DSN;
+if (sentryDsn && sentryDsn !== 'placeholder' && !sentryDsn.includes('placeholder')) {
+  Sentry.init({
+    dsn: sentryDsn,
+    environment: __DEV__ ? 'development' : 'production',
+    tracesSampleRate: __DEV__ ? 1.0 : 0.1,
+    enableAutoPerformanceTracing: true,
+  });
+} else {
+  console.log('Sentry not configured - crash reporting disabled. Set EXPO_PUBLIC_SENTRY_DSN to enable.');
+}
 
 import { HomeScreen } from './src/screens/HomeScreen';
 import { CommunityScreen } from './src/screens/CommunityScreen';
@@ -31,6 +37,7 @@ import { AudioProvider } from './src/contexts/AudioContext';
 import { AuthProvider, useAuth } from './src/contexts/AuthContext';
 import { ThemeProvider, useTheme } from './src/contexts/ThemeContext';
 import { BookmarksProvider } from './src/contexts/BookmarksContext';
+import { ToastProvider } from './src/components/Toast';
 import { LoginScreen } from './src/screens/auth/LoginScreen';
 import { SignupScreen } from './src/screens/auth/SignupScreen';
 import { ForgotPasswordScreen } from './src/screens/auth/ForgotPasswordScreen';
@@ -254,7 +261,9 @@ export default function App() {
         <AuthProvider>
           <BookmarksProvider>
             <AudioProvider>
-              <AppWithTheme />
+              <ToastProvider>
+                <AppWithTheme />
+              </ToastProvider>
             </AudioProvider>
           </BookmarksProvider>
         </AuthProvider>

@@ -25,6 +25,8 @@ import { RootStackParamList } from '../types/navigation';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { supabase } from '../lib/supabase';
+import { registerForPushNotifications } from '../lib/notifications';
+import * as Notifications from 'expo-notifications';
 
 type HubNavigationProp = NativeStackNavigationProp<RootStackParamList>;
 
@@ -148,9 +150,39 @@ export function HubScreen() {
       await AsyncStorage.setItem(NOTIFICATION_KEY, value.toString());
       setNotificationsEnabled(value);
       Haptics.selectionAsync();
+
+      // Register/deregister push notifications
+      if (value) {
+        // Register for push notifications
+        const token = await registerForPushNotifications();
+        if (token && user) {
+          // Store token in user profile (optional - can be done via Supabase function)
+          try {
+            await supabase
+              .from('users')
+              .update({ push_token: token })
+              .eq('id', user.id);
+          } catch (error) {
+            console.log('Note: Push token storage not critical for basic functionality');
+          }
+        }
+      } else {
+        // User disabled notifications - clear any stored token
+        if (user) {
+          try {
+            await supabase
+              .from('users')
+              .update({ push_token: null })
+              .eq('id', user.id);
+          } catch (error) {
+            console.log('Note: Push token cleanup not critical');
+          }
+        }
+      }
     } catch (error) {
       console.error('Error saving notification preference:', error);
-      Alert.alert('Error', 'Could not save notification preference');
+      // Don't show error alert - preference is still saved locally
+      // Push notification registration is optional enhancement
     }
   };
 
