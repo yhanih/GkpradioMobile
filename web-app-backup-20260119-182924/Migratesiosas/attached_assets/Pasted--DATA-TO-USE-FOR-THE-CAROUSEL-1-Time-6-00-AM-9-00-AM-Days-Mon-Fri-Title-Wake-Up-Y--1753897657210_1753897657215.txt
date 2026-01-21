@@ -1,0 +1,92 @@
+ DATA TO USE FOR THE CAROUSEL:
+
+1. Time: 6:00 AM – 9:00 AM  
+   Days: Mon–Fri  
+   Title: Wake Up Y’all  
+   Type: Talk  
+   Description: Start your morning with faith-driven conversation, motivation, and music for the soul.  
+   Host: GKPRadio Morning Team
+
+2. Time: 9:00 AM – 10:00 AM  
+   Days: Mon–Fri  
+   Title: Kingdom Teachings with Dr. Myles Munroe  
+   Type: Talk  
+   Description: Powerful kingdom-focused teaching on purpose, leadership, and spiritual authority.  
+   Host: Dr. Myles Munroe
+
+3. Time: 10:00 AM – 12:00 PM  
+   Days: Mon–Fri  
+   Title: Lunch Time with Jane Peter  
+   Type: Talk  
+   Description: A lunchtime session to inspire and engage through biblical truths and stories.  
+   Host: Jane Peter
+
+4. Time: 12:00 PM – 1:00 PM  
+   Days: Mon–Fri  
+   Title: Marriage Talk with Dustin Scott  
+   Type: Marriage  
+   Description: Strengthen your relationship with honest conversations about love, faith, and growth.  
+   Host: Dustin Scott
+
+5. Time: 1:00 PM – 2:00 PM  
+   Days: Mon–Fri  
+   Title: Testimonies with Stan Lewis  
+   Type: Testimony  
+   Description: Real-life stories of transformation and God’s faithfulness.  
+   Host: Stan Lewis
+
+6. Time: 2:00 PM – 3:00 PM  
+   Days: Mon–Fri  
+   Title: Bragging on My Kid(s) & Relatives  
+   Type: Family  
+   Description: Celebrate the joys of family and give thanks for loved ones doing amazing things.  
+   Host: Community Submission
+
+7. Time: 3:00 PM – 5:00 PM  
+   Days: Mon–Fri  
+   Title: 4-Point Connect to Heaven by Evan  
+   Type: Faith  
+   Description: A four-point biblical breakdown to elevate your connection with God.  
+   Host: Evan
+
+8. Time: 5:00 PM – 6:00 PM  
+   Days: Mon–Fri  
+   Title: Sheffield Family Life Center by Pastor George Westlake  
+   Type: Worship  
+   Description: Inspirational teaching and worship from the Sheffield Family Life Center.  
+   Host: Pastor George Westlake
+
+9. Time: 6:00 PM – 7:00 PM  
+   Days: Mon–Fri  
+   Title: Youth Corner by Melissa Burt  
+   Type: Youth  
+   Description: Real talk, music, and testimonies tailored for the next generation of believers.  
+   Host: Melissa Burt
+
+10. Time: 7:00 PM – 8:00 PM  
+    Days: Mon–Fri  
+    Title: Let’s Talk Money by Steve Richards  
+    Type: Finance  
+    Description: Financial wisdom rooted in scripture. Build wealth, break debt, and steward well.  
+    Host: Steve Richards
+
+11. Time: 8:00 PM – 9:00 PM  
+    Days: Mon–Fri  
+    Title: My Spouse, My Heart  
+    Type: Marriage  
+    Description: Couples share their journey of love, trials, and triumph through God’s design.  
+    Host: Jeff & Suzie Spencer
+
+12. Time: 9:00 PM – 10:00 PM  
+    Days: Mon–Fri  
+    Title: Meditation & Relaxation by Joyce Smith  
+    Type: Meditation  
+    Description: Unwind with peaceful devotionals, scriptures, and guided meditations.  
+    Host: Joyce Smith
+
+13. Time: 10:00 PM – 12:00 AM  
+    Days: Mon–Fri  
+    Title: Praise & Worship Music  
+    Type: Music  
+    Description: A soul-stirring mix of contemporary praise and deep worship.  
+    Host: Auto-DJ

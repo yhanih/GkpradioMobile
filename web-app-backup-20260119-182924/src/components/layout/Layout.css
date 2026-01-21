@@ -1,0 +1,28 @@
+.app-layout {
+    min-height: 100vh;
+    background-color: var(--background);
+    position: relative;
+}
+
+/* Main Content Area */
+.main-content {
+    width: 100%;
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 1rem;
+    color: rgba(112, 112, 112, 1); /* Darker gray text for better readability */
+
+    /* Desktop: Navbar is at TOP (approx 100px space) */
+    padding-top: 120px;
+    padding-bottom: 2rem;
+}
+
+/* Responsive Breakpoints */
+@media (max-width: 768px) {
+    .main-content {
+        /* Mobile: Navbar is at BOTTOM */
+        padding-top: 2rem;
+        padding-bottom: 120px;
+        /* Space for floating pill at bottom */
+    }
+}

@@ -1,0 +1,102 @@
+Alright — let’s go deep into **Step 1: Connect Replit to GitHub**.
+
+---
+
+## 🛠️ STEP 1: CONNECT REPLIT TO GITHUB (IN DETAIL)
+
+### 🎯 Goal:
+
+Let Replit sync your code with a GitHub repository, so all changes you make can later be deployed to IONOS.
+
+---
+
+### ✅ Requirements Before You Start:
+
+* A **GitHub account** (sign up at [github.com](https://github.com) if you don’t have one).
+* A **Replit project** already created with your website files.
+* Your project should be stored in a **private** or **public GitHub repository** (you can create it from Replit).
+
+---
+
+### 🔁 Process Overview:
+
+Replit integrates Git like this:
+
+```
+Replit → GitHub → IONOS
+```
+
+---
+
+### 🧭 FULL STEP-BY-STEP:
+
+#### 📌 A. Open Your Replit Project
+
+1. Go to [replit.com](https://replit.com) and log in.
+2. Open the project you want to connect to GitHub (your website).
+
+---
+
+#### 📌 B. Initialize Git in Replit
+
+If you’ve never used Git on this project:
+
+1. Click the **Git icon** (left sidebar — usually under the "Tools" tab).
+2. You’ll see an option: **“Connect to GitHub”** or **“Create Git Repo”**.
+
+---
+
+#### 📌 C. Authorize Replit with GitHub
+
+1. If it’s your first time:
+
+   * Click **“Connect to GitHub”**
+   * Replit will redirect you to GitHub.
+   * Authorize Replit to access your GitHub account (read/write access to repos).
+
+2. If already connected:
+
+   * It’ll ask you to choose or create a repository.
+
+---
+
+#### 📌 D. Create the GitHub Repo
+
+1. Replit will show a form:
+
+   * **Repo name** → (e.g., `gkp-radio`)
+   * **Visibility** → Choose **public** or **private**
+2. Click **“Create Repository”**
+3. Replit now links your project to that GitHub repo.
+
+---
+
+#### 📌 E. Commit & Push Code
+
+Now you’ll see the Git sidebar with options:
+
+* `Unstaged Changes`
+* Buttons: **Commit**, **Push**
+
+To push your project:
+
+1. Add a message in the **commit message** box:
+   Example: `Initial commit`
+2. Click **Commit**
+3. Then click **Push**
+
+This sends your full codebase from Replit to GitHub.
+
+---
+
+### 📂 BONUS: Verify on GitHub
+
+1. Go to [github.com](https://github.com)
+2. Open the repo you just created (e.g., `yourname/gkp-radio`)
+3. You should see all your files there.
+
+✅ **Congrats!** Your Replit code is now version-controlled and GitHub-connected.
+
+---
+
+Let’s move to **Step 2: Enable Git Deploy in IONOS** when you’re ready. Want to do that now?

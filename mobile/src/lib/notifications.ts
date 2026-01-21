@@ -30,11 +30,11 @@ export async function registerForPushNotifications(): Promise<string | null> {
     }
 
     // Get the push token
-    const projectId = Constants.expoConfig?.extra?.expoProjectId || 
-                      process.env.EXPO_PUBLIC_EXPO_PROJECT_ID || 
-                      Constants.expoConfig?.extra?.eas?.projectId ||
-                      '3cc18e67-a1d7-4f5a-bcc5-48e3dde78f96'; // Fallback to current value
-    
+    const projectId = process.env.EXPO_PUBLIC_EXPO_PROJECT_ID ||
+      Constants.expoConfig?.extra?.expoProjectId ||
+      Constants.expoConfig?.extra?.eas?.projectId ||
+      '3cc18e67-a1d7-4f5a-bcc5-48e3dde78f96'; // Fallback
+
     const token = await Notifications.getExpoPushTokenAsync({
       projectId: projectId,
     });

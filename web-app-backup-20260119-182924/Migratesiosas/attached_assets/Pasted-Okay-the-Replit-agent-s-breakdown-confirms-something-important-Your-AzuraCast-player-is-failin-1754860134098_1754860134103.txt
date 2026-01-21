@@ -1,0 +1,96 @@
+Okay — the Replit agent’s breakdown confirms something important:
+
+Your **AzuraCast player is failing for two separate reasons**:
+
+1. **The API calls are wrong** — it’s trying to hit
+
+   ```
+   https://74.208.102.89/api/nowplaying/1
+   ```
+
+   when your real AzuraCast API lives at
+
+   ```
+   http://74.208.102.89:8081/api/nowplaying/1
+   ```
+
+   That `:8081` is missing, which means the request goes to the wrong place → 404 error.
+
+2. **The stream proxy URL is wrong** — your backend is trying to get the MP3 from
+
+   ```
+   https://74.208.102.89/listen/gkp_radio/radio.mp3
+   ```
+
+   but your station is on **port 8081**, so the real URL should be something like:
+
+   ```
+   http://74.208.102.89:8081/listen/gkp_radio/radio.mp3
+   ```
+
+---
+
+## **How to fix AzuraCast in your Replit app**
+
+We’ll need to fix **two spots**:
+
+### 1️⃣ Update API URL in your Replit secrets
+
+Right now, your `AZURACAST_API_URL` is probably set to:
+
+```
+https://74.208.102.89
+```
+
+You need to change it to:
+
+```
+http://74.208.102.89:8081
+```
+
+Then restart the app.
+
+---
+
+### 2️⃣ Fix your stream URL in the backend
+
+In your backend code (maybe `AudioContext.tsx` or a config file), find the `listen` stream URL and add the port `:8081` so it looks like:
+
+```
+http://74.208.102.89:8081/listen/gkp_radio/radio.mp3
+```
+
+This is the actual playable stream from AzuraCast.
+
+---
+
+## **Testing the Fix**
+
+Before touching Replit, test both URLs in your browser:
+
+* **API Test**
+  Visit:
+
+  ```
+  http://74.208.102.89:8081/api/nowplaying/1
+  ```
+
+  If your station is running, you’ll see JSON with the current track.
+
+* **Stream Test**
+  Visit:
+
+  ```
+  http://74.208.102.89:8081/listen/gkp_radio/radio.mp3
+  ```
+
+  If working, it will start playing music in your browser or prompt a download.
+
+---
+
+If both work, your Replit app will work after you update the values.
+
+---
+
+If you want, I can give you **the exact Replit secret and backend changes line-by-line** so you can just paste them in and not worry about where to add the port.
+Do you want me to prepare that for you?

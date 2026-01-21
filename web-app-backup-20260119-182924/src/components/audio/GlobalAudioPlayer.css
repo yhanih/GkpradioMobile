@@ -1,0 +1,225 @@
+.global-player-container {
+    position: fixed;
+    bottom: 1.5rem;
+    left: 0;
+    right: 0;
+    z-index: 1000;
+    display: flex;
+    justify-content: center;
+    pointer-events: none;
+    transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.global-player {
+    pointer-events: auto;
+    display: grid;
+    grid-template-columns: 1.5fr auto 1.5fr;
+    /* More space for info/actions */
+    align-items: center;
+    padding: 8px 12px 8px 20px;
+    gap: 2rem;
+    /* Exactly like navbar */
+    height: 64px;
+    /* More substantial media presence */
+    /* Exactly like navbar */
+    width: 760px;
+    /* Definitive proportional width */
+    /* Proportional but content-aware */
+
+    background: rgba(13, 13, 13, 0.85);
+    backdrop-filter: blur(32px) saturate(200%);
+    -webkit-backdrop-filter: blur(32px) saturate(200%);
+
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    box-shadow:
+        0 32px 64px -16px rgba(0, 0, 0, 0.6),
+        inset 0 1px 1px rgba(255, 255, 255, 0.15);
+
+    border-radius: 100px;
+    transition: all 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.global-player:hover {
+    background: rgba(8, 8, 8, 0.9);
+    border-color: rgba(255, 255, 255, 0.12);
+    transform: translateY(-2px);
+}
+
+.player-track-info {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding-left: 8px;
+    flex: 1;
+    min-width: 0;
+}
+
+.player-art-wrap {
+    width: 44px;
+    height: 44px;
+    border-radius: 12px;
+    /* Matching the logo orb and badge style */
+    overflow: hidden;
+    flex-shrink: 0;
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    position: relative;
+    background: #000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.player-art-wrap img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.player-text {
+    flex: 1;
+    min-width: 0;
+}
+
+.player-title {
+    color: white;
+    font-size: 0.9rem;
+    font-weight: 700;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.player-artist {
+    color: var(--text-muted);
+    font-size: 0.75rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.player-controls {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+}
+
+.player-actions-extra {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 0.5rem;
+    /* Navbar secondary gap */
+    padding-right: 4px;
+    flex: 1;
+    /* Stretch to balance left info */
+}
+
+.icon-btn {
+    background: none;
+    border: none;
+    color: rgba(255, 255, 255, 0.5);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s;
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+}
+
+.icon-btn:hover {
+    color: white;
+    background: rgba(255, 255, 255, 0.05);
+}
+
+.player-play-btn {
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    background: white;
+    border: none;
+    color: black;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.2s;
+    box-shadow: 0 8px 16px rgba(0, 0, 0, 0.3);
+}
+
+.player-play-btn:hover {
+    transform: scale(1.1);
+    background: #fff;
+    box-shadow: 0 12px 24px rgba(0, 0, 0, 0.4);
+}
+
+.player-skip-btn {
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s;
+    padding: 8px;
+}
+
+.player-skip-btn:hover {
+    color: white;
+    transform: translateY(-1px);
+}
+
+.player-waveform {
+    display: none;
+    /* Waveform removed from main flow to keep center strictly centered */
+}
+
+.wave-bar {
+    width: 3px;
+    background: var(--primary);
+    border-radius: 10px;
+}
+
+.wave-bar.animating {
+    animation: wave 1s ease-in-out infinite;
+}
+
+@keyframes wave {
+    0% {
+        height: 4px;
+    }
+
+    50% {
+        height: 16px;
+    }
+
+    100% {
+        height: 4px;
+    }
+}
+
+@media (max-width: 768px) {
+    .global-player-container {
+        bottom: 1rem;
+    }
+
+    .global-player {
+        width: 90%;
+        padding: 6px;
+        gap: 0.5rem;
+        height: auto;
+        border-radius: 20px;
+    }
+
+    .player-track-info {
+        gap: 8px;
+    }
+
+    .player-art-wrap {
+        width: 40px;
+        height: 40px;
+    }
+}

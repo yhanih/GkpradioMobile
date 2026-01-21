@@ -1,0 +1,73 @@
+bash -lc '
+set -euo pipefail
+GH_USER="yhanih"
+GH_TOKEN="your_new_token_here"
+REPO_SLUG="yhanih/GKP-radio"
+APP_DIR="/srv/gkpradio"
+APP_PORT="3001"
+
+# Install dependencies
+apt-get update -y
+apt-get install -y git ffmpeg postgresql postgresql-contrib
+
+# Configure Git to use the token
+git config --global url."https://${GH_USER}:${GH_TOKEN}@github.com/".insteadOf "https://github.com/"
+
+# Clone or update the repo
+if [ ! -d "$APP_DIR/.git" ]; then
+  mkdir -p "$APP_DIR"
+  git clone "https://github.com/${REPO_SLUG}.git" "$APP_DIR"
+fi
+git -C "$APP_DIR" fetch --all --prune
+
+# Checkout the default branch
+DEFAULT_BRANCH="$(git -C "$APP_DIR" remote show origin | awk "/HEAD branch/ {print \$NF}")"
+git -C "$APP_DIR" checkout "$DEFAULT_BRANCH"
+git -C "$APP_DIR" reset --hard "origin/${DEFAULT_BRANCH}"
+
+# Install and build
+cd "$APP_DIR"
+npm ci
+npm run build
+
+# Setup PostgreSQL DB and user
+sudo -u postgres psql -tc "SELECT 1 FROM pg_database WHERE datname = '\''gkp_radio'\'';" | grep -q 1 || sudo -u postgres createdb gkp_radio
+sudo -u postgres psql -tc "SELECT 1 FROM pg_roles WHERE rolname = '\''gkp_user'\'';" | grep -q 1 || sudo -u postgres psql -c "CREATE USER gkp_user WITH ENCRYPTED PASSWORD '\''change_me'\'';"
+sudo -u postgres psql -c "GRANT ALL PRIVILEGES ON DATABASE gkp_radio TO gkp_user" >/dev/null
+
+# Create env file if missing
+if [ ! -f .env.production ]; then
+cat > .env.production <<EOF
+NODE_ENV=production
+PORT=${APP_PORT}
+DATABASE_URL=postgresql://gkp_user:change_me@localhost:5432/gkp_radio
+SESSION_SECRET=$(openssl rand -hex 32)
+JWT_SECRET=$(openssl rand -hex 32)
+EOF
+fi
+
+# Configure PM2
+cat > ecosystem.config.js <<EOF
+module.exports = {
+  apps: [{
+    name: "gkpradio-app",
+    script: "dist/index.js",
+    env: { NODE_ENV: "production", PORT: "${APP_PORT}" },
+    max_memory_restart: "1G",
+    autorestart: true
+  }]
+}
+EOF
+
+# Run DB migration
+npm run db:push || true
+
+# Start with PM2
+pm2 start ecosystem.config.js --env production
+pm2 save
+sleep 2
+curl -sI "http://127.0.0.1:${APP_PORT}" | head -n 1 || true
+
+echo
+echo "✔ App started. Temporary direct URL:  http://74.208.102.89:${APP_PORT}"
+'

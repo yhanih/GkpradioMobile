@@ -1,0 +1,203 @@
+Replit Agent Prompt — “Add spam and bot protection”
+
+Context
+
+Stack: Node.js + Express backend, React + Vite frontend, PostgreSQL + Drizzle.
+
+Public forms include: sign up, login, contact/prayer requests, comments, newsletter.
+
+Goal: reduce spam and scripted abuse without hurting real users.
+
+Tasks
+
+Dependencies
+
+Install: express-rate-limit, express-slow-down, helmet, cookie-parser
+
+If using cookies: csurf
+
+Frontend Turnstile (pick one): @marsidev/react-turnstile or use the Turnstile script tag
+
+Security middleware (server)
+
+app.set('trust proxy', 1)
+
+helmet()
+
+Global rate limit: 100 requests per 15 minutes per IP
+
+Stricter limit for auth and public post routes: 10 requests per 10 minutes per IP
+
+express-slow-down: after 3 quick hits in 10 seconds, add 500ms delay per request
+
+Honeypot + timing guard (server)
+
+In every public POST handler, reject if a hidden field hp is non-empty (422)
+
+Require a renderAt timestamp from the client and reject if submitted in under 3 seconds from render time
+
+Keep a short-lived cache by IP+content hash for 60 seconds and drop duplicates
+
+CAPTCHA with Cloudflare Turnstile
+
+Add Turnstile widget to React forms
+
+On submit, include the token with the request
+
+On server, verify token with https://challenges.cloudflare.com/turnstile/v0/siteverify
+
+Read secrets from env: TURNSTILE_SITE_KEY, TURNSTILE_SECRET_KEY
+
+If keys are missing, skip Turnstile but keep rate limits + honeypot active
+
+CSRF (only if cookie sessions)
+
+Add csurf with cookie mode and return the token to the client
+
+Ensure forms send the CSRF token header
+
+Feature flag
+
+Use ANTI_SPAM_ENABLED=true to toggle all defenses
+
+Log reasons when rejecting (rate limited, honeypot, timing, bad captcha)
+
+Tests (create a /dev/spam-check route or use an existing public POST route)
+
+Submitting with filled hp returns 422
+
+Submitting in <3s returns 400 with reason:"too_fast"
+
+Bad or missing Turnstile token returns 403
+
+Hitting the route 15 times fast returns 429
+
+Docs
+
+Add a “Spam and Bot Protection” section to README with:
+
+Env vars
+
+How to add Turnstile to new forms
+
+Example curl tests
+
+Exact server snippets
+
+// server/security.ts
+import helmet from "helmet";
+import rateLimit from "express-rate-limit";
+import slowDown from "express-slow-down";
+import crypto from "node:crypto";
+import type { Request, Response, NextFunction } from "express";
+
+export function baseSecurity(app) {
+  app.set("trust proxy", 1);
+  app.use(helmet());
+
+  const globalLimiter = rateLimit({ windowMs: 15*60*1000, max: 100, standardHeaders: true, legacyHeaders: false });
+  app.use(globalLimiter);
+
+  const speed = slowDown({ windowMs: 10*1000, delayAfter: 3, delayMs: 500 });
+  app.use(speed);
+}
+
+export const strictLimiter = rateLimit({ windowMs: 10*60*1000, max: 10, standardHeaders: true, legacyHeaders: false });
+
+const recentSubmissions = new Map<string, number>();
+function key(req: Request, bodyHash: string) {
+  const ip = req.ip ?? "unknown";
+  return `${ip}:${bodyHash}`;
+}
+export function submissionGuards(req: Request, res: Response, next: NextFunction) {
+  const { hp, renderAt } = req.body ?? {};
+  if (typeof hp === "string" && hp.trim() !== "") return res.status(422).json({ ok:false, reason:"honeypot" });
+
+  const now = Date.now();
+  const ts = Number(renderAt);
+  if (!Number.isFinite(ts) || now - ts < 3000) return res.status(400).json({ ok:false, reason:"too_fast" });
+
+  const bodyHash = crypto.createHash("sha256").update(JSON.stringify(req.body)).digest("hex");
+  const k = key(req, bodyHash);
+  const last = recentSubmissions.get(k);
+  if (last && now - last < 60*1000) return res.status(409).json({ ok:false, reason:"duplicate" });
+  recentSubmissions.set(k, now);
+  setTimeout(() => recentSubmissions.delete(k), 90*1000);
+  next();
+}
+
+// Turnstile verification helper
+export async function verifyTurnstile(token?: string) {
+  const secret = process.env.TURNSTILE_SECRET_KEY;
+  if (!process.env.ANTI_SPAM_ENABLED) return { ok: true, skipped: "flag_off" };
+  if (!secret) return { ok: true, skipped: "no_secret" };
+  if (!token) return { ok: false, code: "missing_token" };
+
+  const resp = await fetch("https://challenges.cloudflare.com/turnstile/v0/siteverify", {
+    method: "POST",
+    headers: { "content-type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({ secret, response: token })
+  });
+  const data = await resp.json();
+  return { ok: !!data.success, data };
+}
+
+
+Usage on a public route:
+
+// server/routes/contact.ts
+import { Router } from "express";
+import { strictLimiter, submissionGuards, verifyTurnstile } from "../security";
+
+const r = Router();
+r.post("/contact", strictLimiter, submissionGuards, async (req, res) => {
+  const turnstileToken = req.headers["cf-turnstile-token"] || req.body["cf-turnstile-token"];
+  const check = await verifyTurnstile(typeof turnstileToken === "string" ? turnstileToken : undefined);
+  if (!check.ok) return res.status(403).json({ ok:false, reason:"captcha_failed", meta:check.data });
+
+  // …handle the valid submission…
+  res.json({ ok:true });
+});
+
+export default r;
+
+
+Frontend Turnstile example (React)
+
+// src/components/TurnstileGate.tsx
+import { useState } from "react";
+import Turnstile from "@marsidev/react-turnstile";
+
+export default function TurnstileGate({ onToken }: { onToken: (t: string)=>void }) {
+  const siteKey = import.meta.env.VITE_TURNSTILE_SITE_KEY;
+  return (
+    <div>
+      <Turnstile siteKey={siteKey} onSuccess={onToken} />
+      <input type="hidden" name="renderAt" value={Date.now()} />
+      <input type="text" name="hp" autoComplete="off" className="hidden" tabIndex={-1} />
+    </div>
+  );
+}
+
+
+Environment
+
+Add secrets in Replit:
+
+ANTI_SPAM_ENABLED=true
+
+TURNSTILE_SITE_KEY=<from Cloudflare>
+
+TURNSTILE_SECRET_KEY=<from Cloudflare>
+
+Acceptance criteria
+
+Real users can submit normally
+
+Bots with no JS fail timing and honeypot checks
+
+Scripted floods hit 429 and slowdown
+
+Bad or missing Turnstile token gives 403
+
+README updated with setup and tests

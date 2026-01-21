@@ -1,0 +1,112 @@
+Step-by-Step Reasoning
+
+Mismatch Identified
+
+DB column: userid
+
+Code reference: authorid
+→ This mismatch causes undefined values in the mapping step.
+
+Failure Propagation
+
+Mapping threads.map(t => t.authorid) returns all undefined.
+
+That leads to authorIds = [].
+
+No users fetched → usersMap = {}.
+
+Rendering receives author: null → broken UI state.
+
+Proposed Code Changes
+
+Replace every authorid reference with userid in supabase-data.ts.
+
+Specifically:
+
+// Line 459
+const authorIds = threads.map(t => t.userid).filter(Boolean);
+
+// Line 518
+author: usersMap[thread.userid] || null,
+
+
+Review getThreadById (around line 548) and other similar fetch helpers (getComments, getThreadWithReplies, etc.) for the same pattern.
+
+Expected Behavior After Fix
+
+authorIds properly populated.
+
+Batch fetch returns actual users.
+
+usersMap is populated.
+
+Each thread attaches its author object correctly.
+
+UI correctly shows avatars, names, likes, replies.
+
+🔍 Alternative Perspectives
+
+Before committing this fix, here are two complementary checks to make it bulletproof:
+
+Schema Evolution Guardrail
+If authorid was once valid but renamed to userid, you might have stale code paths elsewhere. Consider doing a quick global search in the repo:
+
+grep -R "authorid" client/src/
+
+
+→ Fix all occurrences in one sweep, not just supabase-data.ts.
+
+Type Safety Enhancement
+If you're using TypeScript, add/update your Thread interface to prevent this mismatch in the future:
+
+interface Thread {
+  id: string;
+  userid: string;
+  // Remove or mark authorid as deprecated
+}
+
+
+That way, if someone references authorid again, the compiler will catch it.
+
+🧪 Practical Test Plan
+
+Community Page Render
+
+Load /community.
+
+Threads should display authors (name + avatar).
+
+Thread Detail Page
+
+Click a thread.
+
+Check that replies load with proper user data.
+
+Functional Interactions
+
+Like/unlike a post.
+
+Add a comment.
+
+Verify user names persist through reloads.
+
+Edge Cases
+
+Threads from users who have since been deleted.
+
+Threads with no replies.
+
+Ensure null authors are gracefully handled.
+
+📝 Action Plan Summary
+Step	Task
+1️⃣	Apply the two line changes (Line 459 & 518)
+2️⃣	Search and replace authorid globally
+3️⃣	Update TypeScript types for safety
+4️⃣	Run regression tests for community UI
+5️⃣	Deploy and verify on staging
+
+Final Verdict:
+✅ This is the correct fix.
+🧰 Add a global search & TS type check to future-proof it.
+🚀 Once patched, this will likely resolve broken author display, like/reply, and spouse tagging features in one stroke.

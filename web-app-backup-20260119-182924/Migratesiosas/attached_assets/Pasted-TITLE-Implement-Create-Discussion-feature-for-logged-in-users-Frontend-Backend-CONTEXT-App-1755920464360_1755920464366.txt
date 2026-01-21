@@ -1,0 +1,103 @@
+TITLE: Implement "Create Discussion" feature for logged-in users (Frontend + Backend)
+
+CONTEXT
+- App: GKP Radio — digital media platform with community discussions.
+- Stack: React + TypeScript frontend; Express.js + PostgreSQL + Drizzle ORM backend.
+- Current state: Users can log in, but discussion creation is not fully implemented. We want to add a clean workflow so logged-in users can create new discussions tied to categories.
+
+PRIMARY OBJECTIVE
+Add a "Create Discussion" workflow:
+- Visible only to authenticated users.
+- Accessible from a button above the hero section.
+- Opens a dialog with a form for subject, category selection, and message content.
+- Submits to the backend via a protected API route, persists to DB, updates frontend list optimistically.
+
+UI / FRONTEND REQUIREMENTS
+1. Placement
+   - Add a "New Discussion" button above the hero section (only visible if user is logged in).
+   - If user is not logged in, show a tooltip or disabled button (“Log in to start a discussion”).
+
+2. Form (DialogContent)
+   - Fields:
+     - Subject (text input, required, max 150 chars).
+     - Category (dropdown / select) → prefilled with our existing preset list of categories (fetched from DB or static enum).
+     - Content (textarea or rich text; required, min 10 chars).
+   - Validation: Use Zod + React Hook Form for client-side validation.
+   - UX:
+     - Submit button disabled while submitting.
+     - Show loading spinner state.
+     - Show error toast if API call fails.
+     - On success, close dialog + show success toast.
+
+3. Auth Integration
+   - Ensure API call includes user’s auth (JWT Bearer token or cookie with `credentials: 'include'`).
+   - If token is missing/expired, redirect to login flow.
+
+4. Optimistic UI
+   - Immediately add the new discussion to the UI list on success (or optimistically before server confirmation with rollback on error).
+
+BACKEND REQUIREMENTS
+1. API Route
+   - `POST /api/v2/discussions`
+   - Auth required: use existing middleware to verify JWT/cookie and extract userId.
+   - Request body:
+     ```json
+     {
+       "title": "string",
+       "category": "string",
+       "content": "string"
+     }
+     ```
+   - Validation with Zod/Joi (title max 150 chars, content min 10 chars, category must be from allowed set).
+   - Response:
+     ```json
+     {
+       "id": 123,
+       "title": "...",
+       "category": "...",
+       "content": "...",
+       "authorId": 456,
+       "createdAt": "2025-08-22T...",
+       "slug": "new-discussion-slug"
+     }
+     ```
+
+2. Database (Drizzle ORM)
+   - Extend `discussions` table to include:
+     - `id serial pk`
+     - `title text not null`
+     - `category text not null`
+     - `content text not null`
+     - `author_id int not null fk users.id`
+     - `slug text unique`
+     - `created_at timestamptz default now()`
+   - Migration script required.
+
+3. Security & Hardening
+   - Only logged-in users can create.
+   - Sanitize content (prevent XSS if rich text allowed).
+   - Rate limiting (per user, per IP).
+   - Return consistent error format (`{code, message, details?}`).
+
+TESTING & VERIFICATION
+- Unit test: input validation (short/long titles, invalid category).
+- Integration test: logged-in user can successfully create → 200 response.
+- Integration test: logged-out user → 401.
+- Frontend E2E test:
+  1) Log in as test user.
+  2) Click “New Discussion”.
+  3) Fill form (subject + category + content).
+  4) Submit → verify new discussion appears in list.
+
+DELIVERABLES
+- Updated frontend component with button + dialog.
+- Backend route `/api/v2/discussions` with validation + auth.
+- Drizzle migration for `category` column.
+- Tests (unit + integration + E2E).
+- README update with how to create discussions in dev.
+
+ACCEPTANCE CRITERIA
+- Authenticated users can open dialog, submit subject/category/content, and discussion is persisted.
+- Non-authenticated users cannot access the feature.
+- Discussions list updates immediately after creation.
+- Validation + error handling implemented both frontend and backend.

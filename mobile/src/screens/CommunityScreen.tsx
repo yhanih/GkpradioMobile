@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { View, Text, ScrollView, StyleSheet, Pressable, ActivityIndicator, RefreshControl, Alert, Image, TextInput, Animated, Share } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -33,7 +33,7 @@ export function CommunityScreen() {
   const { showToast } = useToast();
   const [activeCategory, setActiveCategory] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
-  const [showSearch, setShowSearch] = useState(false);
+  const [debouncedSearchQuery, setDebouncedSearchQuery] = useState('');
   const [sortBy, setSortBy] = useState<SortOption>('newest');
   const [threads, setThreads] = useState<ThreadWithUser[]>([]);
   const [loading, setLoading] = useState(true);
@@ -43,14 +43,36 @@ export function CommunityScreen() {
   const [blockedUserIds, setBlockedUserIds] = useState<string[]>([]);
   const [showNewPostModal, setShowNewPostModal] = useState(false);
   const [showSortMenu, setShowSortMenu] = useState(false);
+  const [likingThreadId, setLikingThreadId] = useState<string | null>(null);
   const [likeAnimations] = useState<{ [key: string]: Animated.Value }>({});
   const fabScale = useRef(new Animated.Value(1)).current;
   const scrollY = useRef(new Animated.Value(0)).current;
   const sortByRef = useRef(sortBy);
+  const blockedUserIdsRef = useRef<string[]>([]);
+  const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     sortByRef.current = sortBy;
   }, [sortBy]);
+
+  useEffect(() => {
+    blockedUserIdsRef.current = blockedUserIds;
+  }, [blockedUserIds]);
+
+  // Debounce search query
+  useEffect(() => {
+    if (searchTimeoutRef.current) {
+      clearTimeout(searchTimeoutRef.current);
+    }
+    searchTimeoutRef.current = setTimeout(() => {
+      setDebouncedSearchQuery(searchQuery);
+    }, 300);
+    return () => {
+      if (searchTimeoutRef.current) {
+        clearTimeout(searchTimeoutRef.current);
+      }
+    };
+  }, [searchQuery]);
 
   useEffect(() => {
     fetchBlockedUsers();
@@ -121,6 +143,7 @@ export function CommunityScreen() {
       });
     } catch (error) {
       console.error('Error processing offline queue:', error);
+      showToast('Failed to sync offline actions. Please check your connection.', 'warning');
     }
   };
 
@@ -132,8 +155,12 @@ export function CommunityScreen() {
         { event: '*', schema: 'public', table: 'communitythreads' },
         (payload: any) => {
           if (payload.eventType === 'INSERT') {
+            const newThread = payload.new as ThreadWithUser;
+            // Filter blocked users using ref
+            if (blockedUserIdsRef.current.includes(newThread.userid)) {
+              return;
+            }
             setThreads(prev => {
-              const newThread = payload.new as ThreadWithUser;
               const updated = [newThread, ...prev];
               return updated;
             });
@@ -197,7 +224,7 @@ export function CommunityScreen() {
         fetchData();
         refreshBookmarks();
       }
-    }, [sortBy, refreshBookmarks])
+    }, [sortBy]) // Removed refreshBookmarks from deps to prevent infinite loop
   );
 
   const fetchBlockedUsers = async () => {
@@ -219,23 +246,54 @@ export function CommunityScreen() {
 
   const fetchStats = async () => {
     try {
-      const { data, error } = await supabase
-        .from('communitythreads')
-        .select('category');
-
-      if (error) throw error;
-
+      // Use aggregation queries for better performance
       const prayerCategories = ['Prayer Requests', 'Pray for Others'];
-      const prayers = data?.filter(t => prayerCategories.includes(t.category)).length || 0;
-      const testimonies = data?.filter(t => t.category === 'Testimonies').length || 0;
+      
+      const [prayersResult, testimoniesResult, totalResult] = await Promise.all([
+        supabase
+          .from('communitythreads')
+          .select('id', { count: 'exact', head: true })
+          .in('category', prayerCategories),
+        supabase
+          .from('communitythreads')
+          .select('id', { count: 'exact', head: true })
+          .eq('category', 'Testimonies'),
+        supabase
+          .from('communitythreads')
+          .select('id', { count: 'exact', head: true }),
+      ]);
+
+      if (prayersResult.error) throw prayersResult.error;
+      if (testimoniesResult.error) throw testimoniesResult.error;
+      if (totalResult.error) throw totalResult.error;
 
       setStats({
-        prayers,
-        testimonies,
-        total: data?.length || 0,
+        prayers: prayersResult.count || 0,
+        testimonies: testimoniesResult.count || 0,
+        total: totalResult.count || 0,
       });
     } catch (error) {
       console.error('Error fetching stats:', error);
+      // Fallback to old method if count queries fail
+      try {
+        const { data, error } = await supabase
+          .from('communitythreads')
+          .select('category');
+
+        if (error) throw error;
+
+        const prayerCategories = ['Prayer Requests', 'Pray for Others'];
+        const prayers = data?.filter(t => prayerCategories.includes(t.category)).length || 0;
+        const testimonies = data?.filter(t => t.category === 'Testimonies').length || 0;
+
+        setStats({
+          prayers,
+          testimonies,
+          total: data?.length || 0,
+        });
+      } catch (fallbackError) {
+        console.error('Error in fallback stats fetch:', fallbackError);
+      }
     }
   };
 
@@ -305,6 +363,16 @@ export function CommunityScreen() {
     return likeAnimations[threadId];
   };
 
+  // Clean up animations for threads that no longer exist
+  useEffect(() => {
+    const threadIds = new Set(threads.map(t => t.id));
+    Object.keys(likeAnimations).forEach(threadId => {
+      if (!threadIds.has(threadId)) {
+        delete likeAnimations[threadId];
+      }
+    });
+  }, [threads]);
+
   const animateLike = (threadId: string) => {
     const anim = getLikeAnimation(threadId);
     Animated.sequence([
@@ -318,6 +386,13 @@ export function CommunityScreen() {
       showToast('Please sign in to like posts', 'info');
       return;
     }
+
+    // Prevent double-tap/race condition
+    if (likingThreadId === threadId) {
+      return;
+    }
+
+    setLikingThreadId(threadId);
 
     // Capture current count before any updates
     const currentThread = threads.find(t => t.id === threadId);
@@ -354,14 +429,12 @@ export function CommunityScreen() {
           .upsert({ thread_id: threadId, user_id: user.id }, { onConflict: 'thread_id,user_id' });
         if (error) throw error;
 
-        // Update like_count in communitythreads table
-        await supabase
-          .from('communitythreads')
-          .update({ like_count: newCount })
-          .eq('id', threadId);
+        // Don't manually update like_count - let realtime subscription handle it to avoid race conditions
+        // The realtime subscription will update the count from the database
       }
     } catch (error: any) {
       if (error?.code === '23505') {
+        setLikingThreadId(null);
         return;
       }
       console.error('Error toggling like:', error);
@@ -376,6 +449,7 @@ export function CommunityScreen() {
           action: currentlyLiked ? 'unlike' : 'like',
         });
         // Keep optimistic update - will sync when online
+        setLikingThreadId(null);
         return;
       }
 
@@ -391,6 +465,8 @@ export function CommunityScreen() {
         return t;
       }));
       showToast('Unable to update like. Please try again.', 'error');
+    } finally {
+      setLikingThreadId(null);
     }
   };
 
@@ -526,12 +602,17 @@ export function CommunityScreen() {
   const handleSharePost = async (thread: ThreadWithUser) => {
     Haptics.selectionAsync();
     try {
+      const content = thread.content || '';
       await Share.share({
         title: thread.title,
-        message: `${thread.title}\n\n${thread.content.substring(0, 200)}${thread.content.length > 200 ? '...' : ''}\n\nShared from GKP Radio Community`,
+        message: `${thread.title}\n\n${content.substring(0, 200)}${content.length > 200 ? '...' : ''}\n\nShared from GKP Radio Community`,
       });
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error sharing:', error);
+      // Only show error if user didn't cancel
+      if (error?.message !== 'User did not share') {
+        showToast('Unable to share post. Please try again.', 'error');
+      }
     }
   };
 
@@ -551,7 +632,20 @@ export function CommunityScreen() {
           style: 'destructive',
           onPress: async () => {
             // Optimistic update
+            const deletedThread = threads.find(t => t.id === threadId);
             setThreads(prev => prev.filter(t => t.id !== threadId));
+            
+            // Optimistically update stats
+            setStats(prev => {
+              const prayerCategories = ['Prayer Requests', 'Pray for Others'];
+              const isPrayer = deletedThread && prayerCategories.includes(deletedThread.category);
+              const isTestimony = deletedThread?.category === 'Testimonies';
+              return {
+                prayers: isPrayer ? Math.max(prev.prayers - 1, 0) : prev.prayers,
+                testimonies: isTestimony ? Math.max(prev.testimonies - 1, 0) : prev.testimonies,
+                total: Math.max(prev.total - 1, 0),
+              };
+            });
 
             try {
               const { error } = await supabase
@@ -563,11 +657,13 @@ export function CommunityScreen() {
 
               showToast('Post deleted successfully', 'success');
               Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+              // Refresh stats to ensure accuracy
               fetchStats();
             } catch (error) {
               console.error('Error deleting post:', error);
               showToast('Unable to delete post. Please try again.', 'error');
               fetchData(); // Restore the post
+              fetchStats(); // Restore stats
             }
           }
         }
@@ -586,25 +682,44 @@ export function CommunityScreen() {
   };
 
   const formatTimeAgo = (dateString: string) => {
-    const date = new Date(dateString);
-    const now = new Date();
-    const diffInSeconds = Math.floor((now.getTime() - date.getTime()) / 1000);
+    try {
+      if (!dateString) return 'recently';
+      const date = new Date(dateString);
+      if (isNaN(date.getTime())) return 'recently';
+      const now = new Date();
+      const diffInSeconds = Math.floor((now.getTime() - date.getTime()) / 1000);
 
-    if (diffInSeconds < 60) return 'just now';
-    if (diffInSeconds < 3600) return `${Math.floor(diffInSeconds / 60)}m ago`;
-    if (diffInSeconds < 86400) return `${Math.floor(diffInSeconds / 3600)}h ago`;
-    return `${Math.floor(diffInSeconds / 86400)}d ago`;
+      if (diffInSeconds < 60) return 'just now';
+      if (diffInSeconds < 3600) return `${Math.floor(diffInSeconds / 60)}m ago`;
+      if (diffInSeconds < 86400) return `${Math.floor(diffInSeconds / 3600)}h ago`;
+      return `${Math.floor(diffInSeconds / 86400)}d ago`;
+    } catch (error) {
+      return 'recently';
+    }
   };
 
-  const filteredThreads = activeCategory === 'all'
-    ? threads
-    : threads.filter(t => t.category === activeCategory);
+  const filteredThreads = useMemo(() => {
+    return activeCategory === 'all'
+      ? threads
+      : threads.filter(t => t.category === activeCategory);
+  }, [threads, activeCategory]);
+
+  // Memoize category counts for performance
+  const categoryCounts = useMemo(() => {
+    const counts: { [key: string]: number } = {};
+    COMMUNITY_CATEGORIES.forEach(cat => {
+      if (cat.id === 'all') {
+        counts[cat.id] = threads.length;
+      } else {
+        counts[cat.id] = threads.filter(t => t.category === cat.id).length;
+      }
+    });
+    return counts;
+  }, [threads]);
 
   const renderCategoryTab = (category: typeof COMMUNITY_CATEGORIES[0]) => {
     const isActive = activeCategory === category.id;
-    const count = category.id === 'all'
-      ? threads.length
-      : threads.filter(t => t.category === category.id).length;
+    const count = categoryCounts[category.id] || 0;
 
     return (
       <Pressable
@@ -640,17 +755,21 @@ export function CommunityScreen() {
   };
 
   const navigateToUserProfile = (userId: string, userData?: User | null) => {
-    if (!userId) return;
+    if (!userId || userId.trim() === '') return;
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     navigation.navigate('UserProfile', { userId, user: userData || undefined });
   };
 
-  const filteredBySearch = searchQuery.trim()
-    ? filteredThreads.filter(t =>
-      t.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      t.content.toLowerCase().includes(searchQuery.toLowerCase())
-    )
-    : filteredThreads;
+  // Memoize filtered search results
+  const filteredBySearch = useMemo(() => {
+    if (!debouncedSearchQuery.trim()) return filteredThreads;
+    const query = debouncedSearchQuery.toLowerCase();
+    return filteredThreads.filter(t => {
+      const title = t.title?.toLowerCase() || '';
+      const content = t.content?.toLowerCase() || '';
+      return title.includes(query) || content.includes(query);
+    });
+  }, [filteredThreads, debouncedSearchQuery]);
 
   const pinnedThreads = filteredBySearch.filter(t => t.ispinned);
   const regularThreads = filteredBySearch.filter(t => !t.ispinned);
@@ -865,24 +984,30 @@ export function CommunityScreen() {
           </Pressable>
 
           {showSortMenu && (
-            <View style={styles.sortMenu}>
-              {(['newest', 'popular', 'discussed'] as SortOption[]).map(option => (
-                <Pressable
-                  key={option}
-                  style={[styles.sortMenuItem, sortBy === option && styles.sortMenuItemActive]}
-                  onPress={() => {
-                    Haptics.selectionAsync();
-                    setSortBy(option);
-                    setShowSortMenu(false);
-                  }}
-                >
-                  <Text style={[styles.sortMenuItemText, sortBy === option && styles.sortMenuItemTextActive]}>
-                    {option === 'newest' ? 'Newest' : option === 'popular' ? 'Most Liked' : 'Most Discussed'}
-                  </Text>
-                  {sortBy === option && <Ionicons name="checkmark" size={16} color="#047857" />}
-                </Pressable>
-              ))}
-            </View>
+            <>
+              <Pressable
+                style={StyleSheet.absoluteFill}
+                onPress={() => setShowSortMenu(false)}
+              />
+              <View style={styles.sortMenu}>
+                {(['newest', 'popular', 'discussed'] as SortOption[]).map(option => (
+                  <Pressable
+                    key={option}
+                    style={[styles.sortMenuItem, sortBy === option && styles.sortMenuItemActive]}
+                    onPress={() => {
+                      Haptics.selectionAsync();
+                      setSortBy(option);
+                      setShowSortMenu(false);
+                    }}
+                  >
+                    <Text style={[styles.sortMenuItemText, sortBy === option && styles.sortMenuItemTextActive]}>
+                      {option === 'newest' ? 'Newest' : option === 'popular' ? 'Most Liked' : 'Most Discussed'}
+                    </Text>
+                    {sortBy === option && <Ionicons name="checkmark" size={16} color="#047857" />}
+                  </Pressable>
+                ))}
+              </View>
+            </>
           )}
         </View>
 
@@ -1076,6 +1201,14 @@ const styles = StyleSheet.create({
     marginBottom: 16,
     position: 'relative',
     zIndex: 10,
+  },
+  sortMenuOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 9,
   },
   sortButton: {
     flexDirection: 'row',

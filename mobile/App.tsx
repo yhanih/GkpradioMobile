@@ -10,7 +10,7 @@ import Constants from 'expo-constants';
 
 // Initialize Sentry for crash reporting (only if DSN is configured)
 const sentryDsn = Constants.expoConfig?.extra?.sentryDsn || process.env.EXPO_PUBLIC_SENTRY_DSN;
-if (sentryDsn && sentryDsn !== 'placeholder' && !sentryDsn.includes('placeholder')) {
+if (sentryDsn && !sentryDsn.includes('placeholder')) {
   Sentry.init({
     dsn: sentryDsn,
     environment: __DEV__ ? 'development' : 'production',
@@ -41,7 +41,10 @@ import { ToastProvider } from './src/components/Toast';
 import { LoginScreen } from './src/screens/auth/LoginScreen';
 import { SignupScreen } from './src/screens/auth/SignupScreen';
 import { ForgotPasswordScreen } from './src/screens/auth/ForgotPasswordScreen';
+import ResetPasswordScreen from './src/screens/auth/ResetPasswordScreen';
 import { OnboardingScreen, checkOnboardingComplete } from './src/screens/OnboardingScreen';
+import * as Linking from 'expo-linking';
+import { supabase } from './src/lib/supabase';
 import { RootStackParamList, MainTabParamList } from './src/types/navigation';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -51,14 +54,22 @@ function ProfileScreenWrapper({
   showSignup,
   setShowSignup,
   showForgotPassword,
-  setShowForgotPassword
+  setShowForgotPassword,
+  showResetPassword,
+  setShowResetPassword
 }: {
   showSignup: boolean;
   setShowSignup: (show: boolean) => void;
   showForgotPassword: boolean;
   setShowForgotPassword: (show: boolean) => void;
+  showResetPassword: boolean;
+  setShowResetPassword: (show: boolean) => void;
 }) {
   const { user } = useAuth();
+
+  if (showResetPassword) {
+    return <ResetPasswordScreen onComplete={() => setShowResetPassword(false)} />;
+  }
 
   if (!user) {
     if (showForgotPassword) {
@@ -67,8 +78,8 @@ function ProfileScreenWrapper({
     if (showSignup) {
       return <SignupScreen onNavigateToLogin={() => setShowSignup(false)} />;
     }
-    return <LoginScreen 
-      onNavigateToSignup={() => setShowSignup(true)} 
+    return <LoginScreen
+      onNavigateToSignup={() => setShowSignup(true)}
       onNavigateToForgotPassword={() => setShowForgotPassword(true)}
     />;
   }
@@ -78,7 +89,7 @@ function ProfileScreenWrapper({
 
 function MainTabs() {
   const { theme } = useTheme();
-  
+
   return (
     <>
       <Tab.Navigator
@@ -137,25 +148,57 @@ function MainTabs() {
 function RootNavigator() {
   const [showSignup, setShowSignup] = useState(false);
   const [showForgotPassword, setShowForgotPassword] = useState(false);
+  const [showResetPassword, setShowResetPassword] = useState(false);
+
+  useEffect(() => {
+    // Handle deep links for password reset
+    const handleDeepLink = (url: string | null) => {
+      if (!url) return;
+      const parsed = Linking.parse(url);
+      if (parsed.path === 'reset-password' || url.includes('reset-password')) {
+        setShowResetPassword(true);
+      }
+    };
+
+    // Listen for incoming links
+    const subscription = Linking.addEventListener('url', (event: { url: string }) => {
+      handleDeepLink(event.url);
+    });
+
+    // Check for initial link
+    Linking.getInitialURL().then(handleDeepLink);
+
+    // Also handle Supabase auth state changes for recovery
+    const { data: { subscription: authSubscription } } = supabase.auth.onAuthStateChange((event) => {
+      if (event === 'PASSWORD_RECOVERY') {
+        setShowResetPassword(true);
+      }
+    });
+
+    return () => {
+      subscription.remove();
+      authSubscription.unsubscribe();
+    };
+  }, []);
 
   return (
     <Stack.Navigator screenOptions={{ headerShown: false }}>
       <Stack.Screen name="MainTabs" component={MainTabs} />
-      <Stack.Screen 
-        name="PostDetail" 
+      <Stack.Screen
+        name="PostDetail"
         component={PostDetailScreen}
         options={{
           animation: 'slide_from_right',
         }}
       />
-      <Stack.Screen 
-        name="UserProfile" 
+      <Stack.Screen
+        name="UserProfile"
         component={UserProfileScreen}
         options={{
           animation: 'slide_from_right',
         }}
       />
-      <Stack.Screen 
+      <Stack.Screen
         name="Profile"
         options={{
           animation: 'slide_from_right',
@@ -167,27 +210,29 @@ function RootNavigator() {
             setShowSignup={setShowSignup}
             showForgotPassword={showForgotPassword}
             setShowForgotPassword={setShowForgotPassword}
+            showResetPassword={showResetPassword}
+            setShowResetPassword={setShowResetPassword}
           />
         )}
       </Stack.Screen>
-      <Stack.Screen 
-        name="VideoPlayer" 
+      <Stack.Screen
+        name="VideoPlayer"
         component={VideoPlayerScreen}
         options={{
           animation: 'fade',
           presentation: 'fullScreenModal',
         }}
       />
-      <Stack.Screen 
-        name="EpisodePlayer" 
+      <Stack.Screen
+        name="EpisodePlayer"
         component={EpisodePlayerScreen}
         options={{
           animation: 'slide_from_bottom',
           presentation: 'modal',
         }}
       />
-      <Stack.Screen 
-        name="LikedPosts" 
+      <Stack.Screen
+        name="LikedPosts"
         component={LikedPostsScreen}
         options={{
           animation: 'slide_from_right',
@@ -243,7 +288,7 @@ function AppWithTheme() {
       heavy: { fontFamily: 'System', fontWeight: '900' as const },
     },
   };
-  
+
   return (
     <>
       <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} />

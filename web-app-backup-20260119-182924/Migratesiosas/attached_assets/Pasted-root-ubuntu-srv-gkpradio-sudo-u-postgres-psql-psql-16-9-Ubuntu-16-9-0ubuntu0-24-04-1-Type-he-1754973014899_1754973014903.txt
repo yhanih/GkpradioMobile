@@ -1,0 +1,64 @@
+root@ubuntu:/srv/gkpradio# sudo -u postgres psql
+psql (16.9 (Ubuntu 16.9-0ubuntu0.24.04.1))
+Type "help" for help.
+
+postgres=# -- Reassign ownership of the schema itself
+ALTER SCHEMA public OWNER TO gkpuser;
+
+-- Grant full rights to gkpuser on the schema
+GRANT ALL ON SCHEMA public TO gkpuser;
+GRANT USAGE ON SCHEMA public TO gkpuser;
+GRANT CREATE ON SCHEMA public TO gkpuser;
+
+-- Reassign ownership of all existing tables and sequences
+DO $$ DECLARE
+    obj record;
+BEGIN
+    FOR obj IN
+        SELECT tablename FROM pg_tables WHERE schemaname = 'public'
+    LOOP
+        EXECUTE format('ALTER TABLE public.%I OWNER TO gkpuser', obj.tablename);
+    END LOOP;
+
+    FOR obj IN
+        SELECT sequence_name FROM information_schema.sequences WHERE sequence_schema = 'public'
+    LOOP
+        EXECUTE format('ALTER SEQUENCE public.%I OWNER TO gkpuser', obj.sequence_name);
+    END LOOP;
+END $$;
+ALTER SCHEMA
+GRANT
+GRANT
+GRANT
+DO
+postgres=# cd /srv/gkpradio && npx drizzle-kit push --config=drizzle.config.ts
+postgres-# \q
+root@ubuntu:/srv/gkpradio# cd /srv/gkpradio && npx drizzle-kit push --config=drizzle.config.ts
+Reading config file '/srv/gkpradio/drizzle.config.ts'
+Using 'pg' driver for database querying
+[✓] Pulling schema from database...
+error: permission denied for schema public
+    at /srv/gkpradio/node_modules/pg-pool/index.js:45:11
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+    at async Object.query (/srv/gkpradio/node_modules/drizzle-kit/bin.cjs:66575:26)
+    at async pgPush (/srv/gkpradio/node_modules/drizzle-kit/bin.cjs:70117:13)
+    at async Object.handler (/srv/gkpradio/node_modules/drizzle-kit/bin.cjs:79124:9)
+    at async run (/srv/gkpradio/node_modules/drizzle-kit/bin.cjs:78381:7) {
+  length: 99,
+  severity: 'ERROR',
+  code: '42501',
+  detail: undefined,
+  hint: undefined,
+  position: '14',
+  internalPosition: undefined,
+  internalQuery: undefined,
+  where: undefined,
+  schema: undefined,
+  table: undefined,
+  column: undefined,
+  dataType: undefined,
+  constraint: undefined,
+  file: 'aclchk.c',
+  line: '2812',
+  routine: 'aclcheck_error'
+}

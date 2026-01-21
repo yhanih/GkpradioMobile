@@ -1,0 +1,173 @@
+Goal: Without changing the visual UI design, fix UX and functional gaps so this version is ready to push. Every button should do its intended action and lead to a real page. Only the homepage uses a hero section; all other routes must not have a hero or top negative white space. The “Sponsored by” section must be clean and responsive on desktop and mobile. Lock down auth and messaging like a modern social app. Use our existing stack and keep styles intact.
+
+Core tasks
+
+Routing and buttons
+
+Crawl all interactive elements and verify they navigate to real routes. Replace dead links with correct paths or disable+hide.
+
+Build a script that clicks every nav item and button, asserts status 200/OK, and that the target route renders. Fail the build on broken links.
+
+Hero visibility
+
+Ensure hero section renders only on / (homepage).
+
+Remove hero and any top negative space from all other routes by conditional rendering. Do not change styles globally.
+
+“Sponsored by” section (desktop + mobile)
+
+Create a SponsorStrip component that:
+
+Accepts an array of sponsors: { name, logoUrl, link, priority }.
+
+Renders a clean carousel/slideshow with pause-on-hover, swipe on mobile, keyboard accessible.
+
+Lazy-loads logos, adds alt text, and uses aspect-ratio boxes to prevent layout shift.
+
+Sanitizes external links with rel="noopener noreferrer" and opens in new tab.
+
+Replace any duplicated “Sponsor: Slideshow” blocks with a single SponsorStrip instance.
+
+Add basic unit and visual tests for breakpoints.
+
+Notifications (events and delivery)
+
+Support notification types for message author and relevant subscribers:
+
+prayer_reply, pray_for_others, to_my_wife, to_my_husband, words_of_encouragement, physical_mental_health.
+
+Backend:
+
+Table notifications(id, user_id, type, entity_id, read_at, created_at).
+
+Table notification_prefs(user_id, type, enabled), default enabled.
+
+Event hooks after post/reply create to enqueue notifications.
+
+Delivery: in-app bell feed first; email or push hooks behind feature flag.
+
+Frontend:
+
+Bell icon with unread badge. List groups by date. Click marks as read via PATCH.
+
+Preference screen to toggle categories. Optimistic UI updates.
+
+Add rate limits to event creation to prevent spam.
+
+“Today’s schedule” integrity
+
+Ensure “Today’s schedule” items link to real destinations:
+
+“Prayer Request in community Main Menu” → category page for Prayer Requests.
+
+All schedule link interactions must be clickable; remove dummy anchors.
+
+Validate schedule data comes from the same canonical source used elsewhere. No duplicated hard-coded lists.
+
+Search button
+
+Make the header search open the real search page or modal.
+
+Wire it to the existing search API and query categories/content. Debounce input, show loading, handle empty state.
+
+Branding
+
+Replace any generic “app” label with the brand “GKPRADIO” in the header/logo area without altering the layout.
+
+Keep existing logo asset if present; otherwise render the wordmark “GKPRADIO”.
+
+Security hardening (auth + messages)
+
+Add Cloudflare Turnstile to signup and login:
+
+Client: render widget with VITE_TURNSTILE_SITE_KEY.
+
+Server: verify token with TURNSTILE_SECRET_KEY. If missing, allow but log captcha_skipped with user/IP/time.
+
+Validation: use a schema validator for all auth and message inputs; enforce length limits and safe characters.
+
+Passwords: hash with Argon2id (or bcrypt as fallback). Minimum length 12.
+
+Sessions: httpOnly, secure cookies; SameSite Lax or Strict; short-lived access + refresh rotation; revoke on logout.
+
+CSRF: use double-submit token or SameSite+CSRF header strategy for state-changing routes.
+
+Rate limiting: per-IP and per-user on login, signup, messaging, and notification triggers.
+
+Content Security Policy with nonce; enable Helmet. Sanitize any user HTML.
+
+Audit logs for auth events and suspicious activity.
+
+Access control
+
+Messages and notifications must only be readable by authorized users.
+
+Server must check ownership/roles before returning any private resource.
+
+DX + tests
+
+Add Playwright E2E flow:
+
+Visit all main routes, click all nav items, assert 200/visible content.
+
+Verify no hero on non-home routes.
+
+Interact with SponsorStrip at sm, md, lg.
+
+Create a message and a reply; assert notification created and visible.
+
+Add unit tests for:
+
+Notification creation rules.
+
+Turnstile verification service (mocked).
+
+Route map link checker.
+
+Add a link-check script that crawls internal links and fails on 404.
+
+Deliverables
+
+Working code changes with no UI regressions.
+
+A checklist output showing:
+
+Total buttons found / wired.
+
+Routes audited and 200 OK.
+
+Pages with hero = only /.
+
+SponsorStrip responsive screenshots (sm/md/lg).
+
+Security checks: Turnstile on auth, rate limits, CSP, Helmet, session cookie flags.
+
+Tests: count and pass status for unit + E2E.
+
+Environment
+
+Expect these env vars:
+
+TURNSTILE_SECRET_KEY, VITE_TURNSTILE_SITE_KEY
+
+Existing DB and auth secrets remain unchanged.
+
+If Turnstile secret missing, proceed and log captcha_skipped.
+
+Acceptance criteria
+
+Zero dead links; test suite green.
+
+Only homepage shows hero; no top negative space elsewhere.
+
+SponsorStrip clean and responsive.
+
+Notifications fire for listed categories; prefs toggle works.
+
+Search leads to real results.
+
+Branding shows “GKPRADIO”.
+
+Auth and messaging pass security checks listed above.
+
+Run all checks, fix issues, and provide a concise summary with file diffs and how to run tests.

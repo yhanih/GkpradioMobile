@@ -1,0 +1,79 @@
+.card {
+  border-radius: var(--radius-xl);
+  background: var(--surface);
+  transition: all var(--transition-base);
+}
+
+/* Variants */
+.card-default {
+  background: var(--surface);
+  border: 1px solid var(--border-primary);
+}
+
+.card-elevated {
+  background: var(--surface-elevated);
+  box-shadow: var(--shadow-lg);
+  border: none;
+}
+
+.card-outlined {
+  background: transparent;
+  border: 2px solid var(--border-primary);
+}
+
+.card-glass {
+  background: rgba(255, 255, 255, 0.05);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+[data-theme='dark'] .card-glass,
+.dark-mode .card-glass {
+  background: rgba(30, 41, 59, 0.8);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+/* Padding */
+.card-padding-none {
+  padding: 0;
+}
+
+.card-padding-sm {
+  padding: var(--space-4);
+}
+
+.card-padding-md {
+  padding: var(--space-6);
+}
+
+.card-padding-lg {
+  padding: var(--space-8);
+}
+
+/* Hoverable */
+.card-hoverable {
+  cursor: pointer;
+}
+
+.card-hoverable:hover {
+  box-shadow: var(--shadow-xl);
+  transform: translateY(-2px);
+}
+
+/* Dark Mode */
+[data-theme='dark'] .card-default,
+.dark-mode .card-default {
+  background: var(--dark-surface);
+  border-color: var(--dark-border-primary);
+}
+
+[data-theme='dark'] .card-elevated,
+.dark-mode .card-elevated {
+  background: var(--dark-surface-elevated);
+}
+
+[data-theme='dark'] .card-outlined,
+.dark-mode .card-outlined {
+  border-color: var(--dark-border-primary);
+}

@@ -337,7 +337,10 @@ export function MediaScreen() {
             onPress={() => {
               Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
               if (activeTab === 'podcasts') {
-                navigation.navigate('EpisodePlayer', { episode: featuredContent as Episode });
+                navigation.navigate('EpisodePlayer', {
+                  episode: featuredContent as Episode,
+                  allEpisodes: podcasts
+                });
               } else {
                 navigation.navigate('VideoPlayer', { video: featuredContent as Video });
               }
@@ -645,7 +648,10 @@ export function MediaScreen() {
                   ]}
                   onPress={() => {
                     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                    navigation.navigate('EpisodePlayer', { episode: podcast });
+                    navigation.navigate('EpisodePlayer', {
+                      episode: podcast,
+                      allEpisodes: continuePlaying
+                    });
                   }}
                 >
                   <Image
@@ -726,7 +732,10 @@ export function MediaScreen() {
                       ]}
                       onPress={() => {
                         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                        navigation.navigate('EpisodePlayer', { episode: podcast });
+                        navigation.navigate('EpisodePlayer', {
+                          episode: podcast,
+                          allEpisodes: searchFilteredPodcasts
+                        });
                       }}
                     >
                       <View style={styles.podcastImageContainer}>

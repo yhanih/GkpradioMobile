@@ -1,0 +1,267 @@
+/* Floating Navbar Container */
+.floating-navbar-container {
+    position: fixed;
+    top: 1.5rem;
+    left: 0;
+    right: 0;
+    z-index: 1000;
+    display: flex;
+    justify-content: center;
+    pointer-events: none;
+    transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* The Pill - Refined Agency Grade */
+.floating-navbar {
+    pointer-events: auto;
+    display: flex;
+    align-items: center;
+    padding: 6px 6px 6px 16px;
+    /* Pill-in-pill spacing */
+    gap: 1.5rem;
+
+    background: rgba(13, 13, 13, 0.7);
+    backdrop-filter: blur(24px) saturate(180%);
+    -webkit-backdrop-filter: blur(24px) saturate(180%);
+
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    box-shadow:
+        0 24px 48px -12px rgba(0, 0, 0, 0.5),
+        inset 0 1px 1px rgba(255, 255, 255, 0.1);
+
+    border-radius: 100px;
+    height: 52px;
+    /* Slimmer high-end feel */
+    transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.floating-navbar-container.scrolled .floating-navbar {
+    height: 48px;
+    background: rgba(8, 8, 8, 0.85);
+    top: 1rem;
+}
+
+/* Left: Logo Orb */
+.nav-brand-section {
+    display: flex;
+    align-items: center;
+}
+
+.logo-orb {
+    width: 28px;
+    height: 28px;
+    background: white;
+    border-radius: 6px;
+    /* Slightly rounded instead of full circle if it's the app icon */
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+}
+
+.logo-img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+/* Center: Links */
+.nav-links-container {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.nav-link-item {
+    padding: 8px 14px;
+    color: rgba(255, 255, 255, 0.6);
+    text-decoration: none;
+    font-size: 13px;
+    font-weight: 500;
+    border-radius: 100px;
+    transition: all 0.2s ease;
+    letter-spacing: 0.2px;
+}
+
+.nav-link-item:hover {
+    color: white;
+    background: rgba(255, 255, 255, 0.05);
+}
+
+.nav-link-item.active {
+    color: white;
+    background: rgba(255, 255, 255, 0.08);
+}
+
+/* Right: Actions */
+.nav-actions-section {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+/* Pill-in-Pill Primary Action */
+.nav-primary-action {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 0 16px;
+    height: 38px;
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    border-radius: 100px;
+    color: white;
+    font-size: 13px;
+    font-weight: 500;
+    text-decoration: none;
+    transition: all 0.2s ease;
+}
+
+.nav-primary-action:hover {
+    background: rgba(255, 255, 255, 0.12);
+    transform: translateY(-1px);
+}
+
+.arrow-icon {
+    font-size: 12px;
+    transition: all 0.2s ease;
+}
+
+.nav-search-wrap {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 8px;
+    padding: 0 12px;
+    height: 38px;
+    margin-left: 1rem;
+}
+
+.search-icon {
+    color: rgba(255, 255, 255, 0.4);
+}
+
+.nav-search-input {
+    background: none;
+    border: none;
+    color: white;
+    font-size: 13px;
+    width: 120px;
+    transition: width 0.3s ease;
+}
+
+.nav-search-input:focus {
+    outline: none;
+    width: 180px;
+}
+
+.nav-secondary-action {
+    background: none;
+    border: none;
+    color: rgba(255, 255, 255, 0.8);
+    font-size: 13px;
+    font-weight: 600;
+    padding: 0 12px;
+    cursor: pointer;
+    transition: color 0.2s;
+}
+
+.nav-secondary-action:hover {
+    color: white;
+}
+
+.nav-profile-link {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 38px;
+    height: 38px;
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 50%;
+    color: white;
+    transition: all 0.2s ease;
+}
+
+.nav-profile-link:hover {
+    background: rgba(255, 255, 255, 0.12);
+    transform: scale(1.05);
+}
+
+.nav-primary-action.donate {
+    background: #ffffff;
+    color: #000000;
+    font-weight: 700;
+}
+
+.nav-primary-action.donate:hover {
+    background: rgba(255, 255, 255, 0.9);
+}
+
+/* Circular Icon Action */
+.nav-icon-action {
+    width: 38px;
+    height: 38px;
+    background: white;
+    border: none;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: black;
+    cursor: pointer;
+    position: relative;
+    transition: all 0.2s ease;
+}
+
+.nav-icon-action:hover {
+    transform: scale(1.05);
+    background: rgba(255, 255, 255, 0.9);
+}
+
+.indicator-dot {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 2px;
+    height: 2px;
+    background: red;
+    border-radius: 50%;
+    box-shadow: 0 0 4px red;
+    display: none;
+    /* Only show if needed */
+}
+
+/* Responsive adjustment */
+@media (max-width: 768px) {
+    .floating-navbar-container {
+        top: auto;
+        bottom: 1.5rem;
+    }
+
+    .floating-navbar {
+        width: 90%;
+        padding: 6px;
+        justify-content: space-between;
+        gap: 0.5rem;
+    }
+
+    .nav-brand-section,
+    .nav-actions-section {
+        display: none;
+    }
+
+    .nav-links-container {
+        width: 100%;
+        justify-content: space-around;
+        gap: 0;
+    }
+
+    .nav-link-item {
+        padding: 10px;
+        font-size: 11px;
+    }
+}

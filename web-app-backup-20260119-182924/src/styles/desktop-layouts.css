@@ -1,0 +1,105 @@
+/* ========================================
+   DESKTOP LAYOUT SYSTEM
+   Desktop-first composition patterns
+   ======================================== */
+
+/* Desktop Container System */
+.desktop-container {
+  width: 100%;
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 0 var(--space-6);
+}
+
+@media (min-width: 1600px) {
+  .desktop-container {
+    max-width: 1600px;
+    padding: 0 var(--space-8);
+  }
+}
+
+/* Desktop Section Patterns */
+.desktop-section {
+  width: 100%;
+  padding: var(--space-12) 0;
+}
+
+/* Multi-Column Layouts */
+.desktop-two-column {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: var(--space-8);
+  align-items: start;
+}
+
+.desktop-three-column {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--space-6);
+}
+
+.desktop-four-column {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: var(--space-6);
+}
+
+/* Desktop Content Density */
+.desktop-content-dense {
+  /* Reduced padding for higher information density */
+  padding: var(--space-6);
+}
+
+.desktop-card-wide {
+  /* Wider cards, not taller */
+  max-width: 100%;
+}
+
+/* Section Background Containment */
+.section-contained {
+  background: var(--surface);
+  border-radius: var(--radius-2xl);
+  padding: var(--space-8);
+  border: 1px solid var(--border-primary);
+}
+
+[data-theme='dark'] .section-contained,
+.dark-mode .section-contained {
+  background: var(--dark-surface);
+  border-color: var(--dark-border-primary);
+}
+
+/* Responsive: Mobile collapses to single column */
+@media (max-width: 1023px) {
+  .desktop-two-column,
+  .desktop-three-column,
+  .desktop-four-column {
+    grid-template-columns: 1fr;
+  }
+
+  .desktop-section {
+    padding: var(--space-8) 0;
+  }
+}
+
+/* Desktop Horizontal Composition */
+.desktop-horizontal-stack {
+  display: flex;
+  gap: var(--space-6);
+  align-items: center;
+}
+
+/* Desktop Spacing Scale */
+@media (min-width: 1024px) {
+  .desktop-spacing-tight {
+    gap: var(--space-4);
+  }
+
+  .desktop-spacing-normal {
+    gap: var(--space-6);
+  }
+
+  .desktop-spacing-relaxed {
+    gap: var(--space-8);
+  }
+}

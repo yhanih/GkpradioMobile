@@ -1,0 +1,811 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GKP Radio - Hero Section Backup</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --gk-green: #0d4a3e;
+            --gk-gold: #c39d48;
+            --gk-red: #ef4444;
+            --gk-dark: #092c25;
+        }
+
+        body {
+            font-family: 'Outfit', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: #ffffff;
+            color: #000;
+            overflow-x: hidden;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 0 2rem;
+        }
+
+        /* HERO SECTION - Modern Redesign */
+        .hero-modern {
+            position: relative;
+            width: 100%;
+            min-height: 85vh;
+            padding: 6rem 0 4rem;
+            overflow: hidden;
+            background: linear-gradient(180deg, #0f172a 0%, #1e293b 50%, #0f172a 100%);
+            isolation: isolate;
+        }
+
+        .hero-modern-bg {
+            position: absolute;
+            inset: 0;
+            background: 
+                radial-gradient(ellipse 80% 50% at 50% 0%, rgba(13, 74, 62, 0.15) 0%, transparent 50%),
+                radial-gradient(ellipse 60% 40% at 50% 100%, rgba(195, 157, 72, 0.1) 0%, transparent 50%);
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        .hero-modern-container {
+            position: relative;
+            z-index: 1;
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 0 2rem;
+        }
+
+        .hero-modern-content {
+            display: flex;
+            flex-direction: column;
+            gap: 3rem;
+        }
+
+        /* Top Row - Live Indicator & Quick Stats */
+        .hero-top-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 2rem;
+        }
+
+        .hero-live-indicator {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 10px 20px;
+            background: rgba(239, 68, 68, 0.1);
+            border: 1px solid rgba(239, 68, 68, 0.3);
+            border-radius: 50px;
+            backdrop-filter: blur(10px);
+        }
+
+        .live-pulse-dot {
+            width: 10px;
+            height: 10px;
+            background: #ef4444;
+            border-radius: 50%;
+            animation: pulse-dot 2s ease-in-out infinite;
+            box-shadow: 0 0 10px rgba(239, 68, 68, 0.6);
+        }
+
+        @keyframes pulse-dot {
+            0%, 100% {
+                opacity: 1;
+                transform: scale(1);
+            }
+            50% {
+                opacity: 0.7;
+                transform: scale(1.2);
+            }
+        }
+
+        .live-text {
+            font-size: 0.75rem;
+            font-weight: 800;
+            color: #ef4444;
+            letter-spacing: 1px;
+            text-transform: uppercase;
+        }
+
+        .live-show-name {
+            font-size: 0.875rem;
+            color: rgba(255, 255, 255, 0.9);
+            font-weight: 500;
+        }
+
+        .hero-quick-stats {
+            display: flex;
+            gap: 2rem;
+            align-items: center;
+        }
+
+        .quick-stat {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-end;
+        }
+
+        .quick-stat-value {
+            font-size: 1.5rem;
+            font-weight: 800;
+            color: var(--gk-gold);
+            line-height: 1;
+        }
+
+        .quick-stat-label {
+            font-size: 0.75rem;
+            color: rgba(255, 255, 255, 0.6);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        /* Main Grid */
+        .hero-main-grid {
+            display: grid;
+            grid-template-columns: 1.2fr 1fr;
+            gap: 4rem;
+            align-items: start;
+        }
+
+        .hero-main-left {
+            display: flex;
+            flex-direction: column;
+            gap: 2rem;
+        }
+
+        .hero-modern-title {
+            font-family: 'Outfit', sans-serif;
+            font-size: 4rem;
+            font-weight: 900;
+            line-height: 1.1;
+            color: white;
+            letter-spacing: -0.03em;
+            margin: 0;
+        }
+
+        .title-highlight {
+            display: block;
+            background: linear-gradient(135deg, var(--gk-gold) 0%, #fbbf24 50%, var(--gk-gold) 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            background-size: 200% 100%;
+            animation: shimmer 3s ease-in-out infinite;
+        }
+
+        @keyframes shimmer {
+            0%, 100% {
+                background-position: 0% 50%;
+            }
+            50% {
+                background-position: 100% 50%;
+            }
+        }
+
+        .hero-modern-description {
+            font-size: 1.25rem;
+            line-height: 1.7;
+            color: rgba(255, 255, 255, 0.85);
+            max-width: 600px;
+            margin: 0;
+        }
+
+        .hero-modern-actions {
+            display: flex;
+            gap: 1rem;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+
+        .hero-modern-play {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 1.25rem 2.5rem;
+            background: var(--gk-gold);
+            color: var(--gk-dark);
+            border: none;
+            border-radius: 16px;
+            font-weight: 700;
+            font-size: 1.125rem;
+            cursor: pointer;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            box-shadow: 0 4px 20px rgba(195, 157, 72, 0.3);
+        }
+
+        .hero-modern-play:hover:not(:disabled) {
+            background: #fbbf24;
+            transform: translateY(-3px);
+            box-shadow: 0 8px 30px rgba(195, 157, 72, 0.4);
+        }
+
+        .hero-modern-play:disabled {
+            opacity: 0.7;
+            cursor: wait;
+        }
+
+        .hero-modern-play.is-playing {
+            background: #ef4444;
+            color: white;
+            box-shadow: 0 4px 20px rgba(239, 68, 68, 0.4);
+            animation: pulse-play 2s ease-in-out infinite;
+        }
+
+        @keyframes pulse-play {
+            0%, 100% {
+                box-shadow: 0 4px 20px rgba(239, 68, 68, 0.4);
+            }
+            50% {
+                box-shadow: 0 4px 30px rgba(239, 68, 68, 0.6);
+            }
+        }
+
+        .play-icon-wrapper {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 32px;
+            height: 32px;
+        }
+
+        .play-icon-wrapper svg {
+            width: 24px;
+            height: 24px;
+        }
+
+        .hero-modern-link {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 1.25rem 2rem;
+            background: rgba(255, 255, 255, 0.05);
+            color: white;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 16px;
+            font-weight: 600;
+            font-size: 1.125rem;
+            text-decoration: none;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            backdrop-filter: blur(10px);
+        }
+
+        .hero-modern-link:hover {
+            background: rgba(255, 255, 255, 0.1);
+            border-color: rgba(255, 255, 255, 0.2);
+            transform: translateY(-2px);
+        }
+
+        .hero-modern-link svg {
+            width: 20px;
+            height: 20px;
+        }
+
+        .hero-main-right {
+            display: flex;
+            align-items: flex-start;
+            justify-content: center;
+        }
+
+        /* Schedule Card Styles */
+        .schedule-slideshow-wrapper {
+            position: relative;
+            width: 100%;
+        }
+
+        .schedule-indicator {
+            margin-bottom: 0.75rem;
+        }
+
+        .schedule-badge-live {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            padding: 4px 8px;
+            border-radius: 100px;
+            background: #ef4444;
+            color: #ffffff;
+            font-size: 0.75rem;
+            font-weight: 700;
+            animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% {
+                opacity: 1;
+            }
+            50% {
+                opacity: 0.7;
+            }
+        }
+
+        .schedule-card {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(13, 74, 62, 0.15);
+            border-radius: 24px;
+            padding: 1.5rem;
+            box-shadow: 0 30px 60px rgba(0, 0, 0, 0.15), 0 0 0 1px rgba(255, 255, 255, 0.1);
+            position: relative;
+            overflow: hidden;
+            transition: all 0.3s ease;
+            max-width: 500px;
+            width: 100%;
+        }
+
+        .schedule-card:hover {
+            border-color: var(--gk-green);
+            box-shadow: 0 40px 80px rgba(0, 0, 0, 0.2), 0 0 0 1px rgba(13, 74, 62, 0.3);
+            transform: translateY(-4px);
+        }
+
+        .schedule-nav {
+            position: absolute;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            background: rgba(0, 0, 0, 0.8);
+            backdrop-filter: blur(4px);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border: none;
+            color: white;
+            cursor: pointer;
+            transition: all 0.2s;
+            z-index: 10;
+        }
+
+        .schedule-nav:hover {
+            background: rgba(0, 0, 0, 0.9);
+            transform: translateY(-50%) scale(1.1);
+        }
+
+        .schedule-nav-prev {
+            left: 0.5rem;
+        }
+
+        .schedule-nav-next {
+            right: 0.5rem;
+        }
+
+        .schedule-card-content {
+            position: relative;
+            z-index: 1;
+        }
+
+        .schedule-header-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 1rem;
+        }
+
+        .schedule-type-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            padding: 4px 12px;
+            border-radius: 6px;
+            font-size: 0.75rem;
+            font-weight: 700;
+            text-transform: capitalize;
+        }
+
+        .schedule-day-info {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            font-size: 0.75rem;
+            color: #64748b;
+        }
+
+        .schedule-title {
+            font-family: 'Outfit', sans-serif;
+            font-size: 1.5rem;
+            font-weight: 800;
+            line-height: 1.2;
+            margin-bottom: 0.5rem;
+            color: #0f172a;
+        }
+
+        .schedule-meta {
+            font-size: 0.875rem;
+            color: #64748b;
+            margin-bottom: 1rem;
+        }
+
+        .schedule-visual {
+            position: relative;
+            aspect-ratio: 16 / 9;
+            border-radius: 16px;
+            overflow: hidden;
+            margin-bottom: 1rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .schedule-visual-bg {
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+        }
+
+        .schedule-visual-icon {
+            width: 48px;
+            height: 48px;
+            margin-bottom: 0.5rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .schedule-visual-time {
+            font-weight: 700;
+            font-size: 1.125rem;
+            color: #0f172a;
+            margin-bottom: 0.25rem;
+        }
+
+        .schedule-visual-day {
+            font-size: 0.75rem;
+            color: #64748b;
+        }
+
+        .schedule-live-badge {
+            position: absolute;
+            top: 0.75rem;
+            right: 0.75rem;
+            background: #ef4444;
+            color: #ffffff;
+            font-size: 0.75rem;
+            font-weight: 700;
+            padding: 4px 8px;
+            border-radius: 4px;
+            animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+        }
+
+        .schedule-details {
+            display: flex;
+            flex-direction: column;
+            gap: 0.75rem;
+        }
+
+        .schedule-description {
+            font-size: 0.875rem;
+            color: #64748b;
+            line-height: 1.5;
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+        }
+
+        .schedule-footer-info {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding-top: 0.5rem;
+        }
+
+        .schedule-host {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .schedule-host-avatar {
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            background: rgba(13, 74, 62, 0.2);
+        }
+
+        .schedule-host span {
+            font-size: 0.875rem;
+            font-weight: 500;
+            color: #0f172a;
+        }
+
+        .schedule-listeners {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            color: #64748b;
+            font-size: 0.875rem;
+        }
+
+        .schedule-dots {
+            display: flex;
+            justify-content: center;
+            gap: 4px;
+            padding-top: 0.5rem;
+        }
+
+        .schedule-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            border: none;
+            background: rgba(13, 74, 62, 0.3);
+            cursor: pointer;
+            transition: all 0.3s ease;
+            padding: 0;
+        }
+
+        .schedule-dot.active {
+            width: 32px;
+            border-radius: 4px;
+            background: var(--gk-green);
+        }
+
+        .schedule-dot:hover {
+            background: rgba(13, 74, 62, 0.5);
+        }
+
+        /* Responsive */
+        @media (max-width: 1200px) {
+            .hero-modern-title {
+                font-size: 3.5rem;
+            }
+            
+            .hero-main-grid {
+                gap: 3rem;
+            }
+        }
+
+        @media (max-width: 1024px) {
+            .hero-modern {
+                min-height: auto;
+                padding: 4rem 0 3rem;
+            }
+            
+            .hero-main-grid {
+                grid-template-columns: 1fr;
+                gap: 3rem;
+            }
+            
+            .hero-modern-title {
+                font-size: 3rem;
+            }
+            
+            .hero-top-row {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+            
+            .hero-quick-stats {
+                width: 100%;
+                justify-content: space-between;
+            }
+        }
+
+        @media (max-width: 768px) {
+            .hero-modern {
+                padding: 3rem 0 2rem;
+            }
+            
+            .hero-modern-title {
+                font-size: 2.25rem;
+            }
+            
+            .hero-modern-description {
+                font-size: 1.125rem;
+            }
+            
+            .hero-modern-actions {
+                flex-direction: column;
+                width: 100%;
+            }
+            
+            .hero-modern-play,
+            .hero-modern-link {
+                width: 100%;
+                justify-content: center;
+            }
+            
+            .hero-quick-stats {
+                gap: 1.5rem;
+            }
+            
+            .quick-stat-value {
+                font-size: 1.25rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- HERO SECTION - Current Design Backup -->
+    <section class="hero-modern">
+        <div class="hero-modern-bg"></div>
+        <div class="container hero-modern-container">
+            <div class="hero-modern-content">
+                <!-- Top Row - Live Badge & Stats -->
+                <div class="hero-top-row">
+                    <div class="hero-live-indicator">
+                        <div class="live-pulse-dot"></div>
+                        <span class="live-text">LIVE NOW</span>
+                        <span class="live-show-name">Wake Up Y'all with GKPRadio Morning Team</span>
+                    </div>
+                    
+                    <div class="hero-quick-stats">
+                        <div class="quick-stat">
+                            <span class="quick-stat-value">2,500+</span>
+                            <span class="quick-stat-label">Family Members</span>
+                        </div>
+                        <div class="quick-stat">
+                            <span class="quick-stat-value">45K+</span>
+                            <span class="quick-stat-label">Prayers Lifted Up</span>
+                        </div>
+                        <div class="quick-stat">
+                            <span class="quick-stat-value">24/7</span>
+                            <span class="quick-stat-label">Live Ministry</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Main Content Grid -->
+                <div class="hero-main-grid">
+                    <!-- Left - Title & CTA -->
+                    <div class="hero-main-left">
+                        <h1 class="hero-modern-title">
+                            Welcome to
+                            <span class="title-highlight"> God Kingdom Principles Radio</span>
+                        </h1>
+
+                        <p class="hero-modern-description">
+                            Join our community of believers in daily inspiration, powerful testimonies, and life-changing conversations about faith, hope, and love.
+                        </p>
+
+                        <div class="hero-modern-actions">
+                            <button class="hero-modern-play">
+                                <div class="play-icon-wrapper">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <polygon points="5 3 19 12 5 21 5 3"></polygon>
+                                    </svg>
+                                </div>
+                                <span>Start Listening</span>
+                            </button>
+                            
+                            <a href="#" class="hero-modern-link">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+                                    <circle cx="9" cy="7" r="4"></circle>
+                                    <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+                                    <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+                                </svg>
+                                <span>Join Community</span>
+                            </a>
+                        </div>
+                    </div>
+
+                    <!-- Right - Schedule Card -->
+                    <div class="hero-main-right">
+                        <div class="schedule-slideshow-wrapper">
+                            <div class="schedule-indicator">
+                                <div class="schedule-badge-live">
+                                    📅 Daily Schedule
+                                </div>
+                            </div>
+                            <div class="schedule-card">
+                                <button class="schedule-nav schedule-nav-prev">‹</button>
+                                <button class="schedule-nav schedule-nav-next">›</button>
+                                
+                                <div class="schedule-card-content">
+                                    <div class="schedule-header-row">
+                                        <div class="schedule-type-badge" style="background: #0d4a3e; color: white;">
+                                            💬 Talk
+                                        </div>
+                                        <div class="schedule-day-info">
+                                            🕐 Mon–Fri
+                                        </div>
+                                    </div>
+                                    
+                                    <h3 class="schedule-title">Wake Up Y'all</h3>
+                                    
+                                    <div class="schedule-meta">
+                                        6:00 AM – 9:00 AM • GKPRadio Morning Team
+                                    </div>
+
+                                    <div class="schedule-visual">
+                                        <div class="schedule-visual-bg" style="background: rgba(13, 74, 62, 0.1);">
+                                            <div class="schedule-visual-icon" style="color: #0d4a3e;">
+                                                💬
+                                            </div>
+                                            <div class="schedule-visual-time">6:00 AM – 9:00 AM</div>
+                                            <div class="schedule-visual-day">Mon–Fri</div>
+                                        </div>
+                                        <div class="schedule-live-badge">LIVE</div>
+                                    </div>
+                                    
+                                    <div class="schedule-details">
+                                        <p class="schedule-description">
+                                            Start your morning with faith-driven conversation, motivation, and music for the soul.
+                                        </p>
+                                        
+                                        <div class="schedule-footer-info">
+                                            <div class="schedule-host">
+                                                <div class="schedule-host-avatar"></div>
+                                                <span>GKPRadio Morning Team</span>
+                                            </div>
+                                            
+                                            <div class="schedule-listeners">
+                                                👥 245
+                                            </div>
+                                        </div>
+
+                                        <div class="schedule-dots">
+                                            <button class="schedule-dot active"></button>
+                                            <button class="schedule-dot"></button>
+                                            <button class="schedule-dot"></button>
+                                            <button class="schedule-dot"></button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <script>
+        // Simple schedule carousel functionality
+        let currentIndex = 0;
+        const dots = document.querySelectorAll('.schedule-dot');
+        const scheduleData = [
+            { title: 'Wake Up Y\'all', time: '6:00 AM – 9:00 AM', host: 'GKPRadio Morning Team', type: 'talk' },
+            { title: 'Kingdom Teachings', time: '10:00 AM – 11:00 AM', host: 'Pastor Myles Monroe', type: 'preach' },
+            { title: 'Marriage Talk', time: '12:00 PM – 1:00 PM', host: 'Dustin Scott', type: 'marriage' },
+            { title: 'Praise & Worship Music', time: '10:00 PM – 12:00 AM', host: 'Auto-DJ', type: 'music' }
+        ];
+
+        function updateSchedule(index) {
+            const item = scheduleData[index];
+            document.querySelector('.schedule-title').textContent = item.title;
+            document.querySelector('.schedule-meta').textContent = `${item.time} • ${item.host}`;
+            
+            dots.forEach((dot, i) => {
+                dot.classList.toggle('active', i === index);
+            });
+        }
+
+        document.querySelector('.schedule-nav-next').addEventListener('click', () => {
+            currentIndex = (currentIndex + 1) % scheduleData.length;
+            updateSchedule(currentIndex);
+        });
+
+        document.querySelector('.schedule-nav-prev').addEventListener('click', () => {
+            currentIndex = (currentIndex - 1 + scheduleData.length) % scheduleData.length;
+            updateSchedule(currentIndex);
+        });
+
+        dots.forEach((dot, i) => {
+            dot.addEventListener('click', () => {
+                currentIndex = i;
+                updateSchedule(currentIndex);
+            });
+        });
+
+        // Auto-advance
+        setInterval(() => {
+            currentIndex = (currentIndex + 1) % scheduleData.length;
+            updateSchedule(currentIndex);
+        }, 4000);
+    </script>
+</body>
+</html>

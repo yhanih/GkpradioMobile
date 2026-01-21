@@ -1,0 +1,148 @@
+.about-section {
+    padding: 6rem 0;
+    background: #ffffff;
+}
+
+.about-section .container {
+    max-width: 1280px;
+    margin: 0 auto;
+    padding: 0 2rem;
+}
+
+.section-header {
+    max-width: 800px;
+    margin: 0 auto 4rem;
+    text-align: center;
+}
+
+.section-badge {
+    display: inline-block;
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: #0d4a3e;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    margin-bottom: 1rem;
+}
+
+.section-title {
+    font-family: serif, 'Outfit', sans-serif;
+    font-size: 3rem;
+    font-weight: 700;
+    line-height: 1.2;
+    color: #0f172a;
+    margin-bottom: 1.5rem;
+}
+
+@media (max-width: 768px) {
+    .section-title {
+        font-size: 2rem;
+    }
+}
+
+.section-description {
+    font-size: 1.125rem;
+    line-height: 1.75;
+    color: #64748b;
+}
+
+/* Features Grid */
+.features-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 2rem;
+    margin-bottom: 5rem;
+}
+
+.feature-card {
+    background: #ffffff;
+    border-radius: 1rem;
+    padding: 2rem;
+    border: 1px solid #e2e8f0;
+    transition: all 0.3s ease;
+}
+
+.feature-card:hover {
+    border-color: #0d4a3e;
+    box-shadow: 0 10px 30px rgba(13, 74, 62, 0.1);
+    transform: translateY(-4px);
+}
+
+.feature-icon {
+    width: 3rem;
+    height: 3rem;
+    border-radius: 0.75rem;
+    background: rgba(13, 74, 62, 0.1);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 1rem;
+    color: #0d4a3e;
+    transition: all 0.3s ease;
+}
+
+.feature-card:hover .feature-icon {
+    background: rgba(13, 74, 62, 0.2);
+}
+
+.feature-title {
+    font-family: serif, 'Outfit', sans-serif;
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: #0f172a;
+    margin-bottom: 0.75rem;
+}
+
+.feature-description {
+    color: #64748b;
+    line-height: 1.6;
+}
+
+/* Stats Grid */
+.stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 2rem;
+    border-top: 1px solid #e2e8f0;
+    padding-top: 3rem;
+}
+
+.stat-item {
+    text-align: center;
+}
+
+.stat-value {
+    font-family: serif, 'Outfit', sans-serif;
+    font-size: 2.5rem;
+    font-weight: 800;
+    color: #0d4a3e;
+    line-height: 1;
+}
+
+.stat-label {
+    font-size: 0.875rem;
+    color: #64748b;
+    margin-top: 0.5rem;
+}
+
+/* Dark mode support */
+[data-theme='dark'] .about-section {
+    background: #0f172a;
+}
+
+[data-theme='dark'] .section-title {
+    color: #f8fafc;
+}
+
+[data-theme='dark'] .feature-card {
+    background: #1e293b;
+    border-color: #334155;
+}
+
+[data-theme='dark'] .feature-card:hover {
+    border-color: #0d4a3e;
+}
+
+[data-theme='dark'] .feature-title {
+    color: #f8fafc;
+}

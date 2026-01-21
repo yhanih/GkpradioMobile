@@ -1,0 +1,34 @@
+Looking at your logs, I can see you're running both Owncast video streaming and AzuraCast audio on the same server, which is definitely causing resource contention and the laggy video interruptions you're experiencing.
+
+The issue is that both services are competing for:
+
+CPU resources (video encoding is very intensive)
+Network bandwidth (both uploading and serving streams)
+Memory (buffering multiple streams)
+Let me optimize your setup to reduce the lag and interruptions:
+
+client/src/components/OwncastPlayer.tsx
+Optimize video player for better buffering and less interruptions Optimize video player for better buffering and less interruptions Add better error handling and reconnection logic Optimize video player for better buffering and less interruptions Add better error handling and reconnection logic Add adaptive quality and resource-aware streaming Optimize video player for better buffering and less interruptions Add better error handling and reconnection logic Add adaptive quality and resource-aware streaming Monitor server load and adjust quality automatically
+server/owncast-proxy.ts
+Optimize Owncast proxy to reduce server load
+server/stream-optimizer.ts
+Create stream optimization middleware
+server/routes.ts
+Add stream optimization and resource monitoring
+Quick Fix Recommendations:
+Increased Buffer Size: The video player now buffers 60-180 seconds instead of 30-120, which should eliminate most interruptions.
+
+Better Error Recovery: Automatic reconnection when network errors occur, with 2-second delays to prevent hammering the server.
+
+Server Load Monitoring: The system now monitors memory usage and adjusts video quality when the server is under stress.
+
+Caching: Video segments are now cached for 10 seconds to reduce repeated requests to your VPS.
+
+Adaptive Quality: When server load is high, the video quality automatically reduces to maintain smooth playback.
+
+The main issue is that AzuraCast + Owncast on the same server is too much. These changes will help, but for the best experience, consider:
+
+Option 1: Use only audio streaming during peak times
+Option 2: Upgrade your VPS to more CPU/RAM
+Option 3: Move one service to a separate server
+Try these changes first - they should significantly reduce the video interruptions you're experiencing.

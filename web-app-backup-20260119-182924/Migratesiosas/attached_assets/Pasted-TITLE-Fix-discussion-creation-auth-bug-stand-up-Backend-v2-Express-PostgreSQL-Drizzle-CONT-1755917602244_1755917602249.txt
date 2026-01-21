@@ -1,0 +1,118 @@
+TITLE: Fix discussion-creation auth bug + stand up Backend v2 (Express + PostgreSQL + Drizzle)
+
+CONTEXT
+- App: GKP Radio — faith-based digital media platform (radio, video, community).
+- Stack: React + TypeScript frontend; Express.js + PostgreSQL + Drizzle ORM backend; integrates with AzuraCast.
+- Current issue: Logged-in users see “you must log in to create a discussion” when posting. Frontend shows logged-in state; backend returns 401/403. This is an auth/session propagation problem.
+
+PRIMARY OBJECTIVES
+1) Diagnose and fix the discussion creation failure (frontend ↔ backend auth).
+2) Build a clean, secure “Backend v2” for discussions with modern patterns (keep v1 running until cutover).
+3) Provide tests, migration, and a safe rollout plan.
+
+NON-GOALS
+- Do not drop production data. Preserve/backup and migrate.
+- Do not change the frontend design beyond what’s required to fix the workflow.
+
+SCOPE OF WORK
+A. DIAGNOSE CURRENT BUG
+- Inspect POST /api/discussions (or equivalent) and any auth middleware.
+- Confirm whether we use JWT (Authorization: Bearer) or HttpOnly session cookies. Ensure the client request actually sends the token/cookie.
+- Verify CORS and cookie flags: SameSite, Secure, Domain, Path; and that fetch/axios uses credentials: "include" if cookies are used.
+- Confirm CSRF handling if cookies are used (token/header pattern).
+- Add temporary structured logging around auth (userId resolved? token claims? route? status?).
+
+B. BACKEND V2 (CREATE ALONGSIDE V1)
+- Create a new service folder (e.g., /services/discussions-v2 or /apps/api-v2).
+- Use Express + Drizzle + Zod + pino logger.
+- Implement robust auth middleware:
+  - If JWT: verify, rotate refresh tokens, short-lived access tokens.
+  - If cookies: HttpOnly, Secure, SameSite=Lax/None (as needed), CSRF token header required.
+- Add rate limiting (IP + user) for create endpoints.
+- Add input validation with Zod; sanitize markdown to prevent XSS.
+- Add OpenAPI/Swagger spec (yaml or via decorators) for the discussions API.
+- Add healthcheck (/healthz) and request-id middleware.
+
+C. DATA MODEL (Drizzle, PostgreSQL)
+- Tables (adjust names to match project conventions):
+  - users(id, …)
+  - discussions(
+      id serial pk,
+      title text not null,
+      content text not null,
+      author_id int not null fk users.id,
+      slug text unique,
+      tags text[] default '{}',
+      created_at timestamptz default now(),
+      updated_at timestamptz default now()
+    )
+  - comments(
+      id serial pk,
+      discussion_id int fk discussions.id,
+      author_id int fk users.id,
+      content text not null,
+      created_at timestamptz default now()
+    )
+  - indexes: (author_id), (created_at), (slug)
+- Provide migration scripts (Drizzle) and a reversible migration plan.
+
+D. API ENDPOINTS (V2)
+- POST   /api/v2/discussions        (auth required) → {id, title, content, authorId, tags, slug}
+- GET    /api/v2/discussions/:id    (public)
+- GET    /api/v2/discussions        (public; pagination, tag filter, search)
+- PATCH  /api/v2/discussions/:id    (author or admin)
+- POST   /api/v2/discussions/:id/comments (auth)
+- GET    /api/v2/discussions/:id/comments (public)
+- Errors: consistent problem+json shape {code, message, details?}.
+
+E. FRONTEND INTEGRATION (JUST WHAT’S NEEDED)
+- Ensure discussion-create call includes auth (Bearer token OR credentials: 'include' for cookies).
+- Use React Hook Form + Zod on the form; disable submit while pending; prevent double-submit.
+- On 401: trigger re-auth flow cleanly (refresh token or redirect to login).
+- Add optimistic UI with rollback on failure.
+
+F. SECURITY & HARDENING
+- CORS: restrict origins to app domains; allow credentials only if cookies used.
+- CSRF protection if cookies are used (X-CSRF-Token).
+- Input sanitation (markdown), output escaping where needed.
+- Rate limiting + basic abuse prevention.
+- Logging: pino with requestId, userId (if available), route, status.
+
+G. TESTING & VERIFICATION
+- Unit tests for auth middleware and validators.
+- Integration tests for POST /api/v2/discussions happy path + common failures (no token, invalid token, expired token, CSRF missing).
+- E2E script (Playwright or supertest) that:
+  1) Logs in (or seeds a session).
+  2) Creates a discussion.
+  3) Verifies it appears in list and detail.
+  4) Posts a comment.
+- Provide a Postman/Insomnia collection + example curl commands.
+
+H. MIGRATION & ROLLOUT
+- Export/backup existing discussion data (if any).
+- Map/transform to new schema (slug generation, tags, etc.).
+- Run migration in a transaction; test on a staging DB first.
+- Ship v2 behind feature flag: ENV VAR DISCUSSIONS_API_VERSION=v2.
+- Cutover: switch frontend to /api/v2; monitor logs; roll back flag if errors spike.
+
+DELIVERABLES
+- Code in repo with /api-v2 (or similar) and Drizzle migrations.
+- OpenAPI spec file and generated API docs route.
+- Test suite (unit + integration + an E2E script) passing in CI.
+- Postman/Insomnia collection + curl examples.
+- README with:
+  - ENV vars required
+  - local dev commands
+  - migration + rollback steps
+  - cutover steps and verification checklist
+
+ACCEPTANCE CRITERIA
+- A logged-in user can create a discussion without 401/403.
+- Token/cookie is verifiably transmitted and validated.
+- 95%+ of discussion endpoints covered by tests.
+- No XSS from discussion content in basic checks.
+- Rollback plan documented and reversible.
+
+NOTES
+- If Better Auth is already integrated, keep it and wire to v2 middleware. If not, prefer HttpOnly cookie sessions + CSRF or short-lived JWTs with refresh rotation. Document whichever you choose.
+- Preserve production data; do not delete tables without a backup snapshot.

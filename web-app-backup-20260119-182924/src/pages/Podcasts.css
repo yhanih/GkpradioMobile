@@ -1,0 +1,236 @@
+.podcasts-page {
+    padding-top: 100px;
+    padding-bottom: 120px;
+    min-height: 100vh;
+}
+
+.podcasts-container {
+    max-width: 1000px;
+    margin: 0 auto;
+    padding: 0 2rem;
+}
+
+/* Desktop optimizations */
+@media (min-width: 1440px) {
+    .podcasts-container {
+        max-width: 1400px;
+        padding: 0 4rem;
+    }
+
+    .podcast-card-wide {
+        padding: 0;
+    }
+
+    .podcast-art {
+        width: 240px;
+        height: 240px;
+    }
+
+    .podcast-content {
+        padding: 2.5rem;
+    }
+}
+
+.media-header {
+    margin-bottom: 3rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    gap: 2rem;
+    flex-wrap: wrap;
+}
+
+.media-title h1 {
+    font-size: 3rem;
+    background: linear-gradient(135deg, #fff 0%, rgba(255, 255, 255, 0.5) 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    margin-bottom: 0.5rem;
+}
+
+.media-title p {
+    color: var(--text-muted);
+    font-size: 1.1rem;
+}
+
+.search-wrap {
+    position: relative;
+    width: 100%;
+    max-width: 400px;
+}
+
+.search-wrap input {
+    width: 100%;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 12px;
+    padding: 0.75rem 1rem 0.75rem 2.5rem;
+    color: white;
+    font-size: 1rem;
+    outline: none;
+    transition: all 0.2s;
+}
+
+.search-wrap input:focus {
+    background: rgba(255, 255, 255, 0.08);
+    border-color: var(--primary);
+    box-shadow: 0 0 0 4px rgba(5, 150, 105, 0.1);
+}
+
+.podcast-list {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+}
+
+/* Desktop: Convert to grid for better density and horizontal composition */
+@media (min-width: 1024px) {
+    .podcast-list {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 2rem;
+    }
+}
+
+@media (min-width: 1440px) {
+    .podcast-list {
+        grid-template-columns: repeat(2, 1fr);
+        gap: 2.5rem;
+    }
+
+    .podcast-card-wide {
+        /* Reduce vertical padding on desktop for better density */
+        padding: 0;
+    }
+}
+
+.podcast-card-wide {
+    display: flex;
+    background: rgba(255, 255, 255, 0.02);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    border-radius: 20px;
+    overflow: hidden;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    cursor: pointer;
+    flex-direction: row;
+}
+
+/* Desktop: Cards maintain horizontal layout in grid */
+@media (min-width: 1024px) {
+    .podcast-card-wide {
+        flex-direction: row;
+        height: 100%;
+    }
+}
+
+.podcast-card-wide:hover {
+    background: rgba(255, 255, 255, 0.05);
+    transform: translateX(8px);
+    border-color: rgba(255, 255, 255, 0.15);
+}
+
+.podcast-art {
+    width: 200px;
+    height: 200px;
+    flex-shrink: 0;
+    position: relative;
+}
+
+/* Desktop: Adjust art size for grid layout */
+@media (min-width: 1024px) {
+    .podcast-art {
+        width: 180px;
+        height: 180px;
+    }
+}
+
+.podcast-art img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.play-overlay {
+    position: absolute;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.4);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    transition: opacity 0.3s;
+}
+
+.podcast-card-wide:hover .play-overlay {
+    opacity: 1;
+}
+
+.podcast-content {
+    flex: 1;
+    padding: 2rem;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    min-width: 0;
+}
+
+.podcast-meta-top {
+    display: flex;
+    gap: 1rem;
+    margin-bottom: 0.75rem;
+    font-size: 0.8rem;
+    color: var(--primary);
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+.podcast-info-main h3 {
+    font-size: 1.4rem;
+    color: white;
+    margin-bottom: 0.75rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.podcast-info-main p {
+    color: var(--text-muted);
+    font-size: 0.95rem;
+    line-height: 1.6;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+.podcast-meta-bottom {
+    margin-top: 1.5rem;
+    display: flex;
+    align-items: center;
+    gap: 1.5rem;
+    color: var(--text-muted);
+    font-size: 0.85rem;
+}
+
+.meta-item {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+@media (max-width: 768px) {
+    .podcast-card-wide {
+        flex-direction: column;
+    }
+
+    .podcast-art {
+        width: 100%;
+        height: 240px;
+    }
+
+    .media-header {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+}

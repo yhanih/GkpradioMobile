@@ -37,10 +37,10 @@ export function EpisodePlayerScreen() {
   const { user } = useAuth();
   const { isBookmarked, toggleBookmark } = useBookmarks();
   const { playEpisode, isPlaying, isLoading, pause, resume, currentEpisode, skipForward, skipBackward, getCurrentPosition } = useAudio();
-  
-  const { episode } = route.params;
+
+  const { episode, allEpisodes = [] } = route.params;
   const isCurrentEpisode = currentEpisode?.id === episode.id;
-  
+
   const [playbackSpeed, setPlaybackSpeed] = useState(1);
   const [currentPosition, setCurrentPosition] = useState(0);
   const [duration, setDuration] = useState(episode.duration || 0);
@@ -102,6 +102,30 @@ export function EpisodePlayerScreen() {
     setPlaybackSpeed(PLAYBACK_SPEEDS[nextIndex]);
   };
 
+  const handleNext = () => {
+    if (allEpisodes.length === 0) return;
+    const currentIndex = allEpisodes.findIndex(e => e.id === episode.id);
+    if (currentIndex < allEpisodes.length - 1) {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      const nextEpisode = allEpisodes[currentIndex + 1];
+      navigation.setParams({ episode: nextEpisode });
+    } else {
+      Alert.alert('End of List', 'This is the last episode in the list.');
+    }
+  };
+
+  const handlePrevious = () => {
+    if (allEpisodes.length === 0) return;
+    const currentIndex = allEpisodes.findIndex(e => e.id === episode.id);
+    if (currentIndex > 0) {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      const prevEpisode = allEpisodes[currentIndex - 1];
+      navigation.setParams({ episode: prevEpisode });
+    } else {
+      Alert.alert('Start of List', 'This is the first episode in the list.');
+    }
+  };
+
   const handleTimer = () => {
     Haptics.selectionAsync();
     Alert.alert(
@@ -151,8 +175,8 @@ export function EpisodePlayerScreen() {
     <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
       <SafeAreaView style={styles.safeArea} edges={['top']}>
         <View style={styles.header}>
-          <Pressable 
-            style={[styles.headerButton, { backgroundColor: theme.colors.surface }]} 
+          <Pressable
+            style={[styles.headerButton, { backgroundColor: theme.colors.surface }]}
             onPress={() => {
               Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
               navigation.goBack();
@@ -160,25 +184,25 @@ export function EpisodePlayerScreen() {
           >
             <Ionicons name="chevron-down" size={24} color={theme.colors.text} />
           </Pressable>
-          
+
           <Text style={[styles.headerTitle, { color: theme.colors.text }]}>Now Playing</Text>
-          
+
           {user && (
-            <Pressable 
-              style={[styles.headerButton, { backgroundColor: theme.colors.surface }]} 
+            <Pressable
+              style={[styles.headerButton, { backgroundColor: theme.colors.surface }]}
               onPress={handleBookmark}
             >
-              <Ionicons 
-                name={isBookmarked('episode', episode.id) ? 'bookmark' : 'bookmark-outline'} 
-                size={22} 
-                color={isBookmarked('episode', episode.id) ? theme.colors.primary : theme.colors.text} 
+              <Ionicons
+                name={isBookmarked('episode', episode.id) ? 'bookmark' : 'bookmark-outline'}
+                size={22}
+                color={isBookmarked('episode', episode.id) ? theme.colors.primary : theme.colors.text}
               />
             </Pressable>
           )}
         </View>
       </SafeAreaView>
 
-      <ScrollView 
+      <ScrollView
         style={styles.scrollView}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
@@ -186,9 +210,9 @@ export function EpisodePlayerScreen() {
         <View style={styles.artworkContainer}>
           <View style={[styles.artworkShadow, { shadowColor: theme.colors.primary }]}>
             <Image
-              source={{ 
-                uri: episode.thumbnail_url || 
-                     'https://images.unsplash.com/photo-1516589178581-6cd7833ae3b2?w=600' 
+              source={{
+                uri: episode.thumbnail_url ||
+                  'https://images.unsplash.com/photo-1516589178581-6cd7833ae3b2?w=600'
               }}
               style={styles.artwork}
             />
@@ -199,13 +223,13 @@ export function EpisodePlayerScreen() {
           <Text style={[styles.title, { color: theme.colors.text }]} numberOfLines={2}>
             {episode.title}
           </Text>
-          
+
           {episode.author && (
             <Text style={[styles.author, { color: theme.colors.primary }]}>
               {episode.author}
             </Text>
           )}
-          
+
           <View style={styles.metaRow}>
             {episode.category && (
               <View style={[styles.categoryBadge, { backgroundColor: theme.colors.primaryLight }]}>
@@ -223,14 +247,14 @@ export function EpisodePlayerScreen() {
         <View style={styles.controlsContainer}>
           <View style={styles.progressContainer}>
             <View style={[styles.progressBar, { backgroundColor: theme.colors.border }]}>
-              <View 
+              <View
                 style={[
-                  styles.progressFill, 
-                  { 
-                    backgroundColor: theme.colors.primary, 
-                    width: duration > 0 ? `${(currentPosition / duration) * 100}%` : '0%' 
+                  styles.progressFill,
+                  {
+                    backgroundColor: theme.colors.primary,
+                    width: duration > 0 ? `${(currentPosition / duration) * 100}%` : '0%'
                   }
-                ]} 
+                ]}
               />
             </View>
             <View style={styles.timeRow}>
@@ -244,17 +268,19 @@ export function EpisodePlayerScreen() {
           </View>
 
           <View style={styles.mainControls}>
-            <Pressable 
+            <Pressable
               style={styles.secondaryControl}
-              onPress={() => {
-                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                Alert.alert('Previous', 'Go to previous episode');
-              }}
+              onPress={handlePrevious}
+              disabled={allEpisodes.length === 0 || allEpisodes.findIndex(e => e.id === episode.id) === 0}
             >
-              <Ionicons name="play-skip-back" size={28} color={theme.colors.textMuted} />
+              <Ionicons
+                name="play-skip-back"
+                size={28}
+                color={allEpisodes.length === 0 || allEpisodes.findIndex(e => e.id === episode.id) === 0 ? theme.colors.textMuted : theme.colors.text}
+              />
             </Pressable>
-            
-            <Pressable 
+
+            <Pressable
               style={styles.secondaryControl}
               onPress={handleSkipBack}
             >
@@ -270,16 +296,16 @@ export function EpisodePlayerScreen() {
                 {isLoading ? (
                   <ActivityIndicator size="large" color="#fff" />
                 ) : (
-                  <Ionicons 
-                    name={isCurrentEpisode && isPlaying ? 'pause' : 'play'} 
-                    size={36} 
-                    color="#fff" 
+                  <Ionicons
+                    name={isCurrentEpisode && isPlaying ? 'pause' : 'play'}
+                    size={36}
+                    color="#fff"
                   />
                 )}
               </LinearGradient>
             </Pressable>
 
-            <Pressable 
+            <Pressable
               style={styles.secondaryControl}
               onPress={handleSkipForward}
             >
@@ -287,35 +313,37 @@ export function EpisodePlayerScreen() {
               <Text style={[styles.skipText, { color: theme.colors.text }]}>30</Text>
             </Pressable>
 
-            <Pressable 
+            <Pressable
               style={styles.secondaryControl}
-              onPress={() => {
-                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                Alert.alert('Next', 'Go to next episode');
-              }}
+              onPress={handleNext}
+              disabled={allEpisodes.length === 0 || allEpisodes.findIndex(e => e.id === episode.id) === allEpisodes.length - 1}
             >
-              <Ionicons name="play-skip-forward" size={28} color={theme.colors.textMuted} />
+              <Ionicons
+                name="play-skip-forward"
+                size={28}
+                color={allEpisodes.length === 0 || allEpisodes.findIndex(e => e.id === episode.id) === allEpisodes.length - 1 ? theme.colors.textMuted : theme.colors.text}
+              />
             </Pressable>
           </View>
 
           <View style={styles.extraControls}>
-            <Pressable 
+            <Pressable
               style={styles.extraButton}
               onPress={handleSpeedChange}
             >
               <Ionicons name="speedometer-outline" size={22} color={theme.colors.textMuted} />
               <Text style={[styles.extraButtonText, { color: theme.colors.textMuted }]}>{playbackSpeed}x</Text>
             </Pressable>
-            
-            <Pressable 
+
+            <Pressable
               style={styles.extraButton}
               onPress={handleTimer}
             >
               <Ionicons name="timer-outline" size={22} color={theme.colors.textMuted} />
               <Text style={[styles.extraButtonText, { color: theme.colors.textMuted }]}>Timer</Text>
             </Pressable>
-            
-            <Pressable 
+
+            <Pressable
               style={styles.extraButton}
               onPress={handleShare}
             >

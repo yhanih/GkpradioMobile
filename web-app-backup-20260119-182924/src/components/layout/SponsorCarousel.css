@@ -1,0 +1,118 @@
+.sponsor-marquee {
+    background-color: #000;
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    overflow: hidden;
+}
+
+.marquee-content {
+    display: flex;
+    align-items: center;
+    gap: 1.5rem;
+    padding: 1rem 0;
+    min-height: 4rem;
+}
+
+.label-wrap {
+    flex-shrink: 0;
+}
+
+.marquee-label {
+    color: white;
+    font-weight: 800;
+    font-size: 0.75rem;
+    letter-spacing: 0.1em;
+    white-space: nowrap;
+}
+
+.sets-container {
+    position: relative;
+    flex: 1;
+    height: 2rem;
+    min-width: 0;
+}
+
+.sponsor-set {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 2rem;
+    opacity: 0;
+    visibility: hidden;
+    transition: all 0.6s ease-in-out;
+}
+
+.sponsor-set.active {
+    opacity: 1;
+    visibility: visible;
+}
+
+@media (min-width: 768px) {
+    .sponsor-set {
+        gap: 4rem;
+    }
+}
+
+.sponsor-link {
+    color: var(--text-muted);
+    font-size: 0.875rem;
+    font-weight: 600;
+    white-space: nowrap;
+    transition: all 0.2s;
+    padding: 0.4rem 0.8rem;
+    border-radius: 4px;
+}
+
+.sponsor-link:hover {
+    color: white;
+    background: rgba(255, 255, 255, 0.05);
+    transform: translateY(-1px);
+}
+
+.indicator-dots {
+    display: flex;
+    gap: 0.5rem;
+    flex-shrink: 0;
+}
+
+.indicator-dot {
+    width: 0.4rem;
+    height: 0.4rem;
+    border-radius: 50%;
+    background: #333;
+    transition: all 0.3s;
+}
+
+.indicator-dot.active {
+    background: var(--accent);
+    width: 1rem;
+    border-radius: 1rem;
+}
+
+@media (max-width: 640px) {
+    .marquee-content {
+        flex-direction: column;
+        gap: 1rem;
+        padding: 1.5rem 0;
+        text-align: center;
+    }
+
+    .sets-container {
+        height: auto;
+        width: 100%;
+    }
+
+    .sponsor-set {
+        position: relative;
+        flex-wrap: wrap;
+        justify-content: center;
+        gap: 1rem;
+        display: none;
+    }
+
+    .sponsor-set.active {
+        display: flex;
+    }
+}

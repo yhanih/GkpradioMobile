@@ -19,7 +19,6 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.gkpradio.mobile",
       "buildNumber": "1.0.1",
-      "privacyPolicyUrl": "https://godkingdomprinciplesradio.com/privacy-policy",
       "config": {
         "usesNonExemptEncryption": false
       },
@@ -46,7 +45,6 @@
     "android": {
       "package": "com.gkpradio.mobile",
       "versionCode": 2,
-      "privacyPolicyUrl": "https://godkingdomprinciplesradio.com/privacy-policy",
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#047857"
@@ -85,7 +83,9 @@
     "extra": {
       "supabaseUrl": "https://fychjnaxljwmgoptjsxn.supabase.co",
       "supabaseAnonKey": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZ5Y2hqbmF4bGp3bWdvcHRqc3huIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTg2ODA5ODQsImV4cCI6MjA3NDI1Njk4NH0.PU002pqmbeCo_plcjaCP678Xo5dischMR3a_OTOqp_E",
-      "azuracastBaseUrl": "http://74.208.102.89:8080"
+      "azuracastBaseUrl": "http://74.208.102.89:8080",
+      "privacyPolicyUrl": "https://godkingdomprinciplesradio.com/privacy-policy",
+      "expoProjectId": "3cc18e67-a1d7-4f5a-bcc5-48e3dde78f96"
     },
     "plugins": [
       "expo-font",

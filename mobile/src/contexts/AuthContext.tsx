@@ -11,6 +11,7 @@ interface AuthContextType {
   signUp: (email: string, password: string, fullName?: string) => Promise<{ error: any }>;
   signOut: () => Promise<void>;
   resetPassword: (email: string) => Promise<{ error: any }>;
+  updatePassword: (password: string) => Promise<{ error: any }>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -28,7 +29,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         email: authUser.email!,
         fullname: authUser.user_metadata?.full_name || null,
       }, { onConflict: 'id' });
-      
+
       if (error) {
         console.error('Error upserting user profile:', error);
       } else {
@@ -80,11 +81,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         email,
         password,
       });
-      
+
       if (!error && data.user) {
         await ensureUserProfile(data.user);
       }
-      
+
       return { error };
     } catch (error) {
       console.error('Error signing in:', error);
@@ -136,8 +137,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  const updatePassword = async (password: string) => {
+    try {
+      const { error } = await supabase.auth.updateUser({
+        password: password,
+      });
+      return { error };
+    } catch (error) {
+      console.error('Error updating password:', error);
+      return { error };
+    }
+  };
+
   return (
-    <AuthContext.Provider value={{ user, session, loading, signIn, signUp, signOut, resetPassword }}>
+    <AuthContext.Provider value={{ user, session, loading, signIn, signUp, signOut, resetPassword, updatePassword }}>
       {children}
     </AuthContext.Provider>
   );
