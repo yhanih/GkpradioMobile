@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { View, Text, ScrollView, StyleSheet, Pressable, ActivityIndicator, RefreshControl, Alert, Image, TextInput, Animated, Share } from 'react-native';
+import { View, Text, ScrollView, StyleSheet, Pressable, ActivityIndicator, RefreshControl, Alert, Image, TextInput, Animated, Share, Dimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
@@ -16,7 +16,16 @@ import { COMMUNITY_CATEGORIES, getCategoryIcon, getCategoryLabel, Category } fro
 import { RootStackParamList } from '../types/navigation';
 import { useToast } from '../components/Toast';
 
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
+
 type SortOption = 'newest' | 'popular' | 'discussed';
+type ModeType = 'prayers' | 'discussions';
+
+// Define which categories belong to each mode
+const PRAYER_CATEGORIES = ['Prayer Requests', 'Pray for Others'];
+const DISCUSSION_CATEGORIES = COMMUNITY_CATEGORIES
+  .filter(cat => cat.id !== 'all' && !PRAYER_CATEGORIES.includes(cat.id))
+  .map(cat => cat.id);
 
 interface ThreadWithUser extends CommunityThread {
   users?: User | null;
@@ -31,6 +40,7 @@ export function CommunityScreen() {
   const { user } = useAuth();
   const { isBookmarked, toggleBookmark, refreshBookmarks } = useBookmarks();
   const { showToast } = useToast();
+  const [activeMode, setActiveMode] = useState<ModeType>('prayers');
   const [activeCategory, setActiveCategory] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [debouncedSearchQuery, setDebouncedSearchQuery] = useState('');
@@ -50,6 +60,7 @@ export function CommunityScreen() {
   const sortByRef = useRef(sortBy);
   const blockedUserIdsRef = useRef<string[]>([]);
   const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const tabIndicatorAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     sortByRef.current = sortBy;
@@ -58,6 +69,21 @@ export function CommunityScreen() {
   useEffect(() => {
     blockedUserIdsRef.current = blockedUserIds;
   }, [blockedUserIds]);
+
+  // Animate tab indicator when mode changes
+  useEffect(() => {
+    Animated.spring(tabIndicatorAnim, {
+      toValue: activeMode === 'prayers' ? 0 : 1,
+      useNativeDriver: true,
+      tension: 100,
+      friction: 10,
+    }).start();
+  }, [activeMode]);
+
+  // Reset category to 'all' when mode changes
+  useEffect(() => {
+    setActiveCategory('all');
+  }, [activeMode]);
 
   // Debounce search query
   useEffect(() => {
@@ -698,26 +724,61 @@ export function CommunityScreen() {
     }
   };
 
+  // Filter threads by mode first, then by category
   const filteredThreads = useMemo(() => {
-    return activeCategory === 'all'
-      ? threads
-      : threads.filter(t => t.category === activeCategory);
-  }, [threads, activeCategory]);
+    // First filter by mode (prayers vs discussions)
+    let modeFiltered = threads.filter(t => {
+      if (activeMode === 'prayers') {
+        return PRAYER_CATEGORIES.includes(t.category);
+      } else {
+        return DISCUSSION_CATEGORIES.includes(t.category);
+      }
+    });
 
-  // Memoize category counts for performance
+    // Then filter by category if not 'all'
+    if (activeCategory === 'all') {
+      return modeFiltered;
+    }
+    return modeFiltered.filter(t => t.category === activeCategory);
+  }, [threads, activeMode, activeCategory]);
+
+  // Get categories relevant to the active mode
+  const modeCategories = useMemo(() => {
+    if (activeMode === 'prayers') {
+      return [
+        { id: 'all', label: 'All', icon: 'grid-outline' as const, iconActive: 'grid' as const },
+        ...COMMUNITY_CATEGORIES.filter(cat => PRAYER_CATEGORIES.includes(cat.id))
+      ];
+    } else {
+      return [
+        { id: 'all', label: 'All', icon: 'grid-outline' as const, iconActive: 'grid' as const },
+        ...COMMUNITY_CATEGORIES.filter(cat => DISCUSSION_CATEGORIES.includes(cat.id))
+      ];
+    }
+  }, [activeMode]);
+
+  // Memoize category counts for performance (only for current mode)
   const categoryCounts = useMemo(() => {
     const counts: { [key: string]: number } = {};
-    COMMUNITY_CATEGORIES.forEach(cat => {
+    modeCategories.forEach(cat => {
       if (cat.id === 'all') {
-        counts[cat.id] = threads.length;
+        // Count all threads in the current mode
+        const modeFiltered = threads.filter(t => {
+          if (activeMode === 'prayers') {
+            return PRAYER_CATEGORIES.includes(t.category);
+          } else {
+            return DISCUSSION_CATEGORIES.includes(t.category);
+          }
+        });
+        counts[cat.id] = modeFiltered.length;
       } else {
         counts[cat.id] = threads.filter(t => t.category === cat.id).length;
       }
     });
     return counts;
-  }, [threads]);
+  }, [threads, activeMode, modeCategories]);
 
-  const renderCategoryTab = (category: typeof COMMUNITY_CATEGORIES[0]) => {
+  const renderCategoryTab = (category: typeof modeCategories[0]) => {
     const isActive = activeCategory === category.id;
     const count = categoryCounts[category.id] || 0;
 
@@ -961,13 +1022,96 @@ export function CommunityScreen() {
           </Pressable>
         </View>
 
+        {/* Mode Tab Switcher */}
+        <View style={styles.tabContainer}>
+          <View style={styles.tabBackground}>
+            <Animated.View
+              style={[
+                styles.tabIndicator,
+                {
+                  transform: [{
+                    translateX: tabIndicatorAnim.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: [0, (SCREEN_WIDTH - 48) / 2],
+                    })
+                  }],
+                },
+              ]}
+            />
+            <Pressable
+              style={styles.tab}
+              onPress={() => {
+                Haptics.selectionAsync();
+                setActiveMode('prayers');
+              }}
+            >
+              <Ionicons
+                name="hand-right"
+                size={18}
+                color={activeMode === 'prayers' ? '#fff' : '#71717a'}
+              />
+              <Text
+                style={[
+                  styles.tabText,
+                  { color: activeMode === 'prayers' ? '#fff' : '#71717a' },
+                ]}
+              >
+                Prayers
+              </Text>
+              <View style={[
+                styles.tabBadge,
+                { backgroundColor: activeMode === 'prayers' ? 'rgba(255,255,255,0.3)' : '#e4e4e7' }
+              ]}>
+                <Text style={[
+                  styles.tabBadgeText,
+                  { color: activeMode === 'prayers' ? '#fff' : '#71717a' }
+                ]}>
+                  {stats.prayers}
+                </Text>
+              </View>
+            </Pressable>
+            <Pressable
+              style={styles.tab}
+              onPress={() => {
+                Haptics.selectionAsync();
+                setActiveMode('discussions');
+              }}
+            >
+              <Ionicons
+                name="chatbubbles"
+                size={18}
+                color={activeMode === 'discussions' ? '#fff' : '#71717a'}
+              />
+              <Text
+                style={[
+                  styles.tabText,
+                  { color: activeMode === 'discussions' ? '#fff' : '#71717a' },
+                ]}
+              >
+                Discussions
+              </Text>
+              <View style={[
+                styles.tabBadge,
+                { backgroundColor: activeMode === 'discussions' ? 'rgba(255,255,255,0.3)' : '#e4e4e7' }
+              ]}>
+                <Text style={[
+                  styles.tabBadgeText,
+                  { color: activeMode === 'discussions' ? '#fff' : '#71717a' }
+                ]}>
+                  {stats.total - stats.prayers}
+                </Text>
+              </View>
+            </Pressable>
+          </View>
+        </View>
+
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
           style={styles.categoryScroll}
           contentContainerStyle={styles.categoryScrollContent}
         >
-          {COMMUNITY_CATEGORIES.map(renderCategoryTab)}
+          {modeCategories.map(renderCategoryTab)}
         </ScrollView>
 
         <View style={styles.sortContainer}>
@@ -1028,21 +1172,27 @@ export function CommunityScreen() {
           ) : filteredBySearch.length === 0 ? (
             <View style={styles.emptyState}>
               <Ionicons
-                name={getCategoryIcon(activeCategory)}
+                name={activeMode === 'prayers' ? 'hand-right-outline' : 'chatbubbles-outline'}
                 size={48}
                 color="#d4d4d8"
               />
               <Text style={styles.emptyStateTitle}>
-                No {activeCategory === 'all' ? 'posts' : getCategoryLabel(activeCategory).toLowerCase()} yet
+                {activeCategory === 'all' 
+                  ? `No ${activeMode === 'prayers' ? 'prayers' : 'discussions'} yet`
+                  : `No ${getCategoryLabel(activeCategory).toLowerCase()} yet`}
               </Text>
               <Text style={styles.emptyStateText}>
-                Be the first to share with the community
+                {activeMode === 'prayers' 
+                  ? 'Be the first to share a prayer request'
+                  : 'Be the first to start a discussion'}
               </Text>
               <Pressable
                 style={styles.emptyStateButton}
                 onPress={() => setShowNewPostModal(true)}
               >
-                <Text style={styles.emptyStateButtonText}>Create Post</Text>
+                <Text style={styles.emptyStateButtonText}>
+                  {activeMode === 'prayers' ? 'Share Prayer' : 'Start Discussion'}
+                </Text>
               </Pressable>
             </View>
           ) : (
@@ -1149,6 +1299,51 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     textTransform: 'uppercase',
     letterSpacing: 0.5,
+  },
+  // Tab Switcher Styles
+  tabContainer: {
+    paddingHorizontal: 24,
+    marginBottom: 20,
+  },
+  tabBackground: {
+    flexDirection: 'row',
+    borderRadius: 14,
+    padding: 4,
+    backgroundColor: '#f4f4f5',
+    position: 'relative',
+  },
+  tabIndicator: {
+    position: 'absolute',
+    top: 4,
+    left: 4,
+    width: '50%',
+    height: '100%',
+    borderRadius: 10,
+    backgroundColor: '#047857',
+  },
+  tab: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    gap: 6,
+    zIndex: 1,
+  },
+  tabText: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  tabBadge: {
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 8,
+    minWidth: 24,
+    alignItems: 'center',
+  },
+  tabBadgeText: {
+    fontSize: 11,
+    fontWeight: '700',
   },
   categoryScroll: {
     marginBottom: 16,
