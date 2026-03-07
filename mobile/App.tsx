@@ -299,20 +299,24 @@ function AppWithTheme() {
   );
 }
 
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
+
 export default function App() {
   return (
-    <SafeAreaProvider>
-      <ThemeProvider>
-        <AuthProvider>
-          <BookmarksProvider>
-            <AudioProvider>
-              <ToastProvider>
-                <AppWithTheme />
-              </ToastProvider>
-            </AudioProvider>
-          </BookmarksProvider>
-        </AuthProvider>
-      </ThemeProvider>
-    </SafeAreaProvider>
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <SafeAreaProvider>
+        <ThemeProvider>
+          <AuthProvider>
+            <BookmarksProvider>
+              <AudioProvider>
+                <ToastProvider>
+                  <AppWithTheme />
+                </ToastProvider>
+              </AudioProvider>
+            </BookmarksProvider>
+          </AuthProvider>
+        </ThemeProvider>
+      </SafeAreaProvider>
+    </GestureHandlerRootView>
   );
 }

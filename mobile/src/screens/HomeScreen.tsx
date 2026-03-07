@@ -26,7 +26,7 @@ import { useAudio } from '../contexts/AudioContext';
 import { HeroPlayerCard } from '../components/HeroPlayerCard';
 import { MediaRail } from '../components/MediaRail';
 import { StatsStrip } from '../components/StatsStrip';
-import { MinistryRail } from '../components/MinistryRail';
+import { MinistryFieldsList } from '../components/MinistryFieldsList';
 import { SkeletonList } from '../components/SkeletonLoader';
 
 type HomeNavigationProp = CompositeNavigationProp<
@@ -70,15 +70,21 @@ export function HomeScreen() {
     try {
       setLoading(true);
 
-      const [episodes, videos, scheduleData] = await Promise.all([
-        supabase.from('episodes').select('*').order('created_at', { ascending: false }).limit(6),
-        supabase.from('videos').select('*').order('created_at', { ascending: false }).limit(6),
-        supabase.from('schedule').select('*').order('start_time', { ascending: true }),
-      ]);
+      // Mock Data for frontend-only mode
+      const mockEpisodes: Episode[] = [
+        { id: '1', title: 'The Power of Prayer', description: 'Exploring the impact of daily prayer.', created_at: new Date().toISOString() } as any,
+        { id: '2', title: 'Faith in Action', description: 'How to live your faith every day.', created_at: new Date().toISOString() } as any,
+        { id: '3', title: 'Community & Growth', description: 'Growing together in the kingdom.', created_at: new Date().toISOString() } as any,
+      ];
 
-      if (episodes.data) setFeaturedEpisodes(episodes.data);
-      if (videos.data) setRecentVideos(videos.data);
-      if (scheduleData.data) setSchedule(scheduleData.data);
+      const mockVideos: Video[] = [
+        { id: '1', title: 'Morning Worship', thumbnail_url: 'https://images.unsplash.com/photo-1544427920-c49ccfb85579', created_at: new Date().toISOString() } as any,
+        { id: '2', title: 'Weekly Sermon', thumbnail_url: 'https://images.unsplash.com/photo-1510915228340-29c85a43dcfe', created_at: new Date().toISOString() } as any,
+      ];
+
+      setFeaturedEpisodes(mockEpisodes);
+      setRecentVideos(mockVideos);
+      setSchedule([]);
 
     } catch (error) {
       console.error('Error fetching dashboard data:', error);
@@ -190,7 +196,7 @@ export function HomeScreen() {
               <StatsStrip />
 
               {/* Ministry Fields (Brand Element from Web) */}
-              <MinistryRail onPressItem={(item) => navigation.navigate('Community')} />
+              <MinistryFieldsList onPressItem={(category) => navigation.navigate('Community')} />
 
               {/* Podcast Rail */}
               {featuredEpisodes.length > 0 ? (

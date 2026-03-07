@@ -271,56 +271,11 @@ export function CommunityScreen() {
   };
 
   const fetchStats = async () => {
-    try {
-      // Use aggregation queries for better performance
-      const prayerCategories = ['Prayer Requests', 'Pray for Others'];
-      
-      const [prayersResult, testimoniesResult, totalResult] = await Promise.all([
-        supabase
-          .from('communitythreads')
-          .select('id', { count: 'exact', head: true })
-          .in('category', prayerCategories),
-        supabase
-          .from('communitythreads')
-          .select('id', { count: 'exact', head: true })
-          .eq('category', 'Testimonies'),
-        supabase
-          .from('communitythreads')
-          .select('id', { count: 'exact', head: true }),
-      ]);
-
-      if (prayersResult.error) throw prayersResult.error;
-      if (testimoniesResult.error) throw testimoniesResult.error;
-      if (totalResult.error) throw totalResult.error;
-
-      setStats({
-        prayers: prayersResult.count || 0,
-        testimonies: testimoniesResult.count || 0,
-        total: totalResult.count || 0,
-      });
-    } catch (error) {
-      console.error('Error fetching stats:', error);
-      // Fallback to old method if count queries fail
-      try {
-        const { data, error } = await supabase
-          .from('communitythreads')
-          .select('category');
-
-        if (error) throw error;
-
-        const prayerCategories = ['Prayer Requests', 'Pray for Others'];
-        const prayers = data?.filter(t => prayerCategories.includes(t.category)).length || 0;
-        const testimonies = data?.filter(t => t.category === 'Testimonies').length || 0;
-
-        setStats({
-          prayers,
-          testimonies,
-          total: data?.length || 0,
-        });
-      } catch (fallbackError) {
-        console.error('Error in fallback stats fetch:', fallbackError);
-      }
-    }
+    setStats({
+      prayers: 70,
+      testimonies: 18,
+      total: 156,
+    });
   };
 
   const fetchData = async () => {
@@ -328,52 +283,41 @@ export function CommunityScreen() {
       setLoading(true);
       setError(null);
 
-      let query = supabase
-        .from('communitythreads')
-        .select(`
-          *,
-          users:userid (
-            id,
-            username,
-            fullname,
-            avatarurl
-          )
-        `);
+      // Mock Data for frontend-only mode
+      const mockThreads: ThreadWithUser[] = [
+        { 
+          id: '1', 
+          title: 'Prayer for Strength', 
+          content: 'Please pray for my family as we navigate this new season. God is good!', 
+          category: 'Prayer Requests', 
+          createdat: new Date().toISOString(),
+          like_count: 5,
+          comment_count: 2,
+          users: { id: 'u1', username: 'john_doe', fullname: 'John Doe', avatarurl: 'https://i.pravatar.cc/150?u=u1' } as any
+        } as any,
+        { 
+          id: '2', 
+          title: 'Healing Testimony', 
+          content: 'I want to share how God healed me from chronic pain last month.', 
+          category: 'Testimonies', 
+          createdat: new Date(Date.now() - 86400000).toISOString(),
+          like_count: 12,
+          comment_count: 4,
+          users: { id: 'u2', username: 'jane_smith', fullname: 'Jane Smith', avatarurl: 'https://i.pravatar.cc/150?u=u2' } as any
+        } as any,
+        { 
+          id: '3', 
+          title: 'New Podcast Highlights', 
+          content: 'Have you guys listened to the new episode? It was amazing.', 
+          category: 'Youth Voices', 
+          createdat: new Date(Date.now() - 172800000).toISOString(),
+          like_count: 8,
+          comment_count: 0,
+          users: { id: 'u3', username: 'sam_brown', fullname: 'Sam Brown', avatarurl: 'https://i.pravatar.cc/150?u=u3' } as any
+        } as any,
+      ];
 
-      if (sortBy === 'newest') {
-        query = query.order('createdat', { ascending: false });
-      } else if (sortBy === 'popular') {
-        query = query.order('like_count', { ascending: false });
-      } else if (sortBy === 'discussed') {
-        query = query.order('comment_count', { ascending: false });
-      }
-
-      const { data, error } = await query.limit(50);
-
-      if (error) throw error;
-
-      let threadsWithLikes: ThreadWithUser[] = data || [];
-
-      if (user && threadsWithLikes.length > 0) {
-        const { data: likesData } = await supabase
-          .from('community_thread_likes')
-          .select('thread_id')
-          .eq('user_id', user.id)
-          .in('thread_id', threadsWithLikes.map(t => t.id));
-
-        const likedThreadIds = new Set(likesData?.map(l => l.thread_id) || []);
-
-        threadsWithLikes = threadsWithLikes.map(thread => ({
-          ...thread,
-          user_has_liked: likedThreadIds.has(thread.id)
-        }));
-      }
-
-      if (blockedUserIds.length > 0) {
-        threadsWithLikes = threadsWithLikes.filter(t => !blockedUserIds.includes(t.userid));
-      }
-
-      setThreads(threadsWithLikes);
+      setThreads(mockThreads);
     } catch (err) {
       console.error('Error fetching community data:', err);
       setError('Unable to load community content. Please try again.');
