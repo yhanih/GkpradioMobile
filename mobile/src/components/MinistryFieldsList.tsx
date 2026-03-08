@@ -4,7 +4,6 @@ import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { COMMUNITY_CATEGORIES, Category } from '../constants/categories';
 import { useTheme } from '../contexts/ThemeContext';
-import { supabase } from '../lib/supabase';
 import { AnimatedCount } from './AnimatedCount';
 
 interface MinistryFieldsListProps {

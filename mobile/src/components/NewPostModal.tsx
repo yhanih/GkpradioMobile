@@ -16,7 +16,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
-import { supabase } from '../lib/supabase';
+import { wpClient } from '../lib/wordpress';
 import { useAuth } from '../contexts/AuthContext';
 import { getPostableCategories, Category, getCategoryLabel } from '../constants/categories';
 
@@ -78,16 +78,13 @@ export function NewPostModal({ visible, onClose, onSuccess }: NewPostModalProps)
         try {
             setLoading(true);
 
-            const { error } = await supabase.from('communitythreads').insert({
-                userid: user.id,
-                title: title.trim(),
-                content: content.trim(),
-                category: selectedCategory.id,
-                privacy_level: 'public',
-                is_anonymous: isAnonymous,
-            });
+            const { error } = await wpClient.createTestimony(
+                title.trim(),
+                content.trim(),
+                selectedCategory.id
+            );
 
-            if (error) throw error;
+            if (error) throw new Error(error);
 
             Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
             // Success will be shown via toast from parent component

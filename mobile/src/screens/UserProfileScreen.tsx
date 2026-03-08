@@ -14,82 +14,56 @@ import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import * as Haptics from 'expo-haptics';
-import { supabase } from '../lib/supabase';
-import { User, CommunityThread } from '../types/database.types';
+import { wpClient, WPUser, WPTestimony } from '../lib/wordpress';
 import { RootStackParamList } from '../types/navigation';
 import { getCategoryIcon, getCategoryLabel } from '../constants/categories';
+import { useTheme } from '../contexts/ThemeContext';
 
 type UserProfileRouteProp = RouteProp<RootStackParamList, 'UserProfile'>;
 type UserProfileNavProp = NativeStackNavigationProp<RootStackParamList, 'UserProfile'>;
 
-interface ThreadWithUser extends CommunityThread {
-  users?: User | null;
-}
-
 export function UserProfileScreen() {
   const navigation = useNavigation<UserProfileNavProp>();
   const route = useRoute<UserProfileRouteProp>();
+  const { theme } = useTheme();
 
-  const [userProfile, setUserProfile] = useState<User | null>(route.params.user || null);
-  const [posts, setPosts] = useState<ThreadWithUser[]>([]);
+  const [userProfile, setUserProfile] = useState<WPUser | null>(route.params.user || null);
+  const [testimonies, setTestimonies] = useState<WPTestimony[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [stats, setStats] = useState({ posts: 0, prayers: 0, testimonies: 0 });
+  const [stats, setStats] = useState({ posts: 0, testimonies: 0 });
 
   const fetchUserProfile = useCallback(async () => {
     try {
-      const { data, error } = await supabase
-        .from('users')
-        .select('*')
-        .eq('id', route.params.userId)
-        .single();
-
-      if (error) throw error;
-      setUserProfile(data);
+      const { data, error } = await wpClient.getUserById(route.params.userId);
+      if (error) throw new Error(error);
+      if (data) setUserProfile(data);
     } catch (error) {
       console.error('Error fetching user profile:', error);
     }
   }, [route.params.userId]);
 
-  const fetchUserPosts = useCallback(async () => {
+  const fetchUserTestimonies = useCallback(async () => {
     try {
-      const { data, error } = await supabase
-        .from('communitythreads')
-        .select(`
-          *,
-          users:userid (
-            id,
-            username,
-            fullname,
-            avatarurl
-          )
-        `)
-        .eq('userid', route.params.userId)
-        .eq('is_anonymous', false)
-        .order('createdat', { ascending: false })
-        .limit(20);
-
-      if (error) throw error;
-      setPosts(data || []);
-
-      const prayers = data?.filter(t => t.category === 'Prayer Requests').length || 0;
-      const testimonies = data?.filter(t => t.category === 'Testimonies').length || 0;
-
+      const { data, error } = await wpClient.getTestimonies(20, 1, route.params.userId);
+      if (error) throw new Error(error);
+      
+      const items = data || [];
+      setTestimonies(items);
       setStats({
-        posts: data?.length || 0,
-        prayers,
-        testimonies,
+        posts: items.length,
+        testimonies: items.length,
       });
     } catch (error) {
-      console.error('Error fetching user posts:', error);
+      console.error('Error fetching user testimonies:', error);
     }
   }, [route.params.userId]);
 
   const loadData = useCallback(async () => {
     setLoading(true);
-    await Promise.all([fetchUserProfile(), fetchUserPosts()]);
+    await Promise.all([fetchUserProfile(), fetchUserTestimonies()]);
     setLoading(false);
-  }, [fetchUserProfile, fetchUserPosts]);
+  }, [fetchUserProfile, fetchUserTestimonies]);
 
   useEffect(() => {
     loadData();
@@ -97,7 +71,7 @@ export function UserProfileScreen() {
 
   const onRefresh = async () => {
     setRefreshing(true);
-    await Promise.all([fetchUserProfile(), fetchUserPosts()]);
+    await Promise.all([fetchUserProfile(), fetchUserTestimonies()]);
     setRefreshing(false);
   };
 
@@ -112,29 +86,23 @@ export function UserProfileScreen() {
     return `${Math.floor(diffInSeconds / 86400)}d ago`;
   };
 
-  const formatJoinDate = (dateString: string | null | undefined) => {
-    if (!dateString) return 'Member';
-    const date = new Date(dateString);
-    return `Joined ${date.toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}`;
-  };
-
-  const navigateToPost = (thread: ThreadWithUser) => {
+  const navigateToPost = (testimony: WPTestimony) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    navigation.navigate('PostDetail', { threadId: thread.id, thread });
+    navigation.navigate('PostDetail', { threadId: testimony.id, testimony });
   };
 
   if (loading) {
     return (
-      <SafeAreaView style={styles.container} edges={['top']}>
+      <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.background }]} edges={['top']}>
         <View style={styles.header}>
           <Pressable onPress={() => navigation.goBack()} style={styles.backButton}>
-            <Ionicons name="arrow-back" size={24} color="#09090b" />
+            <Ionicons name="arrow-back" size={24} color={theme.colors.text} />
           </Pressable>
-          <Text style={styles.headerTitle}>Profile</Text>
+          <Text style={[styles.headerTitle, { color: theme.colors.text }]}>Profile</Text>
           <View style={{ width: 40 }} />
         </View>
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#047857" />
+          <ActivityIndicator size="large" color={theme.colors.primary} />
         </View>
       </SafeAreaView>
     );
@@ -142,18 +110,18 @@ export function UserProfileScreen() {
 
   if (!userProfile) {
     return (
-      <SafeAreaView style={styles.container} edges={['top']}>
+      <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.background }]} edges={['top']}>
         <View style={styles.header}>
           <Pressable onPress={() => navigation.goBack()} style={styles.backButton}>
-            <Ionicons name="arrow-back" size={24} color="#09090b" />
+            <Ionicons name="arrow-back" size={24} color={theme.colors.text} />
           </Pressable>
-          <Text style={styles.headerTitle}>Profile</Text>
+          <Text style={[styles.headerTitle, { color: theme.colors.text }]}>Profile</Text>
           <View style={{ width: 40 }} />
         </View>
         <View style={styles.errorContainer}>
-          <Ionicons name="person-outline" size={48} color="#d4d4d8" />
-          <Text style={styles.errorText}>User not found</Text>
-          <Pressable style={styles.retryButton} onPress={() => navigation.goBack()}>
+          <Ionicons name="person-outline" size={48} color={theme.colors.textMuted} />
+          <Text style={[styles.errorText, { color: theme.colors.textMuted }]}>User not found</Text>
+          <Pressable style={[styles.retryButton, { backgroundColor: theme.colors.primary }]} onPress={() => navigation.goBack()}>
             <Text style={styles.retryButtonText}>Go Back</Text>
           </Pressable>
         </View>
@@ -161,13 +129,16 @@ export function UserProfileScreen() {
     );
   }
 
+  const avatarUrl = userProfile.avatar_urls?.['96'];
+  const displayName = userProfile.name || userProfile.nickname || 'Community Member';
+
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
+    <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.background }]} edges={['top']}>
       <View style={styles.header}>
         <Pressable onPress={() => navigation.goBack()} style={styles.backButton}>
-          <Ionicons name="arrow-back" size={24} color="#09090b" />
+          <Ionicons name="arrow-back" size={24} color={theme.colors.text} />
         </Pressable>
-        <Text style={styles.headerTitle}>Profile</Text>
+        <Text style={[styles.headerTitle, { color: theme.colors.text }]}>Profile</Text>
         <View style={{ width: 40 }} />
       </View>
 
@@ -175,88 +146,70 @@ export function UserProfileScreen() {
         style={styles.scrollView}
         showsVerticalScrollIndicator={false}
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#047857" />
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.colors.primary} />
         }
       >
         <View style={styles.profileHeader}>
-          {userProfile.avatarurl ? (
-            <Image source={{ uri: userProfile.avatarurl }} style={styles.avatar} />
+          {avatarUrl ? (
+            <Image source={{ uri: avatarUrl }} style={styles.avatar} />
           ) : (
             <View style={styles.avatarPlaceholder}>
-              <Ionicons name="person" size={40} color="#71717a" />
+              <Ionicons name="person" size={40} color={theme.colors.textMuted} />
             </View>
           )}
           
-          <Text style={styles.fullName}>
-            {userProfile.fullname || userProfile.username || 'Community Member'}
+          <Text style={[styles.fullName, { color: theme.colors.text }]}>
+            {displayName}
           </Text>
           
-          {userProfile.username && (
-            <Text style={styles.username}>@{userProfile.username}</Text>
-          )}
+          <Text style={[styles.username, { color: theme.colors.textMuted }]}>@{userProfile.username || userProfile.nickname}</Text>
           
-          <Text style={styles.joinDate}>{formatJoinDate(userProfile.created_at)}</Text>
-          
-          {userProfile.bio && (
-            <Text style={styles.bio}>{userProfile.bio}</Text>
+          {userProfile.description && (
+            <Text style={[styles.bio, { color: theme.colors.textMuted }]}>{userProfile.description}</Text>
           )}
         </View>
 
-        <View style={styles.statsContainer}>
+        <View style={[styles.statsContainer, { backgroundColor: theme.colors.surface }]}>
           <View style={styles.statBox}>
-            <Text style={styles.statValue}>{stats.posts}</Text>
-            <Text style={styles.statLabel}>Posts</Text>
-          </View>
-          <View style={styles.statDivider} />
-          <View style={styles.statBox}>
-            <Text style={styles.statValue}>{stats.prayers}</Text>
-            <Text style={styles.statLabel}>Prayers</Text>
-          </View>
-          <View style={styles.statDivider} />
-          <View style={styles.statBox}>
-            <Text style={styles.statValue}>{stats.testimonies}</Text>
-            <Text style={styles.statLabel}>Testimonies</Text>
+            <Text style={[styles.statValue, { color: theme.colors.text }]}>{stats.testimonies}</Text>
+            <Text style={[styles.statLabel, { color: theme.colors.textMuted }]}>Testimonies</Text>
           </View>
         </View>
 
         <View style={styles.postsSection}>
-          <Text style={styles.postsTitle}>Posts</Text>
+          <Text style={[styles.postsTitle, { color: theme.colors.text }]}>Public Testimonies</Text>
           
-          {posts.length === 0 ? (
+          {testimonies.length === 0 ? (
             <View style={styles.emptyPosts}>
-              <Ionicons name="document-text-outline" size={36} color="#d4d4d8" />
-              <Text style={styles.emptyPostsText}>No public posts yet</Text>
+              <Ionicons name="document-text-outline" size={36} color={theme.colors.textMuted} />
+              <Text style={[styles.emptyPostsText, { color: theme.colors.textMuted }]}>No public testimonies yet</Text>
             </View>
           ) : (
-            posts.map(post => (
+            testimonies.map(testimony => (
               <Pressable
-                key={post.id}
-                style={styles.postCard}
-                onPress={() => navigateToPost(post)}
+                key={testimony.id}
+                style={[styles.postCard, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}
+                onPress={() => navigateToPost(testimony)}
               >
                 <View style={styles.postHeader}>
-                  <View style={styles.postCategory}>
-                    <Ionicons
-                      name={getCategoryIcon(post.category)}
-                      size={12}
-                      color="#047857"
-                    />
-                    <Text style={styles.postCategoryText}>{getCategoryLabel(post.category)}</Text>
-                  </View>
-                  <Text style={styles.postTime}>{formatTimeAgo(post.createdat)}</Text>
+                  <Text style={[styles.postTime, { color: theme.colors.textMuted }]}>{formatTimeAgo(testimony.date)}</Text>
                 </View>
                 
-                <Text style={styles.postTitle} numberOfLines={2}>{post.title}</Text>
-                <Text style={styles.postContent} numberOfLines={2}>{post.content}</Text>
+                <Text style={[styles.postTitle, { color: theme.colors.text }]} numberOfLines={2}>
+                  {testimony.title.rendered}
+                </Text>
+                <Text style={[styles.postContent, { color: theme.colors.textMuted }]} numberOfLines={2}>
+                  {testimony.content.rendered.replace(/<[^>]*>?/gm, '')}
+                </Text>
                 
                 <View style={styles.postStats}>
                   <View style={styles.postStat}>
-                    <Ionicons name="heart-outline" size={16} color="#71717a" />
-                    <Text style={styles.postStatText}>{post.like_count || 0}</Text>
+                    <Ionicons name="heart-outline" size={16} color={theme.colors.textMuted} />
+                    <Text style={[styles.postStatText, { color: theme.colors.textMuted }]}>{testimony.like_count || 0}</Text>
                   </View>
                   <View style={styles.postStat}>
-                    <Ionicons name="chatbubble-outline" size={16} color="#71717a" />
-                    <Text style={styles.postStatText}>{post.comment_count || 0}</Text>
+                    <Ionicons name="chatbubble-outline" size={16} color={theme.colors.textMuted} />
+                    <Text style={[styles.postStatText, { color: theme.colors.textMuted }]}>{testimony.comment_count || 0}</Text>
                   </View>
                 </View>
               </Pressable>
@@ -273,7 +226,6 @@ export function UserProfileScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fff',
   },
   header: {
     flexDirection: 'row',
@@ -290,7 +242,6 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 17,
     fontWeight: '600',
-    color: '#09090b',
   },
   scrollView: {
     flex: 1,
@@ -308,13 +259,11 @@ const styles = StyleSheet.create({
   },
   errorText: {
     fontSize: 16,
-    color: '#71717a',
     marginTop: 12,
     marginBottom: 20,
     textAlign: 'center',
   },
   retryButton: {
-    backgroundColor: '#047857',
     paddingHorizontal: 24,
     paddingVertical: 12,
     borderRadius: 8,
@@ -347,22 +296,14 @@ const styles = StyleSheet.create({
   fullName: {
     fontSize: 22,
     fontWeight: '700',
-    color: '#09090b',
     marginBottom: 4,
   },
   username: {
     fontSize: 15,
-    color: '#71717a',
     marginBottom: 4,
-  },
-  joinDate: {
-    fontSize: 13,
-    color: '#a1a1aa',
-    marginBottom: 12,
   },
   bio: {
     fontSize: 15,
-    color: '#3f3f46',
     textAlign: 'center',
     lineHeight: 22,
     marginTop: 8,
@@ -370,27 +311,21 @@ const styles = StyleSheet.create({
   statsContainer: {
     flexDirection: 'row',
     marginHorizontal: 20,
-    backgroundColor: '#f4f4f5',
     borderRadius: 16,
     padding: 20,
+    justifyContent: 'center',
   },
   statBox: {
     flex: 1,
     alignItems: 'center',
   },
-  statDivider: {
-    width: 1,
-    backgroundColor: '#e4e4e7',
-  },
   statValue: {
     fontSize: 20,
     fontWeight: '700',
-    color: '#09090b',
     marginBottom: 4,
   },
   statLabel: {
     fontSize: 12,
-    color: '#71717a',
     fontWeight: '500',
   },
   postsSection: {
@@ -400,7 +335,6 @@ const styles = StyleSheet.create({
   postsTitle: {
     fontSize: 18,
     fontWeight: '600',
-    color: '#09090b',
     marginBottom: 16,
   },
   emptyPosts: {
@@ -409,51 +343,31 @@ const styles = StyleSheet.create({
   },
   emptyPostsText: {
     fontSize: 15,
-    color: '#71717a',
     marginTop: 12,
   },
   postCard: {
-    backgroundColor: '#fff',
     borderRadius: 16,
     padding: 16,
     marginBottom: 12,
     borderWidth: 1,
-    borderColor: '#e4e4e7',
   },
   postHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
+    justifyContent: 'flex-end',
     marginBottom: 10,
-  },
-  postCategory: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    backgroundColor: '#f0fdf4',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 12,
-  },
-  postCategoryText: {
-    fontSize: 12,
-    fontWeight: '500',
-    color: '#047857',
   },
   postTime: {
     fontSize: 12,
-    color: '#a1a1aa',
   },
   postTitle: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#09090b',
     lineHeight: 22,
     marginBottom: 6,
   },
   postContent: {
     fontSize: 14,
-    color: '#71717a',
     lineHeight: 20,
     marginBottom: 12,
   },
@@ -468,6 +382,5 @@ const styles = StyleSheet.create({
   },
   postStatText: {
     fontSize: 13,
-    color: '#71717a',
   },
 });

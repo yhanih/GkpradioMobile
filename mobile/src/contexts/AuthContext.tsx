@@ -1,11 +1,10 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { Session, User } from '@supabase/supabase-js';
-import { supabase } from '../lib/supabase';
+import { wpClient } from '../lib/wordpress';
 import { AppState } from 'react-native';
 
 interface AuthContextType {
-  user: User | null;
-  session: Session | null;
+  user: any | null;
+  session: any | null;
   loading: boolean;
   signIn: (email: string, password: string) => Promise<{ error: any }>;
   signUp: (email: string, password: string, fullName?: string) => Promise<{ error: any }>;
@@ -17,73 +16,43 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [user, setUser] = useState<User | null>(null);
-  const [session, setSession] = useState<Session | null>(null);
+  const [user, setUser] = useState<any | null>(null);
+  const [session, setSession] = useState<any | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const ensureUserProfile = async (authUser: User) => {
+  const loadSession = async () => {
     try {
-      console.log('Ensuring user profile for:', authUser.id, authUser.email);
-      const { data, error } = await supabase.from('users').upsert({
-        id: authUser.id,
-        email: authUser.email!,
-        fullname: authUser.user_metadata?.full_name || null,
-      }, { onConflict: 'id' });
-
-      if (error) {
-        console.error('Error upserting user profile:', error);
-      } else {
-        console.log('User profile ensured successfully');
+      const token = await wpClient.getToken();
+      if (token) {
+        const { data, error } = await wpClient.getMe();
+        if (data) {
+          setUser(data);
+          setSession({ token });
+        } else {
+          await wpClient.logout();
+        }
       }
     } catch (error) {
-      console.error('Error ensuring user profile:', error);
+      console.error('Error loading session:', error);
+    } finally {
+      setLoading(false);
     }
   };
 
   useEffect(() => {
-    supabase.auth.getSession().then(async ({ data: { session } }) => {
-      setSession(session);
-      setUser(session?.user ?? null);
-      if (session?.user) {
-        await ensureUserProfile(session.user);
-      }
-      setLoading(false);
-    });
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
-      setSession(session);
-      setUser(session?.user ?? null);
-      if (session?.user && _event === 'SIGNED_IN') {
-        await ensureUserProfile(session.user);
-      }
-    });
-
-    return () => subscription.unsubscribe();
-  }, []);
-
-  useEffect(() => {
-    const subscription = AppState.addEventListener('change', (state) => {
-      if (state === 'active') {
-        supabase.auth.startAutoRefresh();
-      } else {
-        supabase.auth.stopAutoRefresh();
-      }
-    });
-
-    return () => {
-      subscription.remove();
-    };
+    loadSession();
   }, []);
 
   const signIn = async (email: string, password: string) => {
     try {
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      });
+      const { data, error } = await wpClient.login(email, password);
 
-      if (!error && data.user) {
-        await ensureUserProfile(data.user);
+      if (!error && data) {
+        setSession(data);
+        const userRes = await wpClient.getMe();
+        if (userRes.data) {
+          setUser(userRes.data);
+        }
       }
 
       return { error };
@@ -95,18 +64,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const signUp = async (email: string, password: string, fullName?: string) => {
     try {
-      const { data, error } = await supabase.auth.signUp({
-        email,
-        password,
-        options: {
-          data: {
-            full_name: fullName,
-          },
-        },
-      });
+      const { data, error } = await wpClient.register(email, password, fullName);
 
-      if (!error && data.user) {
-        await ensureUserProfile(data.user);
+      if (!error) {
+        return await signIn(email, password);
       }
 
       return { error };
@@ -118,7 +79,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const signOut = async () => {
     try {
-      await supabase.auth.signOut();
+      await wpClient.logout();
+      setUser(null);
+      setSession(null);
     } catch (error) {
       console.error('Error signing out:', error);
       throw error;
@@ -126,27 +89,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const resetPassword = async (email: string) => {
-    try {
-      const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: 'gkpradio://reset-password',
-      });
-      return { error };
-    } catch (error) {
-      console.error('Error resetting password:', error);
-      return { error };
-    }
+    console.warn('Reset password not implemented for WordPress yet');
+    return { error: 'Please use the website to reset your password' };
   };
 
   const updatePassword = async (password: string) => {
-    try {
-      const { error } = await supabase.auth.updateUser({
-        password: password,
-      });
-      return { error };
-    } catch (error) {
-      console.error('Error updating password:', error);
-      return { error };
-    }
+    console.warn('Update password not implemented for WordPress yet');
+    return { error: 'Please use the website to update your password' };
   };
 
   return (

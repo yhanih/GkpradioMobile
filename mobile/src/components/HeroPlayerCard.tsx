@@ -5,14 +5,14 @@ import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
 import { BlurView } from 'expo-blur';
 import { ScheduleCarousel } from './ScheduleCarousel';
-import { Schedule } from '../types/database.types';
+import { WPSchedule } from '../lib/wordpress';
 
 interface HeroPlayerCardProps {
     isPlaying: boolean;
     onTogglePlay: () => void;
     currentShowTitle?: string;
     currentShowHost?: string;
-    schedule?: Schedule[];
+    schedule?: WPSchedule[];
     onPress: () => void;
 }
 

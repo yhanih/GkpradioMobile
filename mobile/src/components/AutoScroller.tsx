@@ -1,9 +1,9 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { View, Text, Animated, StyleSheet, Easing, LayoutChangeEvent } from 'react-native';
-import { Schedule } from '../types/database.types';
+import { WPSchedule } from '../lib/wordpress';
 
 interface AutoScrollerProps {
-    schedule: Schedule[];
+    schedule: WPSchedule[];
 }
 
 export const AutoScroller: React.FC<AutoScrollerProps> = ({ schedule }) => {
@@ -12,9 +12,8 @@ export const AutoScroller: React.FC<AutoScrollerProps> = ({ schedule }) => {
     const translateX = useRef(new Animated.Value(0)).current;
 
     // Format the schedule items into a single string
-    // If no items, fallback is handled by parent, but we can have a safe default here
     const textContent = schedule.length > 0
-        ? schedule.map(item => `${item.show_title} (${item.start_time.slice(0, 5)} - ${item.end_time.slice(0, 5)})`).join('  •  ')
+        ? schedule.map(item => `${item.title.rendered} (${(item.startTime || '00:00').slice(0, 5)} - ${(item.endTime || '00:00').slice(0, 5)})`).join('  •  ')
         : 'Praise & Worship Music';
 
     // We duplicate the content to ensure smooth seamless scrolling

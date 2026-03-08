@@ -11,34 +11,18 @@ import {
   Animated,
   Dimensions,
   ImageBackground,
-  Alert,
-  Platform,
+  SafeAreaView,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import * as Haptics from 'expo-haptics';
-import * as Notifications from 'expo-notifications';
-import * as Calendar from 'expo-calendar';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { supabase } from '../lib/supabase';
-import { LiveEvent } from '../types/database.types';
-import { RootStackParamList, MainTabParamList } from '../types/navigation';
+import { wpClient } from '../lib/wordpress';
+import { RootStackParamList } from '../types/navigation';
 import { useTheme } from '../contexts/ThemeContext';
 
 type LiveNavProp = NativeStackNavigationProp<RootStackParamList>;
-
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowAlert: true,
-    shouldPlaySound: true,
-    shouldSetBadge: false,
-    shouldShowBanner: true,
-    shouldShowList: true,
-  }),
-});
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 const HERO_HEIGHT = SCREEN_HEIGHT * 0.55;
@@ -46,230 +30,63 @@ const HERO_HEIGHT = SCREEN_HEIGHT * 0.55;
 export function LiveScreen() {
   const navigation = useNavigation<LiveNavProp>();
   const { theme, isDark } = useTheme();
-  const [liveEvents, setLiveEvents] = useState<LiveEvent[]>([]);
+  
+  const [radioStatus, setRadioStatus] = useState<any>(null);
+  const [schedule, setSchedule] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [reminders, setReminders] = useState<Set<string>>(new Set());
-  const [countdownTick, setCountdownTick] = useState(0);
   const [error, setError] = useState<string | null>(null);
   
   const scrollY = useRef(new Animated.Value(0)).current;
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const glowAnim = useRef(new Animated.Value(0.4)).current;
 
-  const loadReminders = async () => {
-    try {
-      const stored = await AsyncStorage.getItem('live_event_reminders');
-      if (stored) {
-        const parsed = JSON.parse(stored);
-        setReminders(new Set(parsed));
-      }
-    } catch (error) {
-      console.error('Error loading reminders:', error);
-    }
-  };
-
-  const cleanupExpiredReminders = async (events: LiveEvent[]) => {
-    try {
-      const stored = await AsyncStorage.getItem('live_event_reminders');
-      if (!stored) return;
-      
-      const storedReminders: string[] = JSON.parse(stored);
-      const now = new Date();
-      const validEventIds = new Set(
-        events
-          .filter(e => new Date(e.scheduled_start) > now)
-          .map(e => e.id)
-      );
-      
-      const validReminders = storedReminders.filter(id => validEventIds.has(id));
-      
-      if (validReminders.length !== storedReminders.length) {
-        await AsyncStorage.setItem('live_event_reminders', JSON.stringify(validReminders));
-        setReminders(new Set(validReminders));
-      }
-    } catch (error) {
-      console.error('Error cleaning up reminders:', error);
-    }
-  };
-
-  const saveReminders = async (newReminders: Set<string>) => {
-    try {
-      await AsyncStorage.setItem('live_event_reminders', JSON.stringify([...newReminders]));
-    } catch (error) {
-      console.error('Error saving reminders:', error);
-    }
-  };
-
-  const scheduleReminder = async (event: LiveEvent) => {
-    if (reminders.has(event.id)) {
-      Alert.alert('Already Set', `You already have a reminder for "${event.title}".`);
-      return;
-    }
-    try {
-      const { status: existingStatus } = await Notifications.getPermissionsAsync();
-      let finalStatus = existingStatus;
-      
-      if (existingStatus !== 'granted') {
-        const { status } = await Notifications.requestPermissionsAsync();
-        finalStatus = status;
-      }
-      
-      if (finalStatus !== 'granted') {
-        Alert.alert(
-          'Notifications Disabled',
-          'Please enable notifications in Settings to receive reminders.'
-        );
-        return;
-      }
-
-      const eventDate = new Date(event.scheduled_start);
-      const reminderDate = new Date(eventDate.getTime() - 15 * 60 * 1000);
-      
-      if (reminderDate <= new Date()) {
-        Alert.alert('Event Starting Soon', 'This event is about to start or has already started!');
-        return;
-      }
-
-      await Notifications.scheduleNotificationAsync({
-        content: {
-          title: 'GKP Radio - Starting Soon!',
-          body: `"${event.title}" starts in 15 minutes`,
-          sound: true,
-        },
-        trigger: {
-          type: Notifications.SchedulableTriggerInputTypes.DATE,
-          date: reminderDate,
-        },
-      });
-
-      const newReminders = new Set(reminders).add(event.id);
-      setReminders(newReminders);
-      saveReminders(newReminders);
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      Alert.alert('Reminder Set', `We'll remind you 15 minutes before "${event.title}" starts.`);
-    } catch (error) {
-      console.error('Error scheduling reminder:', error);
-      Alert.alert('Error', 'Could not set reminder. Please try again.');
-    }
-  };
-
-  const addToCalendar = async (event: LiveEvent) => {
-    try {
-      const { status } = await Calendar.requestCalendarPermissionsAsync();
-      
-      if (status !== 'granted') {
-        Alert.alert(
-          'Calendar Access Denied',
-          'Please enable calendar access in Settings to add events.'
-        );
-        return;
-      }
-
-      const calendars = await Calendar.getCalendarsAsync(Calendar.EntityTypes.EVENT);
-      const defaultCalendar = calendars.find(cal => cal.allowsModifications) || calendars[0];
-      
-      if (!defaultCalendar) {
-        Alert.alert('Error', 'No writable calendar found on your device.');
-        return;
-      }
-
-      const startDate = new Date(event.scheduled_start);
-      const endDate = event.scheduled_end 
-        ? new Date(event.scheduled_end) 
-        : new Date(startDate.getTime() + 60 * 60 * 1000);
-
-      await Calendar.createEventAsync(defaultCalendar.id, {
-        title: event.title,
-        notes: event.description || 'GKP Radio Live Event',
-        startDate,
-        endDate,
-        alarms: [{ relativeOffset: -15 }],
-      });
-
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      Alert.alert('Added to Calendar', `"${event.title}" has been added to your calendar.`);
-    } catch (error) {
-      console.error('Error adding to calendar:', error);
-      Alert.alert('Error', 'Could not add to calendar. Please try again.');
-    }
-  };
-
-  const cancelReminder = async (event: LiveEvent) => {
-    try {
-      const scheduled = await Notifications.getAllScheduledNotificationsAsync();
-      const eventNotification = scheduled.find(n => 
-        n.content.body?.includes(event.title)
-      );
-      
-      if (eventNotification) {
-        await Notifications.cancelScheduledNotificationAsync(eventNotification.identifier);
-      }
-      
-      const newReminders = new Set(reminders);
-      newReminders.delete(event.id);
-      setReminders(newReminders);
-      saveReminders(newReminders);
-      
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      Alert.alert('Reminder Cancelled', `Reminder for "${event.title}" has been removed.`);
-    } catch (error) {
-      console.error('Error cancelling reminder:', error);
-      Alert.alert('Error', 'Could not cancel reminder. Please try again.');
-    }
-  };
-
-  const toggleReminder = (event: LiveEvent) => {
-    if (reminders.has(event.id)) {
-      Alert.alert(
-        'Cancel Reminder?',
-        `Do you want to remove the reminder for "${event.title}"?`,
-        [
-          { text: 'Keep', style: 'cancel' },
-          { text: 'Remove', style: 'destructive', onPress: () => cancelReminder(event) }
-        ]
-      );
-    } else {
-      scheduleReminder(event);
-    }
-  };
-
-  const handleHeroAction = (event: LiveEvent | undefined, isLive: boolean) => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
-    
-    if (isLive && event) {
-      navigation.navigate('VideoPlayer', { liveEvent: event });
-    } else if (event) {
-      toggleReminder(event);
-    }
-  };
-
-  const handlePastBroadcastPlay = (event: LiveEvent) => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    navigation.navigate('VideoPlayer', { liveEvent: event });
-  };
-
-  const navigateToMedia = () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    navigation.getParent()?.navigate('Media');
-  };
-
   useEffect(() => {
-    loadReminders();
-    loadLiveEvents();
+    loadData();
     startPulseAnimation();
     
-    const countdownInterval = setInterval(() => {
-      setCountdownTick(prev => prev + 1);
-    }, 60000);
+    const statusInterval = setInterval(() => {
+      loadRadioStatus();
+    }, 30000);
     
-    return () => clearInterval(countdownInterval);
+    return () => clearInterval(statusInterval);
   }, []);
+
+  const loadRadioStatus = async () => {
+    try {
+      const { data } = await wpClient.getRadioStatus();
+      if (data) setRadioStatus(data);
+    } catch (err) {
+      console.error('Error auto-loading radio status:', err);
+    }
+  };
+
+  const loadData = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      
+      const [statusRes, scheduleRes] = await Promise.all([
+        wpClient.getRadioStatus(),
+        wpClient.getRadioSchedule()
+      ]);
+
+      if (statusRes.data) setRadioStatus(statusRes.data);
+      if (scheduleRes.data) setSchedule(scheduleRes.data);
+      
+    } catch (err) {
+      console.error('Error loading live data:', err);
+      setError('Unable to load data. Pull down to retry.');
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  };
 
   useFocusEffect(
     useCallback(() => {
       if (!loading) {
-        loadLiveEvents();
+        loadData();
       }
     }, [])
   );
@@ -306,78 +123,20 @@ export function LiveScreen() {
     ).start();
   };
 
-  const loadLiveEvents = async () => {
-    try {
-      setError(null);
-      const { data, error: fetchError } = await supabase
-        .from('live_events')
-        .select('*')
-        .order('scheduled_start', { ascending: true });
-
-      if (fetchError) throw fetchError;
-      if (data) {
-        setLiveEvents(data);
-        cleanupExpiredReminders(data);
-      }
-    } catch (err) {
-      console.error('Error loading live events:', err);
-      setError('Unable to load events. Pull down to retry.');
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  };
-
   const onRefresh = () => {
     setRefreshing(true);
-    loadLiveEvents();
+    loadData();
   };
 
-  const formatDateTime = (dateString: string) => {
-    const date = new Date(dateString);
-    const now = new Date();
-    const diffInDays = Math.floor((date.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
-
-    const timeStr = date.toLocaleTimeString('en-US', {
-      hour: 'numeric',
-      minute: '2-digit',
-      hour12: true
-    });
-
-    if (diffInDays === 0) return `Today at ${timeStr}`;
-    if (diffInDays === 1) return `Tomorrow at ${timeStr}`;
-    if (diffInDays === -1) return `Yesterday at ${timeStr}`;
-
-    return date.toLocaleDateString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      hour: 'numeric',
-      minute: '2-digit'
-    });
-  };
-
-  const getCountdown = (dateString: string) => {
-    const date = new Date(dateString);
-    const now = new Date();
-    const diff = date.getTime() - now.getTime();
-    
-    if (diff <= 0) return null;
-    
-    const days = Math.floor(diff / (1000 * 60 * 60 * 24));
-    const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
-    const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
-    
-    if (days > 0) return `${days}d ${hours}h`;
-    if (hours > 0) return `${hours}h ${minutes}m`;
-    return `${minutes}m`;
-  };
-
-  const liveNow = liveEvents.filter(e => e.status === 'live');
-  const upcoming = liveEvents.filter(e => e.status === 'scheduled');
-  const pastEvents = liveEvents.filter(e => e.status === 'ended').slice(0, 5);
-
-  const heroEvent = liveNow[0] || upcoming[0];
-  const isLive = liveNow.length > 0;
+  const isLive = radioStatus?.is_live || false;
+  const isOnline = !!radioStatus?.now_playing;
+  const heroTitle = radioStatus?.now_playing?.title || radioStatus?.current_show || 'Kingdom Principles Radio';
+  const heroDescription = isLive 
+    ? 'Live Broadcast with Host' 
+    : isOnline 
+      ? `Now Playing: ${radioStatus?.now_playing?.artist || 'Worship Music'}`
+      : 'Tune in for our next broadcast';
+  const heroImage = 'https://images.unsplash.com/photo-1507692049790-de58290a4334?w=1200';
 
   const heroImageScale = scrollY.interpolate({
     inputRange: [-100, 0, HERO_HEIGHT],
@@ -391,13 +150,15 @@ export function LiveScreen() {
     extrapolate: 'clamp',
   });
 
+  const scheduleImageUrl = schedule?.content?.rendered?.match(/src="([^"]+)"/)?.[1];
+
   if (loading) {
     return (
       <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={theme.colors.primary} />
           <Text style={[styles.loadingText, { color: theme.colors.textMuted }]}>
-            Loading live events...
+            Loading live data...
           </Text>
         </View>
       </View>
@@ -423,18 +184,13 @@ export function LiveScreen() {
           />
         }
       >
-        {/* Immersive Hero Section */}
         <Animated.View style={[styles.heroContainer, { opacity: heroOpacity }]}>
           <Animated.View style={[styles.heroImageWrapper, { transform: [{ scale: heroImageScale }] }]}>
             <ImageBackground
-              source={{ 
-                uri: heroEvent?.thumbnail_url || 
-                     'https://images.unsplash.com/photo-1507692049790-de58290a4334?w=1200' 
-              }}
+              source={{ uri: heroImage }}
               style={styles.heroImage}
               resizeMode="cover"
             >
-              {/* Dynamic Gradient Overlay */}
               <LinearGradient
                 colors={
                   isLive 
@@ -449,304 +205,95 @@ export function LiveScreen() {
             </ImageBackground>
           </Animated.View>
 
-          {/* Hero Content */}
-          <SafeAreaView style={styles.heroContent} edges={['top']}>
-            {/* Top Bar */}
+          <SafeAreaView style={styles.heroContent}>
             <View style={styles.heroTopBar}>
               <Text style={styles.heroPageTitle}>Live</Text>
-              {isLive && heroEvent?.viewer_count !== null && heroEvent.viewer_count > 0 && (
+              {isLive && (
                 <View style={styles.viewerPill}>
-                  <Ionicons name="eye" size={14} color="#fff" />
-                  <Text style={styles.viewerPillText}>
-                    {heroEvent.viewer_count.toLocaleString()} watching
-                  </Text>
+                  <Ionicons name="radio" size={14} color="#fff" />
+                  <Text style={styles.viewerPillText}>On Air</Text>
                 </View>
               )}
             </View>
 
-            {/* Hero Main Content */}
             <View style={styles.heroMainContent}>
-              {/* Live Indicator */}
               {isLive ? (
                 <View style={styles.liveIndicatorContainer}>
-                  <Animated.View 
-                    style={[
-                      styles.liveGlow,
-                      { opacity: glowAnim }
-                    ]}
-                  />
+                  <Animated.View style={[styles.liveGlow, { opacity: glowAnim }]} />
                   <View style={styles.liveBadge}>
-                    <Animated.View 
-                      style={[
-                        styles.liveDot,
-                        { transform: [{ scale: pulseAnim }] }
-                      ]}
-                    />
+                    <Animated.View style={[styles.liveDot, { transform: [{ scale: pulseAnim }] }]} />
                     <Text style={styles.liveBadgeText}>LIVE</Text>
                   </View>
                 </View>
-              ) : heroEvent ? (
+              ) : (
                 <View style={styles.upcomingBadge}>
                   <Ionicons name="time-outline" size={14} color="#fff" />
-                  <Text style={styles.upcomingBadgeText}>
-                    {getCountdown(heroEvent.scheduled_start) || 'Coming Soon'}
-                  </Text>
+                  <Text style={styles.upcomingBadgeText}>Broadcasting Live</Text>
                 </View>
-              ) : null}
-
-              {/* Title & Description */}
-              {heroEvent ? (
-                <>
-                  <Text style={styles.heroTitle}>{heroEvent.title}</Text>
-                  {heroEvent.description && (
-                    <Text style={styles.heroDescription} numberOfLines={2}>
-                      {heroEvent.description}
-                    </Text>
-                  )}
-                </>
-              ) : (
-                <>
-                  <Text style={styles.heroTitle}>Kingdom Principles Radio</Text>
-                  <Text style={styles.heroDescription}>
-                    No live events right now. Check back soon!
-                  </Text>
-                </>
               )}
 
-              {/* Large Action Button */}
-              {heroEvent && (
-                <Pressable
-                  style={({ pressed }) => [
-                    styles.heroButton,
-                    isLive && styles.heroButtonLive,
-                    pressed && styles.heroButtonPressed,
-                  ]}
-                  onPress={() => handleHeroAction(heroEvent, isLive)}
+              <Text style={styles.heroTitle}>{heroTitle}</Text>
+              <Text style={styles.heroDescription} numberOfLines={2}>
+                {heroDescription}
+              </Text>
+
+              <Pressable
+                style={({ pressed }) => [
+                  styles.heroButton,
+                  isLive && styles.heroButtonLive,
+                  pressed && styles.heroButtonPressed,
+                ]}
+                onPress={() => {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+                  if (radioStatus?.stream_url) {
+                    navigation.navigate('VideoPlayer', { video: { video_url: radioStatus.stream_url } } as any);
+                  }
+                }}
+              >
+                <LinearGradient
+                  colors={isLive ? ['#ef4444', '#dc2626'] : [theme.colors.primary, '#059669']}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 0 }}
+                  style={styles.heroButtonGradient}
                 >
-                  <LinearGradient
-                    colors={
-                      isLive 
-                        ? ['#ef4444', '#dc2626'] 
-                        : reminders.has(heroEvent.id)
-                          ? ['#059669', '#047857']
-                          : [theme.colors.primary, '#059669']
-                    }
-                    start={{ x: 0, y: 0 }}
-                    end={{ x: 1, y: 0 }}
-                    style={styles.heroButtonGradient}
-                  >
-                    <Ionicons 
-                      name={
-                        isLive 
-                          ? 'play' 
-                          : reminders.has(heroEvent.id) 
-                            ? 'notifications' 
-                            : 'notifications-outline'
-                      } 
-                      size={24} 
-                      color="#fff" 
-                    />
-                    <Text style={styles.heroButtonText}>
-                      {isLive 
-                        ? 'Watch Now' 
-                        : reminders.has(heroEvent.id) 
-                          ? 'Reminder Set' 
-                          : 'Set Reminder'
-                      }
-                    </Text>
-                  </LinearGradient>
-                </Pressable>
-              )}
+                  <Ionicons name="play" size={24} color="#fff" />
+                  <Text style={styles.heroButtonText}>
+                    {isLive ? 'Listen Now' : 'Tune In'}
+                  </Text>
+                </LinearGradient>
+              </Pressable>
             </View>
           </SafeAreaView>
         </Animated.View>
 
-        {/* Content Below Hero */}
         <View style={[styles.contentContainer, { backgroundColor: theme.colors.background }]}>
-          {/* Interactive Timeline - Upcoming Shows */}
-          {upcoming.length > 0 && (
+          {scheduleImageUrl ? (
             <View style={styles.section}>
               <View style={styles.sectionHeader}>
                 <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>
-                  Coming Up
-                </Text>
-                <Text style={[styles.sectionSubtitle, { color: theme.colors.textMuted }]}>
-                  {upcoming.length} scheduled
+                  Radio Schedule
                 </Text>
               </View>
-              
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={styles.timelineScroll}
-                decelerationRate="fast"
-                snapToInterval={SCREEN_WIDTH * 0.75 + 16}
-              >
-                {upcoming.map((event, index) => (
-                  <Pressable
-                    key={event.id}
-                    style={({ pressed }) => [
-                      styles.timelineCard,
-                      { backgroundColor: theme.colors.surface },
-                      pressed && styles.timelineCardPressed,
-                    ]}
-                    onPress={() => {
-                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                      toggleReminder(event);
-                    }}
-                  >
-                    <Image
-                      source={{ 
-                        uri: event.thumbnail_url || 
-                             'https://images.unsplash.com/photo-1507692049790-de58290a4334?w=800' 
-                      }}
-                      style={styles.timelineThumbnail}
-                    />
-                    
-                    {/* Countdown Chip */}
-                    <View style={styles.countdownChip}>
-                      <Ionicons name="time" size={12} color="#fff" />
-                      <Text style={styles.countdownText}>
-                        {getCountdown(event.scheduled_start) || 'Soon'}
-                      </Text>
-                    </View>
-
-                    {event.is_featured && (
-                      <View style={styles.featuredStar}>
-                        <Ionicons name="star" size={14} color="#fbbf24" />
-                      </View>
-                    )}
-
-                    {reminders.has(event.id) && (
-                      <View style={styles.reminderBadge}>
-                        <Ionicons name="notifications" size={12} color="#fff" />
-                      </View>
-                    )}
-
-                    <View style={styles.timelineInfo}>
-                      <Text 
-                        style={[styles.timelineTitle, { color: theme.colors.text }]} 
-                        numberOfLines={2}
-                      >
-                        {event.title}
-                      </Text>
-                      <Text style={[styles.timelineTime, { color: theme.colors.primary }]}>
-                        {formatDateTime(event.scheduled_start)}
-                      </Text>
-                      
-                      <View style={styles.timelineActions}>
-                        <Pressable 
-                          style={[
-                            styles.reminderBtn, 
-                            { backgroundColor: reminders.has(event.id) ? theme.colors.primary : theme.colors.primaryLight }
-                          ]}
-                          onPress={() => toggleReminder(event)}
-                        >
-                          <Ionicons 
-                            name={reminders.has(event.id) ? 'notifications' : 'notifications-outline'} 
-                            size={16} 
-                            color={reminders.has(event.id) ? '#fff' : theme.colors.primary} 
-                          />
-                          <Text style={[
-                            styles.reminderBtnText, 
-                            { color: reminders.has(event.id) ? '#fff' : theme.colors.primary }
-                          ]}>
-                            {reminders.has(event.id) ? 'Reminder Set' : 'Remind Me'}
-                          </Text>
-                        </Pressable>
-                        <Pressable 
-                          style={styles.calendarBtn}
-                          onPress={() => addToCalendar(event)}
-                        >
-                          <Ionicons name="calendar-outline" size={18} color={theme.colors.textMuted} />
-                        </Pressable>
-                      </View>
-                    </View>
-                  </Pressable>
-                ))}
-              </ScrollView>
+              <View style={styles.scheduleImageContainer}>
+                <Image
+                  source={{ uri: scheduleImageUrl }}
+                  style={styles.scheduleImage}
+                  resizeMode="contain"
+                />
+              </View>
+            </View>
+          ) : (
+            <View style={styles.emptyState}>
+              <Ionicons name="calendar-outline" size={48} color={theme.colors.textMuted} />
+              <Text style={[styles.emptyTitle, { color: theme.colors.text }]}>
+                No Schedule Available
+              </Text>
+              <Text style={[styles.emptyText, { color: theme.colors.textMuted }]}>
+                Check back later for updated program times
+              </Text>
             </View>
           )}
 
-          {/* Past Broadcasts - Story Cards */}
-          {pastEvents.length > 0 && (
-            <View style={styles.section}>
-              <View style={styles.sectionHeader}>
-                <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>
-                  Recent Broadcasts
-                </Text>
-                <Pressable onPress={navigateToMedia}>
-                  <Text style={[styles.seeAllText, { color: theme.colors.primary }]}>
-                    See All
-                  </Text>
-                </Pressable>
-              </View>
-
-              {pastEvents.map((event, index) => (
-                <Pressable
-                  key={event.id}
-                  style={({ pressed }) => [
-                    styles.storyCard,
-                    pressed && styles.storyCardPressed,
-                  ]}
-                  onPress={() => handlePastBroadcastPlay(event)}
-                >
-                  <ImageBackground
-                    source={{ 
-                      uri: event.thumbnail_url || 
-                           'https://images.unsplash.com/photo-1507692049790-de58290a4334?w=800' 
-                    }}
-                    style={styles.storyCardBg}
-                    imageStyle={styles.storyCardBgImage}
-                    blurRadius={20}
-                  >
-                    <LinearGradient
-                      colors={['rgba(0,0,0,0.3)', 'rgba(0,0,0,0.7)']}
-                      style={styles.storyCardOverlay}
-                    >
-                      <Image
-                        source={{ 
-                          uri: event.thumbnail_url || 
-                               'https://images.unsplash.com/photo-1507692049790-de58290a4334?w=800' 
-                        }}
-                        style={styles.storyCardThumb}
-                      />
-                      
-                      <View style={styles.storyCardContent}>
-                        <Text style={styles.storyCardTitle} numberOfLines={2}>
-                          {event.title}
-                        </Text>
-                        <Text style={styles.storyCardTime}>
-                          {formatDateTime(event.scheduled_start)}
-                        </Text>
-                        
-                        {event.viewer_count !== null && event.viewer_count > 0 && (
-                          <View style={styles.storyCardStats}>
-                            <Ionicons name="eye-outline" size={14} color="rgba(255,255,255,0.7)" />
-                            <Text style={styles.storyCardStatsText}>
-                              {event.viewer_count.toLocaleString()} views
-                            </Text>
-                          </View>
-                        )}
-                      </View>
-
-                      <View style={styles.storyCardActions}>
-                        <Pressable 
-                          style={styles.storyPlayBtn}
-                          onPress={() => handlePastBroadcastPlay(event)}
-                        >
-                          <Ionicons name="play" size={20} color="#fff" />
-                        </Pressable>
-                      </View>
-                    </LinearGradient>
-                  </ImageBackground>
-
-                </Pressable>
-              ))}
-            </View>
-          )}
-
-          {/* Error State */}
           {error && (
             <View style={styles.errorState}>
               <Ionicons name="cloud-offline-outline" size={40} color={theme.colors.error || '#ef4444'} />
@@ -759,36 +306,6 @@ export function LiveScreen() {
               >
                 <Ionicons name="refresh" size={18} color="#fff" />
                 <Text style={styles.retryButtonText}>Try Again</Text>
-              </Pressable>
-            </View>
-          )}
-
-          {/* Empty State */}
-          {!error && liveNow.length === 0 && upcoming.length === 0 && pastEvents.length === 0 && (
-            <View style={styles.emptyState}>
-              <View style={styles.emptyIconContainer}>
-                <LinearGradient
-                  colors={[theme.colors.primaryLight, 'transparent']}
-                  style={styles.emptyIconGlow}
-                />
-                <Ionicons name="videocam-outline" size={48} color={theme.colors.textMuted} />
-              </View>
-              <Text style={[styles.emptyTitle, { color: theme.colors.text }]}>
-                No Events Scheduled
-              </Text>
-              <Text style={[styles.emptyText, { color: theme.colors.textMuted }]}>
-                Check back soon for live streams, teachings, and special broadcasts
-              </Text>
-              <Pressable 
-                style={styles.emptyButton}
-                onPress={navigateToMedia}
-              >
-                <LinearGradient
-                  colors={[theme.colors.primary, '#059669']}
-                  style={styles.emptyButtonGradient}
-                >
-                  <Text style={styles.emptyButtonText}>Explore Videos</Text>
-                </LinearGradient>
               </Pressable>
             </View>
           )}
@@ -818,8 +335,6 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '500',
   },
-
-  // Hero Section
   heroContainer: {
     height: HERO_HEIGHT,
     position: 'relative',
@@ -960,8 +475,6 @@ const styles = StyleSheet.create({
     fontSize: 17,
     fontWeight: '700',
   },
-
-  // Content Container
   contentContainer: {
     borderTopLeftRadius: 28,
     borderTopRightRadius: 28,
@@ -969,8 +482,6 @@ const styles = StyleSheet.create({
     paddingTop: 28,
     minHeight: SCREEN_HEIGHT * 0.5,
   },
-
-  // Section Styles
   section: {
     marginBottom: 36,
   },
@@ -986,192 +497,15 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     letterSpacing: -0.3,
   },
-  sectionSubtitle: {
-    fontSize: 14,
-    fontWeight: '500',
-  },
-  seeAllText: {
-    fontSize: 15,
-    fontWeight: '600',
-  },
-
-  // Timeline Cards (Upcoming)
-  timelineScroll: {
-    paddingHorizontal: 24,
-    gap: 16,
-  },
-  timelineCard: {
-    width: SCREEN_WIDTH * 0.75,
-    borderRadius: 20,
-    overflow: 'hidden',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.1,
-    shadowRadius: 12,
-    elevation: 8,
-  },
-  timelineCardPressed: {
-    transform: [{ scale: 0.98 }],
-    opacity: 0.9,
-  },
-  timelineThumbnail: {
-    width: '100%',
-    aspectRatio: 16 / 9,
-  },
-  countdownChip: {
-    position: 'absolute',
-    top: 12,
-    left: 12,
-    flexDirection: 'row',
+  scheduleImageContainer: {
+    paddingHorizontal: 12,
     alignItems: 'center',
-    gap: 4,
-    backgroundColor: 'rgba(0,0,0,0.7)',
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 12,
   },
-  countdownText: {
-    color: '#fff',
-    fontSize: 12,
-    fontWeight: '700',
-  },
-  featuredStar: {
-    position: 'absolute',
-    top: 12,
-    right: 12,
-    width: 32,
-    height: 32,
+  scheduleImage: {
+    width: SCREEN_WIDTH - 24,
+    height: (SCREEN_WIDTH - 24) * 1.4,
     borderRadius: 16,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    justifyContent: 'center',
-    alignItems: 'center',
   },
-  reminderBadge: {
-    position: 'absolute',
-    top: 12,
-    right: 52,
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: '#10b981',
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 2,
-    borderColor: '#fff',
-  },
-  timelineInfo: {
-    padding: 16,
-  },
-  timelineTitle: {
-    fontSize: 17,
-    fontWeight: '700',
-    marginBottom: 6,
-    lineHeight: 22,
-  },
-  timelineTime: {
-    fontSize: 14,
-    fontWeight: '600',
-    marginBottom: 14,
-  },
-  timelineActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-  },
-  reminderBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderRadius: 12,
-  },
-  reminderBtnText: {
-    fontSize: 13,
-    fontWeight: '600',
-  },
-  calendarBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
-    backgroundColor: 'rgba(0,0,0,0.05)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-
-  // Story Cards (Past Broadcasts)
-  storyCard: {
-    marginHorizontal: 24,
-    marginBottom: 16,
-    borderRadius: 20,
-    overflow: 'hidden',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.15,
-    shadowRadius: 12,
-    elevation: 8,
-  },
-  storyCardPressed: {
-    transform: [{ scale: 0.98 }],
-    opacity: 0.95,
-  },
-  storyCardBg: {
-    width: '100%',
-    height: 120,
-  },
-  storyCardBgImage: {
-    borderRadius: 20,
-  },
-  storyCardOverlay: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 16,
-    gap: 14,
-  },
-  storyCardThumb: {
-    width: 88,
-    height: 88,
-    borderRadius: 14,
-  },
-  storyCardContent: {
-    flex: 1,
-    justifyContent: 'center',
-  },
-  storyCardTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#fff',
-    marginBottom: 4,
-    lineHeight: 21,
-  },
-  storyCardTime: {
-    fontSize: 13,
-    color: 'rgba(255,255,255,0.7)',
-    marginBottom: 6,
-  },
-  storyCardStats: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  storyCardStatsText: {
-    fontSize: 12,
-    color: 'rgba(255,255,255,0.7)',
-  },
-  storyCardActions: {
-    justifyContent: 'center',
-  },
-  storyPlayBtn: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: 'rgba(255,255,255,0.25)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-
-  // Error State
   errorState: {
     paddingVertical: 40,
     paddingHorizontal: 40,
@@ -1196,25 +530,10 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '600',
   },
-
-  // Empty State
   emptyState: {
     paddingVertical: 60,
     paddingHorizontal: 40,
     alignItems: 'center',
-  },
-  emptyIconContainer: {
-    width: 100,
-    height: 100,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 24,
-  },
-  emptyIconGlow: {
-    position: 'absolute',
-    width: 100,
-    height: 100,
-    borderRadius: 50,
   },
   emptyTitle: {
     fontSize: 22,
@@ -1227,23 +546,5 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     lineHeight: 22,
     marginBottom: 28,
-  },
-  emptyButton: {
-    borderRadius: 16,
-    overflow: 'hidden',
-    shadowColor: '#047857',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.25,
-    shadowRadius: 12,
-    elevation: 8,
-  },
-  emptyButtonGradient: {
-    paddingHorizontal: 32,
-    paddingVertical: 16,
-  },
-  emptyButtonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '700',
   },
 });

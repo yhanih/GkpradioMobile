@@ -19,13 +19,32 @@ import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { wpClient } from '../lib/wordpress';
 import { useAuth } from '../contexts/AuthContext';
 import { useBookmarks } from '../contexts/BookmarksContext';
 import { useTheme } from '../contexts/ThemeContext';
-import { supabase } from '../lib/supabase';
-import { Episode, Video } from '../types/database.types';
 import { RootStackParamList } from '../types/navigation';
 import * as Haptics from 'expo-haptics';
+
+interface Episode {
+  id: string;
+  title: string;
+  content: string;
+  thumbnail_url?: string;
+  audio_url?: string;
+  created_at?: string;
+  category?: string;
+}
+
+interface Video {
+  id: string;
+  title: string;
+  content: string;
+  thumbnail_url?: string;
+  video_url?: string;
+  created_at?: string;
+  category?: string;
+}
 
 interface ProfileData {
   fullname: string | null;
@@ -78,39 +97,41 @@ export function ProfileScreen() {
       setLoadingSaved(true);
       
       const episodeIds = bookmarks
-        .filter(b => b.content_type === 'episode')
-        .map(b => b.content_id);
+        .filter((b: any) => b.content_type === 'episode')
+        .map((b: any) => b.content_id);
       
       const videoIds = bookmarks
-        .filter(b => b.content_type === 'video')
-        .map(b => b.content_id);
+        .filter((b: any) => b.content_type === 'video')
+        .map((b: any) => b.content_id);
 
       const [episodesResult, videosResult] = await Promise.all([
         episodeIds.length > 0
-          ? supabase
-              .from('episodes')
-              .select('*')
-              .in('id', episodeIds)
-              .order('created_at', { ascending: false })
+          ? wpClient.getPodcasts(100, episodeIds)
           : Promise.resolve({ data: [], error: null }),
         videoIds.length > 0
-          ? supabase
-              .from('videos')
-              .select('*')
-              .in('id', videoIds)
-              .order('created_at', { ascending: false })
+          ? wpClient.getVideos(100, videoIds)
           : Promise.resolve({ data: [], error: null }),
       ]);
 
-      if (episodesResult.error) {
-        console.error('Error fetching saved episodes:', episodesResult.error);
-      }
-      if (videosResult.error) {
-        console.error('Error fetching saved videos:', videosResult.error);
-      }
-
-      setSavedEpisodes(episodesResult.data || []);
-      setSavedVideos(videosResult.data || []);
+      setSavedEpisodes((episodesResult.data || []).map(p => ({
+        id: String(p.id),
+        title: p.title.rendered,
+        content: p.content.rendered,
+        thumbnail_url: p.thumbnail_url,
+        audio_url: p.audio_url,
+        created_at: p.date,
+        category: 'Podcast'
+      } as any)));
+      
+      setSavedVideos((videosResult.data || []).map(v => ({
+        id: String(v.id),
+        title: v.title.rendered,
+        content: v.content.rendered,
+        thumbnail_url: v.thumbnail_url,
+        video_url: v.video_url,
+        created_at: v.date,
+        category: 'Video'
+      } as any)));
     } catch (error) {
       console.error('Error fetching saved content:', error);
     } finally {
@@ -121,26 +142,20 @@ export function ProfileScreen() {
   const fetchProfile = async () => {
     try {
       setLoading(true);
-      const { data, error } = await supabase
-        .from('users')
-        .select('*')
-        .eq('id', user?.id)
-        .single();
-
-      if (error && error.code !== 'PGRST116') {
-        throw error;
-      }
+      const { data, error } = await wpClient.getMe();
+      if (error) throw new Error(error);
 
       if (data) {
-        setProfile(data);
-        setFullName(data.fullname || '');
-        setBio(data.bio || '');
-      } else {
-        setProfile(null);
-        setFullName('');
-        setBio('');
+        setProfile({
+          fullname: data.name,
+          bio: data.description,
+          avatarurl: data.avatar_urls?.['96'] || null,
+          created_at: new Date().toISOString(),
+        } as any);
+        setFullName(data.name || '');
+        setBio(data.description || '');
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error fetching profile:', error);
       Alert.alert('Error', 'Unable to load profile. Please try again.');
     } finally {
@@ -177,23 +192,19 @@ export function ProfileScreen() {
 
     try {
       setSaving(true);
-      const { error } = await supabase
-        .from('users')
-        .upsert({
-          id: user.id,
-          fullname: fullName.trim() || null,
-          bio: bio.trim() || null,
-          updated_at: new Date().toISOString(),
-        });
+      const { error } = await wpClient.updateMe({
+        fullname: fullName.trim(),
+        bio: bio.trim()
+      });
 
-      if (error) throw error;
+      if (error) throw new Error(error);
 
       Alert.alert('Success', 'Profile updated successfully!');
       setEditing(false);
       fetchProfile();
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error updating profile:', error);
-      Alert.alert('Error', 'Unable to update profile. Please try again.');
+      Alert.alert('Error', error.message || 'Unable to update profile. Please try again.');
     } finally {
       setSaving(false);
     }
@@ -206,7 +217,7 @@ export function ProfileScreen() {
   };
 
   const handleLogout = () => {
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     Alert.alert(
       'Logout',
       'Are you sure you want to logout?',
@@ -229,52 +240,15 @@ export function ProfileScreen() {
   };
 
   const handleDeleteAccount = () => {
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
     Alert.alert(
       'Delete Account',
-      'WARNING: This action is permanent. All your data, including prayer requests and testimonies, will be permanently deleted.',
+      'If you wish to delete your account, please contact our support team at support@gkpradio.com.',
       [
         { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete Permanently',
-          style: 'destructive',
-          onPress: () => {
-            Alert.alert(
-              'Final Confirmation',
-              'Are you absolutely sure? This cannot be undone.',
-              [
-                { text: 'Cancel', style: 'cancel' },
-                {
-                  text: 'Yes, Delete My Account',
-                  style: 'destructive',
-                  onPress: async () => {
-                    try {
-                      setSaving(true);
-
-                      // 1. Call the Edge Function to delete the auth user
-                      // This ensures complete account erasure as required by Apple
-                      const { data, error: functionError } = await supabase.functions.invoke('delete-user');
-
-                      if (functionError) throw functionError;
-
-                      // 2. Sign out locally
-                      await signOut();
-
-                      Alert.alert('Account Deleted', 'Your account and all associated data have been permanently removed.');
-                    } catch (error) {
-                      console.error('Error deleting account:', error);
-                      Alert.alert(
-                        'Deletion Error',
-                        'Unable to complete account deletion automatically. Please contact support@gkpradio.com to manually request deletion.'
-                      );
-                    } finally {
-                      setSaving(false);
-                    }
-                  }
-                }
-              ]
-            );
-          }
+        { 
+          text: 'Contact Support', 
+          onPress: () => Linking.openURL('mailto:support@gkpradio.com?subject=Account%20Deletion%20Request') 
         }
       ]
     );

@@ -1,8 +1,22 @@
 import React, { createContext, useContext, useState, useRef, useEffect } from 'react';
 import { Audio, AVPlaybackStatus } from 'expo-av';
 import { Alert } from 'react-native';
-import { fetchNowPlaying, NowPlayingData } from '../lib/azuracast';
-import { Episode } from '../types/database.types';
+import { wpClient } from '../lib/wordpress';
+// Local Episode interface for WordPress data
+export interface Episode {
+  id: number;
+  title: { rendered: string };
+  content: { rendered: string };
+  date: string;
+  thumbnail_url?: string;
+  audio_url?: string;
+}
+
+export interface NowPlayingData {
+    station: { listen_url: string; name: string };
+    now_playing: { song: { title: string; artist: string; art?: string } };
+    is_live: boolean;
+}
 
 interface AudioContextType {
     isPlaying: boolean;
@@ -43,10 +57,17 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
 
     const fetchNowPlayingData = async () => {
         try {
-            const data = await fetchNowPlaying(1);
-            setNowPlaying(data);
-            if (data.station && data.station.listen_url) {
-                setStreamUrl(data.station.listen_url);
+            const { data } = await wpClient.getRadioStatus();
+            if (data) {
+                setNowPlaying({
+                    station: { listen_url: data.stream_url, name: 'GKP Radio' },
+                    now_playing: { song: { title: data.current_show || 'GKP Radio Live', artist: 'Divine Inspiration' } },
+                    is_live: data.is_live
+                } as any);
+                
+                if (data.stream_url) {
+                    setStreamUrl(data.stream_url);
+                }
             }
         } catch (error) {
             console.error('Error fetching now playing:', error);

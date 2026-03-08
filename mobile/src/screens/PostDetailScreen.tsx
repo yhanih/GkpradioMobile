@@ -19,26 +19,50 @@ import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import * as Haptics from 'expo-haptics';
-import { supabase } from '../lib/supabase';
+import { wpClient, WPComment, WPTestimony, WPUser } from '../lib/wordpress';
 import { useAuth } from '../contexts/AuthContext';
 import { useBookmarks } from '../contexts/BookmarksContext';
-import { CommunityThread, CommunityComment, User } from '../types/database.types';
 import { RootStackParamList } from '../types/navigation';
 import { getCategoryIcon, getCategoryLabel } from '../constants/categories';
 
 type PostDetailRouteProp = RouteProp<RootStackParamList, 'PostDetail'>;
 type PostDetailNavProp = NativeStackNavigationProp<RootStackParamList, 'PostDetail'>;
 
-interface ThreadWithUser extends CommunityThread {
-  users?: User | null;
+interface ThreadWithUser {
+  id: string;
+  title: string;
+  content: string;
+  createdat: string;
+  category: string;
+  userid: string;
+  is_anonymous: boolean;
+  ispinned: boolean;
+  like_count: number;
+  comment_count: number;
   user_has_liked?: boolean;
   user_has_prayed?: boolean;
   prayer_count?: number;
   user_has_bookmarked?: boolean;
+  users?: {
+    id: string;
+    fullname?: string;
+    username?: string;
+    avatarurl?: string;
+  } | null;
 }
 
-interface CommentWithUser extends CommunityComment {
-  users?: User | null;
+interface CommentWithUser {
+  id: string;
+  threadid: string;
+  userid: string;
+  content: string;
+  createdat: string;
+  users?: {
+    id: string;
+    fullname?: string;
+    username?: string;
+    avatarurl?: string;
+  } | null;
 }
 
 export function PostDetailScreen() {
@@ -47,7 +71,7 @@ export function PostDetailScreen() {
   const { user } = useAuth();
   const { isBookmarked, toggleBookmark } = useBookmarks();
 
-  const [thread, setThread] = useState<ThreadWithUser | null>(route.params.thread || null);
+  const [thread, setThread] = useState<ThreadWithUser | null>(null);
   const [comments, setComments] = useState<CommentWithUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -56,78 +80,76 @@ export function PostDetailScreen() {
 
   const fetchThread = useCallback(async () => {
     try {
-      const { data, error } = await supabase
-        .from('communitythreads')
-        .select(`
-          *,
-          users:userid (
-            id,
-            username,
-            fullname,
-            avatarurl
-          )
-        `)
-        .eq('id', route.params.threadId)
-        .single();
-
-      if (error) throw error;
-
-      let threadData: ThreadWithUser = data;
-
-      if (user) {
-        const [likesResult, prayersResult] = await Promise.all([
-          supabase
-            .from('community_thread_likes')
-            .select('id')
-            .eq('thread_id', route.params.threadId)
-            .eq('user_id', user.id)
-            .maybeSingle(),
-          supabase
-            .from('thread_prayers')
-            .select('id')
-            .eq('thread_id', route.params.threadId)
-            .eq('user_id', user.id)
-            .maybeSingle(),
-        ]);
-
-        threadData = {
-          ...data,
-          user_has_liked: !!likesResult.data,
-          user_has_prayed: !!prayersResult.data,
-        };
+      const threadId = Number(route.params.threadId);
+      
+      // If we have the thread in params, use it for immediate display
+      if (route.params.thread && !thread) {
+        const t = route.params.thread;
+        setThread({
+          id: String(t.id),
+          title: t.title,
+          content: t.content,
+          createdat: t.createdat,
+          category: t.category,
+          userid: t.userid,
+          is_anonymous: t.is_anonymous,
+          ispinned: t.ispinned,
+          like_count: t.like_count,
+          comment_count: t.comment_count,
+          user_has_liked: t.user_has_liked,
+          users: t.users
+        } as any);
       }
 
-      const { count: prayerCount } = await supabase
-        .from('thread_prayers')
-        .select('*', { count: 'exact', head: true })
-        .eq('thread_id', route.params.threadId);
-
-      threadData.prayer_count = prayerCount || 0;
-
-      setThread(threadData);
+      // Fetch fresh data from API
+      // Since we don't have getTestimonyById yet, we'll use getTestimonies and filter
+      const { data, error } = await wpClient.getTestimonies(100);
+      if (data) {
+        const found = data.find(t => t.id === threadId);
+        if (found) {
+          setThread({
+            id: String(found.id),
+            title: found.title.rendered,
+            content: found.content.rendered.replace(/<[^>]*>?/gm, ''),
+            createdat: found.date,
+            category: 'general', // Default category for now
+            userid: String(found.author),
+            is_anonymous: false,
+            ispinned: false,
+            like_count: found.like_count || 0,
+            comment_count: found.comment_count || 0,
+            user_has_liked: found.user_has_liked || false,
+            users: { 
+              id: String(found.author), 
+              fullname: 'Member',
+              username: 'member'
+            } as any
+          });
+        }
+      }
     } catch (error) {
       console.error('Error fetching thread:', error);
     }
-  }, [route.params.threadId, user]);
+  }, [route.params.threadId, route.params.thread]);
 
   const fetchComments = useCallback(async () => {
     try {
-      const { data, error } = await supabase
-        .from('communitycomments')
-        .select(`
-          *,
-          users:userid (
-            id,
-            username,
-            fullname,
-            avatarurl
-          )
-        `)
-        .eq('threadid', route.params.threadId)
-        .order('createdat', { ascending: true });
-
-      if (error) throw error;
-      setComments(data || []);
+      const { data, error } = await wpClient.getComments(Number(route.params.threadId));
+      if (data) {
+        const formatted = data.map((c: WPComment) => ({
+          id: String(c.id),
+          threadid: String(c.post),
+          userid: 'WP_USER',
+          content: c.content.rendered.replace(/<[^>]*>?/gm, ''),
+          createdat: c.date,
+          users: { 
+            id: 'WP_USER', 
+            fullname: c.author_name, 
+            avatarurl: c.author_avatar_urls?.['96'] 
+          }
+        }));
+        setComments(formatted);
+      }
     } catch (error) {
       console.error('Error fetching comments:', error);
     }
@@ -142,89 +164,6 @@ export function PostDetailScreen() {
   useEffect(() => {
     loadData();
   }, [loadData]);
-
-  useEffect(() => {
-    const threadId = route.params.threadId;
-    
-    const realtimeChannel = supabase
-      .channel(`post-detail-${threadId}`)
-      .on(
-        'postgres_changes',
-        { 
-          event: '*', 
-          schema: 'public', 
-          table: 'communitythreads',
-          filter: `id=eq.${threadId}`
-        },
-        (payload) => {
-          if (payload.eventType === 'UPDATE') {
-            setThread(prev => prev ? { ...prev, ...payload.new } : null);
-          }
-        }
-      )
-      .on(
-        'postgres_changes',
-        { 
-          event: '*', 
-          schema: 'public', 
-          table: 'communitycomments',
-          filter: `threadid=eq.${threadId}`
-        },
-        (payload) => {
-          if (payload.eventType === 'INSERT') {
-            fetchComments();
-          } else if (payload.eventType === 'DELETE') {
-            setComments(prev => prev.filter(c => c.id !== payload.old.id));
-          } else if (payload.eventType === 'UPDATE') {
-            setComments(prev => prev.map(c => 
-              c.id === payload.new.id ? { ...c, ...payload.new } : c
-            ));
-          }
-        }
-      )
-      .on(
-        'postgres_changes',
-        { 
-          event: '*', 
-          schema: 'public', 
-          table: 'community_thread_likes',
-          filter: `thread_id=eq.${threadId}`
-        },
-        async () => {
-          const { data } = await supabase
-            .from('communitythreads')
-            .select('like_count')
-            .eq('id', threadId)
-            .single();
-          
-          if (data) {
-            setThread(prev => prev ? { ...prev, like_count: data.like_count } : null);
-          }
-        }
-      )
-      .on(
-        'postgres_changes',
-        { 
-          event: '*', 
-          schema: 'public', 
-          table: 'thread_prayers',
-          filter: `thread_id=eq.${threadId}`
-        },
-        async () => {
-          const { count } = await supabase
-            .from('thread_prayers')
-            .select('*', { count: 'exact', head: true })
-            .eq('thread_id', threadId);
-          
-          setThread(prev => prev ? { ...prev, prayer_count: count || 0 } : null);
-        }
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(realtimeChannel);
-    };
-  }, [route.params.threadId, fetchComments]);
 
   const onRefresh = async () => {
     setRefreshing(true);
@@ -252,34 +191,11 @@ export function PostDetailScreen() {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
 
     try {
-      if (currentlyLiked) {
-        const { error } = await supabase
-          .from('community_thread_likes')
-          .delete()
-          .eq('thread_id', thread.id)
-          .eq('user_id', user.id);
-        if (error) throw error;
-
-        // Update like_count in database
-        await supabase
-          .from('communitythreads')
-          .update({ like_count: newCount })
-          .eq('id', thread.id);
-      } else {
-        const { error } = await supabase
-          .from('community_thread_likes')
-          .upsert({ thread_id: thread.id, user_id: user.id }, { onConflict: 'thread_id,user_id' });
-        if (error) throw error;
-
-        // Update like_count in database
-        await supabase
-          .from('communitythreads')
-          .update({ like_count: newCount })
-          .eq('id', thread.id);
-      }
+      const { error } = await wpClient.toggleLike(Number(thread.id));
+      if (error) throw new Error(error);
     } catch (error: any) {
-      if (error?.code === '23505') return;
       console.error('Error toggling like:', error);
+      // Rollback
       setThread(prev => prev ? {
         ...prev,
         user_has_liked: currentlyLiked,
@@ -289,49 +205,9 @@ export function PostDetailScreen() {
   };
 
   const handlePray = async () => {
-    if (!user) {
-      Alert.alert('Sign In Required', 'Please sign in to pray for posts.');
-      return;
-    }
-    if (!thread) return;
-
-    const currentlyPrayed = thread.user_has_prayed;
-
-    setThread(prev => prev ? {
-      ...prev,
-      user_has_prayed: !currentlyPrayed,
-      prayer_count: currentlyPrayed 
-        ? (prev.prayer_count || 1) - 1 
-        : (prev.prayer_count || 0) + 1
-    } : null);
-
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-
-    try {
-      if (currentlyPrayed) {
-        const { error } = await supabase
-          .from('thread_prayers')
-          .delete()
-          .eq('thread_id', thread.id)
-          .eq('user_id', user.id);
-        if (error) throw error;
-      } else {
-        const { error } = await supabase
-          .from('thread_prayers')
-          .upsert({ thread_id: thread.id, user_id: user.id }, { onConflict: 'thread_id,user_id' });
-        if (error) throw error;
-      }
-    } catch (error: any) {
-      if (error?.code === '23505') return;
-      console.error('Error toggling prayer:', error);
-      setThread(prev => prev ? {
-        ...prev,
-        user_has_prayed: currentlyPrayed,
-        prayer_count: currentlyPrayed 
-          ? (prev.prayer_count || 0) + 1 
-          : (prev.prayer_count || 1) - 1
-      } : null);
-    }
+    // Prayer feature can be implemented using same toggleLike logic with a different key 
+    // or just use Like for now. For GKP, "Amen" is equivalent to Like.
+    handleLike();
   };
 
   const handleBookmark = async () => {
@@ -377,23 +253,8 @@ export function PostDetailScreen() {
     setSubmittingComment(true);
 
     try {
-      const { error } = await supabase
-        .from('communitycomments')
-        .insert({
-          userid: user.id,
-          threadid: thread.id,
-          content: newComment.trim(),
-        });
-
-      if (error) throw error;
-
-      // Update comment_count in database
-      const currentCommentCount = thread.comment_count ?? 0;
-      const newCommentCount = currentCommentCount + 1;
-      await supabase
-        .from('communitythreads')
-        .update({ comment_count: newCommentCount })
-        .eq('id', thread.id);
+      const { error } = await wpClient.createComment(Number(thread.id), newComment.trim());
+      if (error) throw new Error(error);
 
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       setNewComment('');
@@ -401,7 +262,7 @@ export function PostDetailScreen() {
       
       setThread(prev => prev ? {
         ...prev,
-        comment_count: newCommentCount
+        comment_count: (prev.comment_count || 0) + 1
       } : null);
     } catch (error) {
       console.error('Error submitting comment:', error);
@@ -411,60 +272,15 @@ export function PostDetailScreen() {
     }
   };
 
-  const navigateToUserProfile = (userId: string, userData?: User | null) => {
+  const navigateToUserProfile = (userId: string) => {
     if (!userId) return;
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    navigation.navigate('UserProfile', { userId, user: userData || undefined });
+    navigation.navigate('UserProfile', { userId });
   };
 
-  const handleDeleteComment = async (commentId: string, commentUserId: string) => {
-    if (!user || user.id !== commentUserId) {
-      Alert.alert('Not Allowed', 'You can only delete your own comments.');
-      return;
-    }
-
-    Alert.alert(
-      'Delete Comment',
-      'Are you sure you want to delete this comment?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              const { error } = await supabase
-                .from('communitycomments')
-                .delete()
-                .eq('id', commentId);
-
-              if (error) throw error;
-
-              // Update comment_count in database
-              const currentCommentCount = thread?.comment_count ?? 0;
-              const newCommentCount = Math.max(currentCommentCount - 1, 0);
-              if (thread) {
-                await supabase
-                  .from('communitythreads')
-                  .update({ comment_count: newCommentCount })
-                  .eq('id', thread.id);
-              }
-
-              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-              await fetchComments();
-              
-              setThread(prev => prev ? {
-                ...prev,
-                comment_count: newCommentCount
-              } : null);
-            } catch (error) {
-              console.error('Error deleting comment:', error);
-              Alert.alert('Error', 'Unable to delete comment. Please try again.');
-            }
-          }
-        }
-      ]
-    );
+  const handleDeleteComment = async (commentId: string) => {
+    // Delete comment not yet implemented in wpClient for users
+    Alert.alert('Coming Soon', 'Comment deletion will be available soon.');
   };
 
   const formatTimeAgo = (dateString: string) => {
@@ -478,7 +294,7 @@ export function PostDetailScreen() {
     return `${Math.floor(diffInSeconds / 86400)}d ago`;
   };
 
-  if (loading) {
+  if (loading && !thread) {
     return (
       <SafeAreaView style={styles.container} edges={['top']}>
         <View style={styles.header}>
@@ -555,7 +371,7 @@ export function PostDetailScreen() {
           <View style={styles.postContainer}>
             <Pressable 
               style={styles.authorRow}
-              onPress={() => !thread.is_anonymous && thread.users && navigateToUserProfile(thread.userid, thread.users)}
+              onPress={() => !thread.is_anonymous && thread.users && navigateToUserProfile(thread.userid)}
               disabled={thread.is_anonymous}
             >
               {avatarUrl ? (
@@ -639,7 +455,7 @@ export function PostDetailScreen() {
                 <View key={comment.id} style={styles.commentCard}>
                   <Pressable 
                     style={styles.commentRow}
-                    onPress={() => comment.users && navigateToUserProfile(comment.userid, comment.users)}
+                    onPress={() => comment.users && navigateToUserProfile(comment.userid)}
                   >
                     {comment.users?.avatarurl ? (
                       <Image source={{ uri: comment.users.avatarurl }} style={styles.commentAvatar} />
@@ -657,7 +473,7 @@ export function PostDetailScreen() {
                           <Text style={styles.commentTime}>{formatTimeAgo(comment.createdat)}</Text>
                           {user && user.id === comment.userid && (
                             <Pressable 
-                              onPress={() => handleDeleteComment(comment.id, comment.userid)}
+                              onPress={() => handleDeleteComment(comment.id)}
                               style={styles.deleteCommentButton}
                             >
                               <Ionicons name="trash-outline" size={14} color="#ef4444" />

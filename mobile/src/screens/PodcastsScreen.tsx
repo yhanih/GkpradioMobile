@@ -2,11 +2,12 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, ScrollView, Image, StyleSheet, Pressable, ActivityIndicator, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { supabase } from '../lib/supabase';
-import { Episode } from '../types/database.types';
+import { wpClient } from '../lib/wordpress';
+import { useTheme } from '../contexts/ThemeContext';
 
 export function PodcastsScreen() {
-  const [podcasts, setPodcasts] = useState<Episode[]>([]);
+  const { theme } = useTheme();
+  const [podcasts, setPodcasts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -19,14 +20,11 @@ export function PodcastsScreen() {
     try {
       setLoading(true);
       setError(null);
-      const { data, error: fetchError } = await supabase
-        .from('episodes')
-        .select('*')
-        .order('created_at', { ascending: false });
+      const { data, error: fetchError } = await wpClient.getPodcasts();
 
-      if (fetchError) throw fetchError;
+      if (fetchError) throw new Error(fetchError);
       if (data) setPodcasts(data);
-    } catch (err) {
+    } catch (err: any) {
       console.error('Error fetching podcasts:', err);
       setError('Unable to load podcasts. Please try again.');
     } finally {
@@ -86,7 +84,7 @@ export function PodcastsScreen() {
             </View>
           ) : (
             podcasts.map((podcast) => (
-              <Pressable key={podcast.id} style={styles.podcastCard}>
+              <Pressable key={podcast.id} style={[styles.podcastCard, { backgroundColor: theme.colors.surface }]}>
                 <Image
                   source={{
                     uri: podcast.thumbnail_url || 'https://images.unsplash.com/photo-1516589178581-6cd7833ae3b2?w=400',
@@ -94,27 +92,13 @@ export function PodcastsScreen() {
                   style={styles.podcastImage}
                 />
                 <View style={styles.podcastInfo}>
-                  <Text style={styles.podcastTitle} numberOfLines={2}>
-                    {podcast.title}
+                  <Text style={[styles.podcastTitle, { color: theme.colors.text }]} numberOfLines={2}>
+                    {podcast.title.rendered}
                   </Text>
-                  {podcast.author && (
-                    <Text style={styles.podcastHosts}>{podcast.author}</Text>
-                  )}
-                  {podcast.description && (
-                    <Text style={styles.podcastDescription} numberOfLines={2}>
-                      {podcast.description}
-                    </Text>
-                  )}
                   <View style={styles.podcastMeta}>
-                    {podcast.category && (
-                      <View style={styles.metaItem}>
-                        <Ionicons name="folder" size={14} color="#71717a" />
-                        <Text style={styles.metaText}>{podcast.category}</Text>
-                      </View>
-                    )}
                     <View style={styles.metaItem}>
-                      <Ionicons name="time" size={14} color="#71717a" />
-                      <Text style={styles.metaText}>{formatDuration(podcast.duration)}</Text>
+                      <Ionicons name="time" size={14} color={theme.colors.textMuted} />
+                      <Text style={[styles.metaText, { color: theme.colors.textMuted }]}>Podcast</Text>
                     </View>
                   </View>
                 </View>
@@ -132,7 +116,6 @@ export function PodcastsScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fff',
   },
   scrollView: {
     flex: 1,

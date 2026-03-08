@@ -14,8 +14,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { supabase } from '../lib/supabase';
-import { CommunityThread, User } from '../types/database.types';
+import { wpClient, WPTestimony } from '../lib/wordpress';
 import { useAuth } from '../contexts/AuthContext';
 import * as Haptics from 'expo-haptics';
 import { RootStackParamList } from '../types/navigation';
@@ -24,16 +23,11 @@ import { getCategoryIcon, getCategoryLabel } from '../constants/categories';
 
 type LikedPostsNavProp = NativeStackNavigationProp<RootStackParamList>;
 
-interface ThreadWithUser extends CommunityThread {
-  users?: User | null;
-  user_has_liked?: boolean;
-}
-
 export function LikedPostsScreen() {
   const navigation = useNavigation<LikedPostsNavProp>();
   const { user } = useAuth();
   const { theme } = useTheme();
-  const [threads, setThreads] = useState<ThreadWithUser[]>([]);
+  const [testimonies, setTestimonies] = useState<WPTestimony[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -48,48 +42,18 @@ export function LikedPostsScreen() {
     try {
       setError(null);
       
-      // First, get all thread IDs that the user has liked
-      const { data: likesData, error: likesError } = await supabase
-        .from('community_thread_likes')
-        .select('thread_id')
-        .eq('user_id', user.id)
-        .order('created_at', { ascending: false });
+      // Since we don't have a targeted "get liked" endpoint yet, 
+      // we filter from recent testimonies as a placeholder
+      const { data, error: fetchError } = await wpClient.getTestimonies(50);
 
-      if (likesError) throw likesError;
+      if (fetchError) throw new Error(fetchError);
 
-      if (!likesData || likesData.length === 0) {
-        setThreads([]);
-        setLoading(false);
-        setRefreshing(false);
-        return;
-      }
+      // In a real WP setup with likes, we'd have a specific endpoint.
+      // For now, we'll show testimonies where user_has_liked is true if the API supports it,
+      // or just show recent ones if we can't filter server-side yet.
+      const likedItems = (data || []).filter(item => item.user_has_liked);
 
-      const threadIds = likesData.map(like => like.thread_id);
-
-      // Then, fetch the full thread data with user info
-      const { data: threadsData, error: threadsError } = await supabase
-        .from('communitythreads')
-        .select(`
-          *,
-          users:userid (
-            id,
-            username,
-            fullname,
-            avatarurl
-          )
-        `)
-        .in('id', threadIds)
-        .order('createdat', { ascending: false });
-
-      if (threadsError) throw threadsError;
-
-      // Mark all as liked since we're in the liked posts screen
-      const threadsWithLikes: ThreadWithUser[] = (threadsData || []).map(thread => ({
-        ...thread,
-        user_has_liked: true,
-      }));
-
-      setThreads(threadsWithLikes);
+      setTestimonies(likedItems);
     } catch (err: any) {
       console.error('Error fetching liked posts:', err);
       setError('Failed to load liked posts. Please try again.');
@@ -128,65 +92,35 @@ export function LikedPostsScreen() {
     return date.toLocaleDateString();
   };
 
-  const navigateToPost = (thread: ThreadWithUser) => {
+  const navigateToPost = (testimony: WPTestimony) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    navigation.navigate('PostDetail', { threadId: thread.id, thread });
+    navigation.navigate('PostDetail', { threadId: testimony.id, testimony });
   };
 
-  const renderThread = (thread: ThreadWithUser) => {
-    const authorName = thread.is_anonymous
-      ? 'Anonymous'
-      : thread.users?.fullname || thread.users?.username || 'Member';
-    const avatarUrl = thread.is_anonymous ? null : thread.users?.avatarurl;
-
+  const renderTestimony = (testimony: WPTestimony) => {
     return (
       <Pressable
-        key={thread.id}
+        key={testimony.id}
         style={[styles.card, { backgroundColor: theme.colors.surface }]}
-        onPress={() => navigateToPost(thread)}
+        onPress={() => navigateToPost(testimony)}
       >
         <View style={styles.cardHeader}>
-          <Pressable
-            style={styles.authorInfo}
-            onPress={(e) => {
-              e.stopPropagation();
-              if (!thread.is_anonymous && thread.users) {
-                navigation.navigate('UserProfile', {
-                  userId: thread.userid,
-                  user: thread.users,
-                });
-              }
-            }}
-          >
-            {avatarUrl ? (
-              <Image source={{ uri: avatarUrl }} style={styles.avatar} />
-            ) : (
-              <View style={styles.avatarPlaceholder}>
-                <Ionicons name="person" size={14} color="#71717a" />
-              </View>
-            )}
-            <View style={styles.authorMeta}>
-              <Text style={[styles.authorName, !thread.is_anonymous && styles.authorNameClickable]}>
-                {authorName}
-              </Text>
-              <Text style={styles.time}>{formatTimeAgo(thread.createdat)}</Text>
+          <View style={styles.authorInfo}>
+            <View style={styles.avatarPlaceholder}>
+              <Ionicons name="person" size={14} color="#71717a" />
             </View>
-          </Pressable>
-          <View style={styles.categoryBadge}>
-            <Ionicons
-              name={getCategoryIcon(thread.category as any)}
-              size={12}
-              color="#047857"
-            />
-            <Text style={styles.categoryBadgeText}>{getCategoryLabel(thread.category as any)}</Text>
+            <View style={styles.authorMeta}>
+              <Text style={styles.authorName}>Member</Text>
+              <Text style={styles.time}>{formatTimeAgo(testimony.date)}</Text>
+            </View>
           </View>
         </View>
 
         <Text style={[styles.cardTitle, { color: theme.colors.text }]} numberOfLines={2}>
-          {thread.title}
+          {testimony.title.rendered}
         </Text>
         <Text style={[styles.cardDescription, { color: theme.colors.textMuted }]} numberOfLines={3}>
-          {thread.content}
+          {testimony.content.rendered.replace(/<[^>]*>?/gm, '')}
         </Text>
 
         <View style={styles.cardFooter}>
@@ -194,12 +128,12 @@ export function LikedPostsScreen() {
             <View style={styles.statButton}>
               <Ionicons name="heart" size={18} color="#ef4444" />
               <Text style={[styles.statText, styles.statTextActive]}>
-                {thread.like_count || 0}
+                {testimony.like_count || 0}
               </Text>
             </View>
             <View style={styles.statButton}>
               <Ionicons name="chatbubble-outline" size={18} color="#71717a" />
-              <Text style={styles.statText}>{thread.comment_count || 0}</Text>
+              <Text style={styles.statText}>{testimony.comment_count || 0}</Text>
             </View>
           </View>
         </View>
@@ -260,7 +194,7 @@ export function LikedPostsScreen() {
           <ActivityIndicator size="large" color={theme.colors.primary} />
           <Text style={[styles.loadingText, { color: theme.colors.textMuted }]}>Loading...</Text>
         </View>
-      ) : threads.length === 0 ? (
+      ) : testimonies.length === 0 ? (
         <View style={styles.emptyState}>
           <Ionicons name="heart-outline" size={64} color={theme.colors.textMuted} />
           <Text style={[styles.emptyTitle, { color: theme.colors.text }]}>No Liked Posts</Text>
@@ -285,7 +219,7 @@ export function LikedPostsScreen() {
             <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.colors.primary} />
           }
         >
-          {threads.map(thread => renderThread(thread))}
+          {testimonies.map(testimony => renderTestimony(testimony))}
           <View style={{ height: 100 }} />
         </ScrollView>
       )}
@@ -343,12 +277,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     flex: 1,
   },
-  avatar: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    marginRight: 10,
-  },
   avatarPlaceholder: {
     width: 36,
     height: 36,
@@ -367,26 +295,9 @@ const styles = StyleSheet.create({
     color: '#18181b',
     marginBottom: 2,
   },
-  authorNameClickable: {
-    color: '#047857',
-  },
   time: {
     fontSize: 12,
     color: '#71717a',
-  },
-  categoryBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    backgroundColor: '#ecfdf5',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 12,
-  },
-  categoryBadgeText: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: '#047857',
   },
   cardTitle: {
     fontSize: 16,

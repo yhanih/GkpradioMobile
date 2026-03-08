@@ -44,7 +44,6 @@ import { ForgotPasswordScreen } from './src/screens/auth/ForgotPasswordScreen';
 import ResetPasswordScreen from './src/screens/auth/ResetPasswordScreen';
 import { OnboardingScreen, checkOnboardingComplete } from './src/screens/OnboardingScreen';
 import * as Linking from 'expo-linking';
-import { supabase } from './src/lib/supabase';
 import { RootStackParamList, MainTabParamList } from './src/types/navigation';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -168,16 +167,8 @@ function RootNavigator() {
     // Check for initial link
     Linking.getInitialURL().then(handleDeepLink);
 
-    // Also handle Supabase auth state changes for recovery
-    const { data: { subscription: authSubscription } } = supabase.auth.onAuthStateChange((event) => {
-      if (event === 'PASSWORD_RECOVERY') {
-        setShowResetPassword(true);
-      }
-    });
-
     return () => {
       subscription.remove();
-      authSubscription.unsubscribe();
     };
   }, []);
 

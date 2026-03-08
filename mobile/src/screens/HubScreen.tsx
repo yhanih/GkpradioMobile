@@ -24,7 +24,7 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../types/navigation';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
-import { supabase } from '../lib/supabase';
+import { wpClient } from '../lib/wordpress';
 import { registerForPushNotifications } from '../lib/notifications';
 import * as Notifications from 'expo-notifications';
 
@@ -156,33 +156,12 @@ export function HubScreen() {
         // Register for push notifications
         const token = await registerForPushNotifications();
         if (token && user) {
-          // Store token in user profile (optional - can be done via Supabase function)
-          try {
-            await supabase
-              .from('users')
-              .update({ push_token: token })
-              .eq('id', user.id);
-          } catch (error) {
-            console.log('Note: Push token storage not critical for basic functionality');
-          }
-        }
-      } else {
-        // User disabled notifications - clear any stored token
-        if (user) {
-          try {
-            await supabase
-              .from('users')
-              .update({ push_token: null })
-              .eq('id', user.id);
-          } catch (error) {
-            console.log('Note: Push token cleanup not critical');
-          }
+          // Push token storage in WP meta can be implemented later if endpoint exists
+          console.log('Push token:', token);
         }
       }
     } catch (error) {
       console.error('Error saving notification preference:', error);
-      // Don't show error alert - preference is still saved locally
-      // Push notification registration is optional enhancement
     }
   };
 
@@ -192,23 +171,17 @@ export function HubScreen() {
     try {
       setLoadingStats(true);
       
-      const [postsResult, likesResult] = await Promise.all([
-        supabase
-          .from('communitythreads')
-          .select('id', { count: 'exact', head: true })
-          .eq('userid', user.id),
-        supabase
-          .from('community_thread_likes')
-          .select('id', { count: 'exact', head: true })
-          .eq('user_id', user.id),
-      ]);
-
-      setUserStats({
-        posts: postsResult.count || 0,
-        likes: likesResult.count || 0,
-      });
-
-      setSavedPostsCount(likesResult.count || 0);
+      // Fetch testimonies for this user
+      const { data, error } = await wpClient.getTestimonies(100, 1, user.id);
+      
+      if (!error && data) {
+        const count = data.length;
+        setUserStats({
+          posts: count,
+          likes: 0, // WP API might not expose total likes given by a user easily
+        });
+        setSavedPostsCount(0); // Placeholder for now
+      }
     } catch (error) {
       console.error('Error fetching user stats:', error);
     } finally {
@@ -217,7 +190,7 @@ export function HubScreen() {
   };
 
   const handleLogout = () => {
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     Alert.alert(
       'Logout',
       'Are you sure you want to logout?',
@@ -270,22 +243,22 @@ export function HubScreen() {
 
   const handleVisitWebsite = () => {
     openExternalLink(
-      'https://gkpradio.com',
-      'Could not open browser. Please visit gkpradio.com manually.'
+      'https://godkingdomprinciplesradio.com',
+      'Could not open browser. Please visit godkingdomprinciplesradio.com manually.'
     );
   };
 
   const handlePrivacyPolicy = () => {
     openExternalLink(
-      'https://gkpradio.com/privacy',
-      'Could not open browser. Please visit gkpradio.com/privacy manually.'
+      'https://godkingdomprinciplesradio.com/privacy-policy/',
+      'Could not open browser. Please visit our website manually.'
     );
   };
 
   const handleTermsOfService = () => {
     openExternalLink(
-      'https://gkpradio.com/terms',
-      'Could not open browser. Please visit gkpradio.com/terms manually.'
+      'https://godkingdomprinciplesradio.com/terms-and-conditions/',
+      'Could not open browser. Please visit our website manually.'
     );
   };
 
@@ -297,12 +270,12 @@ export function HubScreen() {
       
       if (isAvailable) {
         await StoreReview.requestReview();
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
       } else {
         const storeUrl = Platform.select({
           ios: 'https://apps.apple.com/app/gkp-radio/id123456789',
           android: 'https://play.google.com/store/apps/details?id=com.gkpradio.app',
-          default: 'https://gkpradio.com/app',
+          default: 'https://godkingdomprinciplesradio.com/app',
         });
         
         Alert.alert(
@@ -315,7 +288,7 @@ export function HubScreen() {
               onPress: async () => {
                 try {
                   await Linking.openURL(storeUrl);
-                  Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
                 } catch (err) {
                   Alert.alert('Error', 'Could not open app store.');
                 }
@@ -336,16 +309,16 @@ export function HubScreen() {
     try {
       const result = await Share.share({
         message: Platform.select({
-          ios: 'Check out GKP Radio - Faith-based content, live radio, and community!\n\nhttps://gkpradio.com/app',
-          android: 'Check out GKP Radio - Faith-based content, live radio, and community!\n\nhttps://gkpradio.com/app',
-          default: 'Check out GKP Radio!\n\nhttps://gkpradio.com/app',
+          ios: 'Check out GKP Radio - Faith-based content, live radio, and community!\n\nhttps://godkingdomprinciplesradio.com/app',
+          android: 'Check out GKP Radio - Faith-based content, live radio, and community!\n\nhttps://godkingdomprinciplesradio.com/app',
+          default: 'Check out GKP Radio!\n\nhttps://godkingdomprinciplesradio.com/app',
         }),
         title: 'Share GKP Radio',
-        url: 'https://gkpradio.com/app',
+        url: 'https://godkingdomprinciplesradio.com/app',
       });
       
       if (result.action === Share.sharedAction) {
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
       }
     } catch (error) {
       console.error('Error sharing:', error);
@@ -354,13 +327,16 @@ export function HubScreen() {
   };
 
   const getUserInitials = () => {
-    if (!user?.email) return 'GK';
-    const parts = user.email.split('@')[0].split(/[._-]/);
+    if (!user) return 'GK';
+    const name = user.name || user.display_name || user.email;
+    const parts = name.split(/[ @._-]/);
     if (parts.length >= 2) {
       return (parts[0][0] + parts[1][0]).toUpperCase();
     }
-    return user.email.slice(0, 2).toUpperCase();
+    return name.slice(0, 2).toUpperCase();
   };
+
+  const avatarUrl = user?.avatar_urls?.['96'];
 
   return (
     <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
@@ -388,32 +364,26 @@ export function HubScreen() {
                 }}
               >
                 <View style={styles.avatarContainer}>
-                  <LinearGradient
-                    colors={['#ffffff', '#f0fdf4']}
-                    style={styles.avatar}
-                  >
-                    <Text style={styles.avatarText}>{getUserInitials()}</Text>
-                  </LinearGradient>
+                  {avatarUrl ? (
+                    <Image source={{ uri: avatarUrl }} style={styles.avatarImage} />
+                  ) : (
+                    <LinearGradient
+                      colors={['#ffffff', '#f0fdf4']}
+                      style={styles.avatar}
+                    >
+                      <Text style={styles.avatarText}>{getUserInitials()}</Text>
+                    </LinearGradient>
+                  )}
                   <View style={styles.onlineIndicator} />
                 </View>
                 <Text style={styles.welcomeText}>Welcome back!</Text>
-                <Text style={styles.emailText}>{user.email}</Text>
+                <Text style={styles.emailText}>{user.name || user.username || user.email}</Text>
                 
                 {!loadingStats && (
                   <View style={styles.statsRow}>
                     <View style={styles.statItem}>
                       <Text style={styles.statValue}>{userStats.posts}</Text>
-                      <Text style={styles.statLabel}>Posts</Text>
-                    </View>
-                    <View style={styles.statDivider} />
-                    <View style={styles.statItem}>
-                      <Text style={styles.statValue}>{userStats.likes}</Text>
-                      <Text style={styles.statLabel}>Likes</Text>
-                    </View>
-                    <View style={styles.statDivider} />
-                    <View style={styles.statItem}>
-                      <Text style={styles.statValue}>{savedPostsCount}</Text>
-                      <Text style={styles.statLabel}>Saved</Text>
+                      <Text style={styles.statLabel}>Testimonies</Text>
                     </View>
                   </View>
                 )}
@@ -446,17 +416,6 @@ export function HubScreen() {
                 label="My Profile"
                 subtitle="Edit your profile and preferences"
                 onPress={() => navigation.navigate('Profile')}
-                theme={theme}
-              />
-              <View style={[styles.divider, { backgroundColor: theme.colors.border }]} />
-              <SettingItem
-                icon="heart-outline"
-                label="Liked Posts"
-                subtitle={`${savedPostsCount} posts you've liked`}
-                onPress={() => {
-                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                  navigation.navigate('LikedPosts');
-                }}
                 theme={theme}
               />
             </View>
@@ -673,6 +632,13 @@ const styles = StyleSheet.create({
     shadowRadius: 12,
     elevation: 6,
   },
+  avatarImage: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    borderWidth: 2,
+    borderColor: '#fff',
+  },
   avatarText: {
     fontSize: 28,
     fontWeight: '700',
@@ -721,11 +687,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: 'rgba(255,255,255,0.7)',
     marginTop: 2,
-  },
-  statDivider: {
-    width: 1,
-    height: 24,
-    backgroundColor: 'rgba(255,255,255,0.3)',
   },
   guestSection: {
     alignItems: 'center',
@@ -800,10 +761,10 @@ const styles = StyleSheet.create({
   },
   settingText: {
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: '500',
   },
   settingSubtext: {
-    fontSize: 13,
+    fontSize: 12,
     marginTop: 2,
   },
   divider: {
@@ -818,72 +779,65 @@ const styles = StyleSheet.create({
     paddingHorizontal: 18,
   },
   versionBadge: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 10,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
   },
   versionText: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '600',
   },
   logoutButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 18,
-    borderRadius: 20,
-    gap: 10,
-    borderWidth: 1.5,
-    borderColor: '#fecaca',
+    paddingVertical: 16,
+    borderRadius: 16,
+    gap: 8,
   },
   logoutButtonPressed: {
-    backgroundColor: '#fef2f2',
+    opacity: 0.7,
   },
   logoutButtonText: {
+    color: '#ef4444',
     fontSize: 16,
     fontWeight: '600',
-    color: '#ef4444',
   },
   loginButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 18,
-    borderRadius: 20,
-    gap: 10,
-    shadowColor: '#047857',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.3,
-    shadowRadius: 12,
-    elevation: 6,
+    paddingVertical: 16,
+    borderRadius: 16,
+    gap: 8,
   },
   loginButtonPressed: {
     opacity: 0.9,
   },
   loginButtonText: {
+    color: '#fff',
     fontSize: 16,
     fontWeight: '600',
-    color: '#fff',
   },
   footer: {
     alignItems: 'center',
-    paddingTop: 40,
+    marginTop: 40,
     paddingBottom: 20,
   },
   footerLogo: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
+    width: 48,
+    height: 48,
+    borderRadius: 12,
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 14,
+    marginBottom: 12,
   },
   footerText: {
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: '600',
   },
   footerSubtext: {
-    fontSize: 13,
+    fontSize: 12,
     marginTop: 4,
   },
 });

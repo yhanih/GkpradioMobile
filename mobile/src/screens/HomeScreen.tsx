@@ -18,8 +18,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { RootStackParamList, MainTabParamList } from '../types/navigation';
 import { ProfileAvatar } from '../components/ProfileAvatar';
 
-import { supabase } from '../lib/supabase';
-import { Episode, Video, Schedule } from '../types/database.types';
+import { wpClient, WPPodcast, WPVideo, WPRadioStatus } from '../lib/wordpress';
 import { useAuth } from '../contexts/AuthContext';
 import { useAudio } from '../contexts/AudioContext';
 
@@ -28,6 +27,25 @@ import { MediaRail } from '../components/MediaRail';
 import { StatsStrip } from '../components/StatsStrip';
 import { MinistryFieldsList } from '../components/MinistryFieldsList';
 import { SkeletonList } from '../components/SkeletonLoader';
+
+interface Episode {
+  id: string;
+  title: string;
+  description?: string;
+  created_at?: string;
+  thumbnail_url?: string;
+  audio_url?: string;
+  duration?: number;
+}
+
+interface Video {
+  id: string;
+  title: string;
+  created_at?: string;
+  thumbnail_url?: string;
+  video_url?: string;
+  duration?: number;
+}
 
 type HomeNavigationProp = CompositeNavigationProp<
   BottomTabNavigationProp<MainTabParamList, 'Home'>,
@@ -46,7 +64,8 @@ export function HomeScreen() {
   // Data State
   const [featuredEpisodes, setFeaturedEpisodes] = useState<Episode[]>([]);
   const [recentVideos, setRecentVideos] = useState<Video[]>([]);
-  const [schedule, setSchedule] = useState<Schedule[]>([]);
+  const [schedule, setSchedule] = useState<any[]>([]);
+  const [radioStatus, setRadioStatus] = useState<WPRadioStatus | null>(null);
 
   // Animation State
   const fadeAnim = React.useRef(new Animated.Value(0)).current;
@@ -67,27 +86,57 @@ export function HomeScreen() {
   }, [user]);
 
   const fetchData = async () => {
+    console.log('[HomeScreen] fetchData started');
     try {
       setLoading(true);
 
-      // Mock Data for frontend-only mode
-      const mockEpisodes: Episode[] = [
-        { id: '1', title: 'The Power of Prayer', description: 'Exploring the impact of daily prayer.', created_at: new Date().toISOString() } as any,
-        { id: '2', title: 'Faith in Action', description: 'How to live your faith every day.', created_at: new Date().toISOString() } as any,
-        { id: '3', title: 'Community & Growth', description: 'Growing together in the kingdom.', created_at: new Date().toISOString() } as any,
-      ];
+      const [podcastsRes, videosRes, radioRes, scheduleRes] = await Promise.all([
+        wpClient.getPodcasts(5),
+        wpClient.getVideos(3),
+        wpClient.getRadioStatus(),
+        wpClient.getRadioSchedule()
+      ]);
 
-      const mockVideos: Video[] = [
-        { id: '1', title: 'Morning Worship', thumbnail_url: 'https://images.unsplash.com/photo-1544427920-c49ccfb85579', created_at: new Date().toISOString() } as any,
-        { id: '2', title: 'Weekly Sermon', thumbnail_url: 'https://images.unsplash.com/photo-1510915228340-29c85a43dcfe', created_at: new Date().toISOString() } as any,
-      ];
+      if (radioRes.data) {
+        setRadioStatus(radioRes.data);
+      }
 
-      setFeaturedEpisodes(mockEpisodes);
-      setRecentVideos(mockVideos);
-      setSchedule([]);
+      console.log('[HomeScreen] Radio status:', radioRes.data?.is_live ? 'Live' : 'Offline');
+      console.log('[HomeScreen] Schedule data:', scheduleRes.data ? 'Found' : 'Missing');
 
-    } catch (error) {
-      console.error('Error fetching dashboard data:', error);
+      if (podcastsRes.data) {
+        setFeaturedEpisodes(podcastsRes.data.map((p: WPPodcast) => ({
+          id: String(p.id),
+          title: p.title.rendered,
+          description: p.content.rendered,
+          created_at: p.date,
+          thumbnail_url: p.thumbnail_url,
+          audio_url: p.audio_url
+        } as any)));
+      }
+
+      if (videosRes.data) {
+        setRecentVideos(videosRes.data.map((v: WPVideo) => ({
+          id: String(v.id),
+          title: v.title.rendered,
+          created_at: v.date,
+          thumbnail_url: v.thumbnail_url,
+          video_url: v.video_url
+        } as any)));
+      }
+
+      if (scheduleRes.data) {
+        // Wrap single item in array for ScheduleCarousel
+        setSchedule([scheduleRes.data]);
+      } else {
+        setSchedule([]);
+      }
+
+      console.log(`[HomeScreen] State updated: ${podcastsRes.data?.length || 0} pods, ${videosRes.data?.length || 0} vids, ${scheduleRes.data ? 1 : 0} sched`);
+
+    } catch (error: any) {
+      console.error('[HomeScreen] Error fetching dashboard data:', error);
+      if (error && error.stack) console.error(error.stack);
     } finally {
       setLoading(false);
     }
@@ -186,8 +235,8 @@ export function HomeScreen() {
               <HeroPlayerCard
                 isPlaying={isPlaying}
                 onTogglePlay={handleTogglePlay}
-                currentShowTitle="Praise & Worship Music"
-                currentShowHost="10:00 PM - 12:00 AM • Auto-DJ"
+                currentShowTitle={radioStatus?.now_playing?.title || "Kingdom Principles Live"}
+                currentShowHost={radioStatus?.now_playing?.artist || "GKP Radio"}
                 schedule={schedule}
                 onPress={() => navigation.navigate('Live')}
               />
@@ -199,6 +248,7 @@ export function HomeScreen() {
               <MinistryFieldsList onPressItem={(category) => navigation.navigate('Community')} />
 
               {/* Podcast Rail */}
+              {console.log('[HomeScreen] Rendering podcast rail, count:', featuredEpisodes.length)}
               {featuredEpisodes.length > 0 ? (
                 <MediaRail
                   title="Faith on Demand"
@@ -221,6 +271,7 @@ export function HomeScreen() {
               ) : null}
 
               {/* Video Rail */}
+              {console.log('[HomeScreen] Rendering video rail, count:', recentVideos.length)}
               {recentVideos.length > 0 ? (
                 <MediaRail
                   title="Watch & Learn"

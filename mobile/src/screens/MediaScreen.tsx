@@ -19,9 +19,33 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { supabase } from '../lib/supabase';
-import { Episode, Video } from '../types/database.types';
+import { wpClient, WPPodcast, WPVideo } from '../lib/wordpress';
 import { RootStackParamList } from '../types/navigation';
+
+interface Episode {
+  id: string;
+  title: string;
+  description: string;
+  created_at: string;
+  thumbnail_url?: string;
+  audio_url?: string;
+  duration?: number;
+  author?: string;
+  category?: string;
+  is_featured?: boolean;
+}
+
+interface Video {
+  id: string;
+  title: string;
+  description: string;
+  created_at: string;
+  thumbnail_url?: string;
+  video_url?: string;
+  duration?: number;
+  category?: string;
+  is_featured?: boolean;
+}
 import { useTheme } from '../contexts/ThemeContext';
 import { useBookmarks } from '../contexts/BookmarksContext';
 import { useAuth } from '../contexts/AuthContext';
@@ -110,28 +134,45 @@ export function MediaScreen() {
   };
 
   const fetchData = async () => {
+    console.log('[MediaScreen] fetchData started');
     try {
       setLoading(true);
       setError(null);
 
-      const [podcastsData, videosData] = await Promise.all([
-        supabase
-          .from('episodes')
-          .select('*')
-          .order('created_at', { ascending: false }),
-        supabase
-          .from('videos')
-          .select('*')
-          .order('created_at', { ascending: false }),
+      const [podcastsRes, videosRes] = await Promise.all([
+        wpClient.getPodcasts(20),
+        wpClient.getVideos(20)
       ]);
 
-      if (podcastsData.error) throw podcastsData.error;
-      if (videosData.error) throw videosData.error;
+      console.log(`[MediaScreen] Data received: ${podcastsRes.data?.length || 0} pods, ${videosRes.data?.length || 0} vids`);
 
-      if (podcastsData.data) setPodcasts(podcastsData.data);
-      if (videosData.data) setVideos(videosData.data);
-    } catch (err) {
-      console.error('Error fetching media:', err);
+      if (podcastsRes.data) {
+        setPodcasts(podcastsRes.data.map((p: WPPodcast) => ({
+          id: String(p.id),
+          title: p.title.rendered,
+          description: p.content.rendered,
+          created_at: p.date,
+          thumbnail_url: p.thumbnail_url,
+          audio_url: p.audio_url,
+          is_featured: false
+        } as any)));
+      }
+
+      if (videosRes.data) {
+        setVideos(videosRes.data.map((v: WPVideo) => ({
+          id: String(v.id),
+          title: v.title.rendered,
+          description: v.content.rendered,
+          created_at: v.date,
+          thumbnail_url: v.thumbnail_url,
+          video_url: v.video_url,
+          is_featured: false
+        } as any)));
+      }
+      console.log('[MediaScreen] State updated');
+    } catch (err: any) {
+      console.error('[MediaScreen] Error fetching media:', err);
+      if (err.stack) console.error(err.stack);
       setError('Unable to load media content. Please try again.');
     } finally {
       setLoading(false);
@@ -144,7 +185,7 @@ export function MediaScreen() {
     setRefreshing(false);
   };
 
-  const formatDuration = (seconds: number | null) => {
+  const formatDuration = (seconds: number | null | undefined) => {
     if (!seconds) return '~30 min';
     const hours = Math.floor(seconds / 3600);
     const mins = Math.floor((seconds % 3600) / 60);

@@ -3,11 +3,12 @@ import { View, Text, ScrollView, Image, StyleSheet, Pressable, ActivityIndicator
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { supabase } from '../lib/supabase';
-import { Video } from '../types/database.types';
+import { wpClient } from '../lib/wordpress';
+import { useTheme } from '../contexts/ThemeContext';
 
 export function VideoScreen() {
-  const [videos, setVideos] = useState<Video[]>([]);
+  const { theme } = useTheme();
+  const [videos, setVideos] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -20,14 +21,11 @@ export function VideoScreen() {
     try {
       setLoading(true);
       setError(null);
-      const { data, error: fetchError } = await supabase
-        .from('videos')
-        .select('*')
-        .order('created_at', { ascending: false });
+      const { data, error: fetchError } = await wpClient.getVideos();
 
-      if (fetchError) throw fetchError;
+      if (fetchError) throw new Error(fetchError);
       if (data) setVideos(data);
-    } catch (err) {
+    } catch (err: any) {
       console.error('Error fetching videos:', err);
       setError('Unable to load videos. Please try again.');
     } finally {
@@ -104,7 +102,7 @@ export function VideoScreen() {
             </View>
           ) : (
             videos.map((video) => (
-              <Pressable key={video.id} style={styles.videoCard}>
+              <Pressable key={video.id} style={[styles.videoCard, { backgroundColor: theme.colors.surface }]}>
                 <View style={styles.thumbnailContainer}>
                   <Image
                     source={{
@@ -119,26 +117,14 @@ export function VideoScreen() {
                   <View style={styles.playButton}>
                     <Ionicons name="play" size={32} color="#fff" />
                   </View>
-                  <View style={styles.durationBadge}>
-                    <Text style={styles.durationText}>{formatDuration(video.duration)}</Text>
-                  </View>
                 </View>
 
                 <View style={styles.videoInfo}>
-                  <Text style={styles.videoTitle} numberOfLines={2}>
-                    {video.title}
+                  <Text style={[styles.videoTitle, { color: theme.colors.text }]} numberOfLines={2}>
+                    {video.title.rendered}
                   </Text>
-                  {video.category && (
-                    <Text style={styles.channelName}>{video.category}</Text>
-                  )}
                   <View style={styles.videoMeta}>
-                    <Text style={styles.metaText}>{formatTimeAgo(video.created_at)}</Text>
-                    {video.is_featured && (
-                      <>
-                        <Text style={styles.metaDot}>•</Text>
-                        <Text style={styles.featuredText}>Featured</Text>
-                      </>
-                    )}
+                    <Text style={[styles.metaText, { color: theme.colors.textMuted }]}>{formatTimeAgo(video.date)}</Text>
                   </View>
                 </View>
               </Pressable>
@@ -155,7 +141,6 @@ export function VideoScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fff',
   },
   scrollView: {
     flex: 1,

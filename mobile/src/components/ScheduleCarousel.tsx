@@ -1,9 +1,9 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { View, Text, Animated, StyleSheet, Dimensions } from 'react-native';
-import { Schedule } from '../types/database.types';
+import { WPSchedule } from '../lib/wordpress';
 
 interface ScheduleCarouselProps {
-    schedule: Schedule[];
+    schedule: WPSchedule[];
 }
 
 const { width } = Dimensions.get('window');
@@ -55,11 +55,10 @@ export const ScheduleCarousel: React.FC<ScheduleCarouselProps> = ({ schedule }) 
         <View style={styles.container}>
             <Animated.View style={[styles.cardContainer, { opacity }]}>
                 <Text style={styles.showTitle} numberOfLines={1}>
-                    {currentShow.show_title}
+                    {currentShow.title.rendered}
                 </Text>
                 <Text style={styles.showTime}>
-                    {currentShow.start_time?.slice(0, 5)} - {currentShow.end_time?.slice(0, 5)}
-                    {currentShow.hosts && ` • ${currentShow.hosts}`}
+                    {(currentShow.startTime || '00:00').slice(0, 5)} - {(currentShow.endTime || '00:00').slice(0, 5)}
                 </Text>
             </Animated.View>
 

@@ -1,16 +1,15 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { View, Text, ScrollView, StyleSheet, Pressable, ActivityIndicator, RefreshControl, Alert, Image, TextInput, Animated, Share, Dimensions } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { View, Text, ScrollView, StyleSheet, Pressable, ActivityIndicator, RefreshControl, Alert, Image, TextInput, Animated, Share, Dimensions, Linking } from 'react-native';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { LinearGradient } from 'expo-linear-gradient';
-import { supabase } from '../lib/supabase';
-import { CommunityThread, User } from '../types/database.types';
+import { wpClient, WPTestimony } from '../lib/wordpress';
 import { useAuth } from '../contexts/AuthContext';
 import { useBookmarks } from '../contexts/BookmarksContext';
+import { useTheme } from '../contexts/ThemeContext';
 import * as Haptics from 'expo-haptics';
-import { OfflineQueue } from '../lib/offlineQueue';
 import { NewPostModal } from '../components/NewPostModal';
 import { COMMUNITY_CATEGORIES, getCategoryIcon, getCategoryLabel, Category } from '../constants/categories';
 import { RootStackParamList } from '../types/navigation';
@@ -21,16 +20,28 @@ const { width: SCREEN_WIDTH } = Dimensions.get('window');
 type SortOption = 'newest' | 'popular' | 'discussed';
 type ModeType = 'prayers' | 'discussions';
 
-// Define which categories belong to each mode
 const PRAYER_CATEGORIES = ['Prayer Requests', 'Pray for Others'];
 const DISCUSSION_CATEGORIES = COMMUNITY_CATEGORIES
   .filter(cat => cat.id !== 'all' && !PRAYER_CATEGORIES.includes(cat.id))
   .map(cat => cat.id);
 
-interface ThreadWithUser extends CommunityThread {
-  users?: User | null;
+interface ThreadWithUser {
+  id: string;
+  title: string;
+  content: string;
+  category: string;
+  createdat: string;
+  like_count: number;
+  comment_count: number;
   user_has_liked?: boolean;
-  user_has_bookmarked?: boolean;
+  userid: string;
+  is_anonymous?: boolean;
+  ispinned?: boolean;
+  users?: {
+    id: string;
+    fullname: string | null;
+    avatarurl: string | null;
+  } | null;
 }
 
 type CommunityNavProp = NativeStackNavigationProp<RootStackParamList, 'MainTabs'>;
@@ -38,8 +49,10 @@ type CommunityNavProp = NativeStackNavigationProp<RootStackParamList, 'MainTabs'
 export function CommunityScreen() {
   const navigation = useNavigation<CommunityNavProp>();
   const { user } = useAuth();
+  const { theme, isDark } = useTheme();
   const { isBookmarked, toggleBookmark, refreshBookmarks } = useBookmarks();
   const { showToast } = useToast();
+  const insets = useSafeAreaInsets();
   const [activeMode, setActiveMode] = useState<ModeType>('prayers');
   const [activeCategory, setActiveCategory] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
@@ -50,15 +63,12 @@ export function CommunityScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [stats, setStats] = useState({ prayers: 0, testimonies: 0, total: 0 });
-  const [blockedUserIds, setBlockedUserIds] = useState<string[]>([]);
   const [showNewPostModal, setShowNewPostModal] = useState(false);
   const [showSortMenu, setShowSortMenu] = useState(false);
   const [likingThreadId, setLikingThreadId] = useState<string | null>(null);
   const [likeAnimations] = useState<{ [key: string]: Animated.Value }>({});
   const fabScale = useRef(new Animated.Value(1)).current;
-  const scrollY = useRef(new Animated.Value(0)).current;
   const sortByRef = useRef(sortBy);
-  const blockedUserIdsRef = useRef<string[]>([]);
   const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const tabIndicatorAnim = useRef(new Animated.Value(0)).current;
 
@@ -66,11 +76,6 @@ export function CommunityScreen() {
     sortByRef.current = sortBy;
   }, [sortBy]);
 
-  useEffect(() => {
-    blockedUserIdsRef.current = blockedUserIds;
-  }, [blockedUserIds]);
-
-  // Animate tab indicator when mode changes
   useEffect(() => {
     Animated.spring(tabIndicatorAnim, {
       toValue: activeMode === 'prayers' ? 0 : 1,
@@ -80,12 +85,10 @@ export function CommunityScreen() {
     }).start();
   }, [activeMode]);
 
-  // Reset category to 'all' when mode changes
   useEffect(() => {
     setActiveCategory('all');
   }, [activeMode]);
 
-  // Debounce search query
   useEffect(() => {
     if (searchTimeoutRef.current) {
       clearTimeout(searchTimeoutRef.current);
@@ -101,148 +104,9 @@ export function CommunityScreen() {
   }, [searchQuery]);
 
   useEffect(() => {
-    fetchBlockedUsers();
     fetchData();
     fetchStats();
-    processOfflineQueue();
   }, [user, sortBy]);
-
-  const processOfflineQueue = async () => {
-    if (!user) return;
-
-    try {
-      await OfflineQueue.processQueue(async (action) => {
-        try {
-          if (action.type === 'like') {
-            const { thread_id, action: likeAction } = action.payload;
-            if (likeAction === 'like') {
-              const { error } = await supabase
-                .from('community_thread_likes')
-                .upsert({ thread_id, user_id: user.id }, { onConflict: 'thread_id,user_id' });
-              if (error) throw error;
-
-              // Update like count
-              const { data: thread } = await supabase
-                .from('communitythreads')
-                .select('like_count')
-                .eq('id', thread_id)
-                .single();
-
-              if (thread) {
-                await supabase
-                  .from('communitythreads')
-                  .update({ like_count: (thread.like_count || 0) + 1 })
-                  .eq('id', thread_id);
-              }
-            } else {
-              await supabase
-                .from('community_thread_likes')
-                .delete()
-                .eq('thread_id', thread_id)
-                .eq('user_id', user.id);
-
-              // Update like count
-              const { data: thread } = await supabase
-                .from('communitythreads')
-                .select('like_count')
-                .eq('id', thread_id)
-                .single();
-
-              if (thread) {
-                await supabase
-                  .from('communitythreads')
-                  .update({ like_count: Math.max((thread.like_count || 0) - 1, 0) })
-                  .eq('id', thread_id);
-              }
-            }
-            return true;
-          } else if (action.type === 'bookmark') {
-            // Bookmarks are handled by BookmarksContext, so we'll just mark as processed
-            // The context will handle sync on its own
-            return true;
-          }
-          return false;
-        } catch (error) {
-          console.error('Error processing queued action:', error);
-          return false;
-        }
-      });
-    } catch (error) {
-      console.error('Error processing offline queue:', error);
-      showToast('Failed to sync offline actions. Please check your connection.', 'warning');
-    }
-  };
-
-  useEffect(() => {
-    const threadsChannel = supabase
-      .channel('community-threads-realtime')
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'communitythreads' },
-        (payload: any) => {
-          if (payload.eventType === 'INSERT') {
-            const newThread = payload.new as ThreadWithUser;
-            // Filter blocked users using ref
-            if (blockedUserIdsRef.current.includes(newThread.userid)) {
-              return;
-            }
-            setThreads(prev => {
-              const updated = [newThread, ...prev];
-              return updated;
-            });
-          } else if (payload.eventType === 'UPDATE') {
-            setThreads(prev => {
-              const updated = prev.map(t =>
-                t.id === payload.new.id
-                  ? { ...t, ...payload.new }
-                  : t
-              );
-              if (sortByRef.current === 'popular') {
-                return [...updated].sort((a, b) => (b.like_count || 0) - (a.like_count || 0));
-              } else if (sortByRef.current === 'discussed') {
-                return [...updated].sort((a, b) => (b.comment_count || 0) - (a.comment_count || 0));
-              }
-              return updated;
-            });
-          } else if (payload.eventType === 'DELETE') {
-            setThreads(prev => prev.filter(t => t.id !== payload.old.id));
-          }
-        }
-      )
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'community_thread_likes' },
-        async (payload: any) => {
-          const threadId = payload.new?.thread_id || payload.old?.thread_id;
-          if (threadId) {
-            const { data } = await supabase
-              .from('communitythreads')
-              .select('like_count')
-              .eq('id', threadId)
-              .single();
-
-            if (data) {
-              setThreads(prev => {
-                const updated = prev.map(t =>
-                  t.id === threadId
-                    ? { ...t, like_count: data.like_count }
-                    : t
-                );
-                if (sortByRef.current === 'popular') {
-                  return [...updated].sort((a, b) => (b.like_count || 0) - (a.like_count || 0));
-                }
-                return updated;
-              });
-            }
-          }
-        }
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(threadsChannel);
-    };
-  }, []);
 
   useFocusEffect(
     useCallback(() => {
@@ -250,25 +114,8 @@ export function CommunityScreen() {
         fetchData();
         refreshBookmarks();
       }
-    }, [sortBy]) // Removed refreshBookmarks from deps to prevent infinite loop
+    }, [sortBy])
   );
-
-  const fetchBlockedUsers = async () => {
-    if (!user) return;
-    try {
-      const { data, error } = await supabase
-        .from('blocked_users')
-        .select('blocked_id')
-        .eq('blocker_id', user.id);
-
-      if (error) throw error;
-      if (data) {
-        setBlockedUserIds(data.map(b => b.blocked_id));
-      }
-    } catch (error) {
-      console.error('Error fetching blocked users:', error);
-    }
-  };
 
   const fetchStats = async () => {
     setStats({
@@ -279,47 +126,43 @@ export function CommunityScreen() {
   };
 
   const fetchData = async () => {
+    console.log('[CommunityScreen] fetchData started');
     try {
       setLoading(true);
       setError(null);
 
-      // Mock Data for frontend-only mode
-      const mockThreads: ThreadWithUser[] = [
-        { 
-          id: '1', 
-          title: 'Prayer for Strength', 
-          content: 'Please pray for my family as we navigate this new season. God is good!', 
-          category: 'Prayer Requests', 
-          createdat: new Date().toISOString(),
-          like_count: 5,
-          comment_count: 2,
-          users: { id: 'u1', username: 'john_doe', fullname: 'John Doe', avatarurl: 'https://i.pravatar.cc/150?u=u1' } as any
-        } as any,
-        { 
-          id: '2', 
-          title: 'Healing Testimony', 
-          content: 'I want to share how God healed me from chronic pain last month.', 
-          category: 'Testimonies', 
-          createdat: new Date(Date.now() - 86400000).toISOString(),
-          like_count: 12,
-          comment_count: 4,
-          users: { id: 'u2', username: 'jane_smith', fullname: 'Jane Smith', avatarurl: 'https://i.pravatar.cc/150?u=u2' } as any
-        } as any,
-        { 
-          id: '3', 
-          title: 'New Podcast Highlights', 
-          content: 'Have you guys listened to the new episode? It was amazing.', 
-          category: 'Youth Voices', 
-          createdat: new Date(Date.now() - 172800000).toISOString(),
-          like_count: 8,
-          comment_count: 0,
-          users: { id: 'u3', username: 'sam_brown', fullname: 'Sam Brown', avatarurl: 'https://i.pravatar.cc/150?u=u3' } as any
-        } as any,
-      ];
+      const { data, error } = await wpClient.getTestimonies(20);
+      console.log(`[CommunityScreen] Testimonies fetched: ${data?.length || 0}`);
 
-      setThreads(mockThreads);
-    } catch (err) {
-      console.error('Error fetching community data:', err);
+      if (error) {
+        console.error('[CommunityScreen] API Error:', error);
+        throw new Error(error);
+      }
+
+      if (data) {
+        const formattedThreads: ThreadWithUser[] = data.map((t: WPTestimony) => ({
+          id: String(t.id),
+          title: t.title.rendered,
+          content: t.content.rendered.replace(/<[^>]*>?/gm, ''),
+          category: 'Testimonies',
+          createdat: t.date,
+          like_count: t.like_count || 0,
+          comment_count: t.comment_count || 0,
+          user_has_liked: t.user_has_liked || false,
+          userid: String(t.author),
+          users: {
+            id: String(t.author),
+            fullname: 'Member',
+            avatarurl: `https://i.pravatar.cc/150?u=${t.author}`
+          }
+        } as any));
+
+        console.log(`[CommunityScreen] State mapping complete: ${formattedThreads.length} items`);
+        setThreads(formattedThreads);
+      }
+    } catch (err: any) {
+      console.error('[CommunityScreen] Error fetching community data:', err);
+      if (err.stack) console.error(err.stack);
       setError('Unable to load community content. Please try again.');
     } finally {
       setLoading(false);
@@ -333,7 +176,6 @@ export function CommunityScreen() {
     return likeAnimations[threadId];
   };
 
-  // Clean up animations for threads that no longer exist
   useEffect(() => {
     const threadIds = new Set(threads.map(t => t.id));
     Object.keys(likeAnimations).forEach(threadId => {
@@ -357,21 +199,18 @@ export function CommunityScreen() {
       return;
     }
 
-    // Prevent double-tap/race condition
     if (likingThreadId === threadId) {
       return;
     }
 
     setLikingThreadId(threadId);
 
-    // Capture current count before any updates
     const currentThread = threads.find(t => t.id === threadId);
     const currentCount = currentThread?.like_count ?? 0;
     const newCount = currentlyLiked ? Math.max(currentCount - 1, 0) : currentCount + 1;
 
     animateLike(threadId);
 
-    // Optimistic update
     setThreads(prev => prev.map(t => {
       if (t.id === threadId) {
         return {
@@ -386,44 +225,10 @@ export function CommunityScreen() {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
 
     try {
-      if (currentlyLiked) {
-        const { error } = await supabase
-          .from('community_thread_likes')
-          .delete()
-          .eq('thread_id', threadId)
-          .eq('user_id', user.id);
-        if (error) throw error;
-      } else {
-        const { error } = await supabase
-          .from('community_thread_likes')
-          .upsert({ thread_id: threadId, user_id: user.id }, { onConflict: 'thread_id,user_id' });
-        if (error) throw error;
-
-        // Don't manually update like_count - let realtime subscription handle it to avoid race conditions
-        // The realtime subscription will update the count from the database
-      }
+      const { error } = await wpClient.toggleLike(Number(threadId));
+      if (error) throw new Error(error);
     } catch (error: any) {
-      if (error?.code === '23505') {
-        setLikingThreadId(null);
-        return;
-      }
       console.error('Error toggling like:', error);
-
-      // If it's a network error, queue for offline sync
-      const isNetworkError = !error?.code || error?.message?.includes('network') || error?.message?.includes('fetch');
-      if (isNetworkError && user) {
-        // Queue action for when connection is restored
-        await OfflineQueue.addAction('like', {
-          thread_id: threadId,
-          user_id: user.id,
-          action: currentlyLiked ? 'unlike' : 'like',
-        });
-        // Keep optimistic update - will sync when online
-        setLikingThreadId(null);
-        return;
-      }
-
-      // Revert optimistic update on error (validation errors, etc.)
       setThreads(prev => prev.map(t => {
         if (t.id === threadId) {
           return {
@@ -454,26 +259,9 @@ export function CommunityScreen() {
         {
           text: 'Report',
           style: 'destructive',
-          onPress: async () => {
-            try {
-              const { error } = await supabase.from('reports').upsert({
-                reporter_id: user.id,
-                target_type: targetType,
-                target_id: targetId,
-                reason: 'Inappropriate content'
-              }, { onConflict: 'reporter_id,target_type,target_id' });
-
-              if (error) throw error;
-              showToast('Thank you for your report. We will review it shortly.', 'success');
-              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-            } catch (error: any) {
-              if (error?.code === '23505') {
-                showToast('You have already reported this content', 'info');
-                return;
-              }
-              console.error('Error reporting content:', error);
-              showToast('Unable to submit report. Please try again.', 'error');
-            }
+          onPress: () => {
+            Linking.openURL(`mailto:support@gkpradio.com?subject=Report%20Inappropriate%20Content&body=Reporting%20${targetType}%20with%20ID:%20${targetId}`);
+            showToast('Thank you for your report. Our team will review it.', 'success');
           }
         }
       ]
@@ -486,42 +274,15 @@ export function CommunityScreen() {
       return;
     }
 
-    if (user.id === blockedUserId) {
-      Alert.alert('Not Allowed', 'You cannot block yourself.');
-      return;
-    }
-
     Alert.alert(
       'Block User',
-      'Are you sure you want to block this user? You will no longer see their posts.',
+      'If you wish to block a user, please contact our support team.',
       [
         { text: 'Cancel', style: 'cancel' },
         {
-          text: 'Block',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              const { error } = await supabase.from('blocked_users').upsert({
-                blocker_id: user.id,
-                blocked_id: blockedUserId
-              }, { onConflict: 'blocker_id,blocked_id' });
-
-              if (error) throw error;
-
-              if (!blockedUserIds.includes(blockedUserId)) {
-                setBlockedUserIds([...blockedUserIds, blockedUserId]);
-              }
-              fetchData();
-              showToast('User has been blocked', 'success');
-              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-            } catch (error: any) {
-              if (error?.code === '23505') {
-                showToast('You have already blocked this user', 'info');
-                return;
-              }
-              console.error('Error blocking user:', error);
-              showToast('Unable to block user. Please try again.', 'error');
-            }
+          text: 'Contact Support',
+          onPress: () => {
+            Linking.openURL(`mailto:support@gkpradio.com?subject=Block%20User%20Request&body=I%20would%20like%20to%20block%20user%20ID:%20${blockedUserId}`);
           }
         }
       ]
@@ -544,27 +305,12 @@ export function CommunityScreen() {
 
     try {
       const result = await toggleBookmark('thread', threadId);
-      // toggleBookmark returns the NEW state
       showToast(result ? 'Post saved' : 'Post removed from bookmarks', 'success', 2000);
       if (result) {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       }
     } catch (error: any) {
       console.error('Error toggling bookmark:', error);
-
-      // If it's a network error, queue for offline sync
-      const isNetworkError = !error?.code || error?.message?.includes('network') || error?.message?.includes('fetch');
-      if (isNetworkError && user) {
-        const currentlyBookmarked = isBookmarked('thread', threadId);
-        await OfflineQueue.addAction('bookmark', {
-          thread_id: threadId,
-          user_id: user.id,
-          action: currentlyBookmarked ? 'remove' : 'add',
-        });
-        showToast('Action saved offline', 'info');
-        return;
-      }
-
       showToast('Unable to save post. Please try again.', 'error');
     }
   };
@@ -579,7 +325,6 @@ export function CommunityScreen() {
       });
     } catch (error: any) {
       console.error('Error sharing:', error);
-      // Only show error if user didn't cancel
       if (error?.message !== 'User did not share') {
         showToast('Unable to share post. Please try again.', 'error');
       }
@@ -587,54 +332,20 @@ export function CommunityScreen() {
   };
 
   const handleDeletePost = async (threadId: string, threadUserId: string) => {
-    if (!user || user.id !== threadUserId) {
+    if (!user || String(user.id) !== threadUserId) {
       showToast('You can only delete your own posts', 'warning');
       return;
     }
 
     Alert.alert(
       'Delete Post',
-      'Are you sure you want to delete this post? This action cannot be undone.',
+      'Please contact support to delete your post permanently.',
       [
         { text: 'Cancel', style: 'cancel' },
         {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: async () => {
-            // Optimistic update
-            const deletedThread = threads.find(t => t.id === threadId);
-            setThreads(prev => prev.filter(t => t.id !== threadId));
-            
-            // Optimistically update stats
-            setStats(prev => {
-              const prayerCategories = ['Prayer Requests', 'Pray for Others'];
-              const isPrayer = deletedThread && prayerCategories.includes(deletedThread.category);
-              const isTestimony = deletedThread?.category === 'Testimonies';
-              return {
-                prayers: isPrayer ? Math.max(prev.prayers - 1, 0) : prev.prayers,
-                testimonies: isTestimony ? Math.max(prev.testimonies - 1, 0) : prev.testimonies,
-                total: Math.max(prev.total - 1, 0),
-              };
-            });
-
-            try {
-              const { error } = await supabase
-                .from('communitythreads')
-                .delete()
-                .eq('id', threadId);
-
-              if (error) throw error;
-
-              showToast('Post deleted successfully', 'success');
-              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-              // Refresh stats to ensure accuracy
-              fetchStats();
-            } catch (error) {
-              console.error('Error deleting post:', error);
-              showToast('Unable to delete post. Please try again.', 'error');
-              fetchData(); // Restore the post
-              fetchStats(); // Restore stats
-            }
+          text: 'Contact Support',
+          onPress: () => {
+            Linking.openURL(`mailto:support@gkpradio.com?subject=Delete%20Post%20Request&body=I%20would%20like%20to%20delete%20post%20ID:%20${threadId}`);
           }
         }
       ]
@@ -759,10 +470,10 @@ export function CommunityScreen() {
     navigation.navigate('PostDetail', { threadId: thread.id, thread });
   };
 
-  const navigateToUserProfile = (userId: string, userData?: User | null) => {
+  const navigateToUserProfile = (userId: string, userData?: { id: string; fullname: string | null; avatarurl: string | null } | null) => {
     if (!userId || userId.trim() === '') return;
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    navigation.navigate('UserProfile', { userId, user: userData || undefined });
+    navigation.navigate('UserProfile', { userId, user: userData ? { ...userData, username: '' } as any : undefined });
   };
 
   // Memoize filtered search results
@@ -782,7 +493,7 @@ export function CommunityScreen() {
   const renderThread = (thread: ThreadWithUser, isPinned = false) => {
     const authorName = thread.is_anonymous
       ? 'Anonymous'
-      : thread.users?.fullname || thread.users?.username || 'Member';
+      : thread.users?.fullname || 'Member';
     const avatarUrl = thread.is_anonymous ? null : thread.users?.avatarurl;
 
     return (

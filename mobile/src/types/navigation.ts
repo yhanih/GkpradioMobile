@@ -1,23 +1,23 @@
-import { CommunityThread, User, Episode, Video, LiveEvent } from './database.types';
 
 export type RootStackParamList = {
   MainTabs: undefined;
   PostDetail: {
-    threadId: string;
-    thread?: CommunityThread & { users?: User | null };
+    threadId: string | number;
+    testimony?: any;
+    thread?: any;
   };
   UserProfile: {
-    userId: string;
-    user?: User;
+    userId: string | number;
+    user?: any;
   };
   Profile: undefined;
   VideoPlayer: {
-    video?: Video;
-    liveEvent?: LiveEvent;
+    video?: any;
+    liveEvent?: any;
   };
   EpisodePlayer: {
-    episode: Episode;
-    allEpisodes?: Episode[];
+    episode: any;
+    allEpisodes?: any[];
   };
   PastBroadcasts: undefined;
   LikedPosts: undefined;

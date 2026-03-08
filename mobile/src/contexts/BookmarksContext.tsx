@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
-import { supabase } from '../lib/supabase';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuth } from './AuthContext';
 
 type ContentType = 'episode' | 'video' | 'thread';
@@ -37,23 +37,21 @@ export function BookmarksProvider({ children }: { children: React.ReactNode }) {
 
     try {
       setLoading(true);
-      const [bookmarksResult, threadsResult] = await Promise.all([
-        supabase
-          .from('bookmarks')
-          .select('*')
-          .eq('userid', user.id),
-        supabase
-          .from('savedthreads')
-          .select('threadid')
-          .eq('userid', user.id),
+      const [storedBookmarks, storedThreads] = await Promise.all([
+        AsyncStorage.getItem(`bookmarks_${user.id}`),
+        AsyncStorage.getItem(`threads_${user.id}`)
       ]);
 
-      if (bookmarksResult.data) {
-        setBookmarks(bookmarksResult.data);
+      if (storedBookmarks) {
+        setBookmarks(JSON.parse(storedBookmarks));
+      } else {
+        setBookmarks([]);
       }
 
-      if (threadsResult.data) {
-        setSavedThreads(threadsResult.data.map((t) => t.threadid));
+      if (storedThreads) {
+        setSavedThreads(JSON.parse(storedThreads));
+      } else {
+        setSavedThreads([]);
       }
     } catch (error) {
       console.error('Error fetching bookmarks:', error);
@@ -86,56 +84,32 @@ export function BookmarksProvider({ children }: { children: React.ReactNode }) {
 
       try {
         if (contentType === 'thread') {
+          let newThreads: string[];
           if (currentlyBookmarked) {
-            const { error } = await supabase
-              .from('savedthreads')
-              .delete()
-              .eq('userid', user.id)
-              .eq('threadid', contentId);
-
-            if (error) throw error;
-            setSavedThreads((prev) => prev.filter((id) => id !== contentId));
+            newThreads = savedThreads.filter((id) => id !== contentId);
           } else {
-            const { error } = await supabase.from('savedthreads').insert({
-              userid: user.id,
-              threadid: contentId,
-            });
-
-            if (error) throw error;
-            setSavedThreads((prev) => [...prev, contentId]);
+            newThreads = [...savedThreads, contentId];
           }
+          await AsyncStorage.setItem(`threads_${user.id}`, JSON.stringify(newThreads));
+          setSavedThreads(newThreads);
         } else {
+          let newBookmarks: Bookmark[];
           if (currentlyBookmarked) {
-            const { error } = await supabase
-              .from('bookmarks')
-              .delete()
-              .eq('userid', user.id)
-              .eq('content_type', contentType)
-              .eq('content_id', contentId);
-
-            if (error) throw error;
-            setBookmarks((prev) =>
-              prev.filter(
-                (b) =>
-                  !(b.content_type === contentType && b.content_id === contentId)
-              )
+            newBookmarks = bookmarks.filter(
+              (b) => !(b.content_type === contentType && b.content_id === contentId)
             );
           } else {
-            const { data, error } = await supabase
-              .from('bookmarks')
-              .insert({
-                userid: user.id,
-                content_type: contentType,
-                content_id: contentId,
-              })
-              .select()
-              .single();
-
-            if (error) throw error;
-            if (data) {
-              setBookmarks((prev) => [...prev, data]);
-            }
+            const newBookmark: Bookmark = {
+              id: Math.random().toString(36).substring(7),
+              userid: user.id,
+              content_type: contentType,
+              content_id: contentId,
+              createdat: new Date().toISOString(),
+            };
+            newBookmarks = [...bookmarks, newBookmark];
           }
+          await AsyncStorage.setItem(`bookmarks_${user.id}`, JSON.stringify(newBookmarks));
+          setBookmarks(newBookmarks);
         }
 
         return !currentlyBookmarked;
@@ -144,7 +118,7 @@ export function BookmarksProvider({ children }: { children: React.ReactNode }) {
         return currentlyBookmarked;
       }
     },
-    [user, isBookmarked]
+    [user, isBookmarked, savedThreads, bookmarks]
   );
 
   return (
