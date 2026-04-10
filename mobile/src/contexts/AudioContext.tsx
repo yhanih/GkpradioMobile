@@ -32,6 +32,8 @@ interface AudioContextType {
     skipForward: (seconds?: number) => Promise<void>;
     skipBackward: (seconds?: number) => Promise<void>;
     getCurrentPosition: () => Promise<number | null>;
+    pauseForVideoSession: () => Promise<void>;
+    resumeAfterVideoSession: () => Promise<void>;
 }
 
 const AudioContext = createContext<AudioContextType | undefined>(undefined);
@@ -44,6 +46,8 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
     const [nowPlaying, setNowPlaying] = useState<NowPlayingData | null>(null);
     const [streamUrl, setStreamUrl] = useState<string>('');
     const [currentEpisode, setCurrentEpisode] = useState<Episode | null>(null);
+    const wasPlayingBeforeVideoRef = useRef(false);
+    const pausedForVideoRef = useRef(false);
 
     useEffect(() => {
         fetchNowPlayingData();
@@ -257,6 +261,37 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
         }
     };
 
+    const pauseForVideoSession = async () => {
+        try {
+            pausedForVideoRef.current = true;
+            wasPlayingBeforeVideoRef.current = isPlaying;
+            if (isPlaying && soundRef.current) {
+                await soundRef.current.pauseAsync();
+                setIsPlaying(false);
+            }
+        } catch (error) {
+            console.error('Error pausing for video session:', error);
+        }
+    };
+
+    const resumeAfterVideoSession = async () => {
+        try {
+            if (!pausedForVideoRef.current) return;
+            const shouldResume = wasPlayingBeforeVideoRef.current;
+            pausedForVideoRef.current = false;
+            wasPlayingBeforeVideoRef.current = false;
+            if (!shouldResume || !soundRef.current) return;
+
+            const status = await soundRef.current.getStatusAsync();
+            if (status.isLoaded) {
+                await soundRef.current.playAsync();
+                setIsPlaying(true);
+            }
+        } catch (error) {
+            console.error('Error resuming after video session:', error);
+        }
+    };
+
     return (
         <AudioContext.Provider value={{ 
             isPlaying, 
@@ -271,7 +306,9 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
             clearEpisode,
             skipForward,
             skipBackward,
-            getCurrentPosition
+            getCurrentPosition,
+            pauseForVideoSession,
+            resumeAfterVideoSession
         }}>
             {children}
         </AudioContext.Provider>

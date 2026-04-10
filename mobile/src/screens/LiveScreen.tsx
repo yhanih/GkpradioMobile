@@ -1,186 +1,158 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  View,
-  Text,
-  ScrollView,
-  Image,
-  StyleSheet,
-  Pressable,
   ActivityIndicator,
-  RefreshControl,
   Animated,
   Dimensions,
   ImageBackground,
+  Pressable,
+  RefreshControl,
   SafeAreaView,
+  StyleSheet,
+  Text,
+  View,
 } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
-import { useNavigation, useFocusEffect } from '@react-navigation/native';
+import { LinearGradient } from 'expo-linear-gradient';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import * as Haptics from 'expo-haptics';
-import { fetchRadioSchedule, fetchRadioStatusFromAzuraCast } from '../lib/backend';
-import { RootStackParamList } from '../types/navigation';
-import { useTheme } from '../contexts/ThemeContext';
 import { useAudio } from '../contexts/AudioContext';
+import { useTheme } from '../contexts/ThemeContext';
+import { fetchCurrentLiveEvent, fetchUpcomingLiveEvents, BackendLiveEvent } from '../lib/backend';
+import { RootStackParamList } from '../types/navigation';
 
 type LiveNavProp = NativeStackNavigationProp<RootStackParamList>;
 
-const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
-const HERO_HEIGHT = SCREEN_HEIGHT * 0.55;
+const { height: SCREEN_HEIGHT } = Dimensions.get('window');
+const HERO_HEIGHT = SCREEN_HEIGHT * 0.52;
+const FALLBACK_HERO_IMAGE = 'https://images.unsplash.com/photo-1507692049790-de58290a4334?w=1200';
+
+function formatEventDate(isoDate: string): string {
+  const date = new Date(isoDate);
+  return date.toLocaleString(undefined, {
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  });
+}
 
 export function LiveScreen() {
   const navigation = useNavigation<LiveNavProp>();
   const { theme, isDark } = useTheme();
-  const { isPlaying, play, pause } = useAudio();
-  
-  const [radioStatus, setRadioStatus] = useState<any>(null);
-  const [schedule, setSchedule] = useState<any>(null);
+  const { isPlaying, pause } = useAudio();
+  const scrollY = useRef(new Animated.Value(0)).current;
+  const pulseAnim = useRef(new Animated.Value(1)).current;
+
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  
-  const scrollY = useRef(new Animated.Value(0)).current;
-  const pulseAnim = useRef(new Animated.Value(1)).current;
-  const glowAnim = useRef(new Animated.Value(0.4)).current;
+  const [liveEvent, setLiveEvent] = useState<BackendLiveEvent | null>(null);
+  const [upcomingEvents, setUpcomingEvents] = useState<BackendLiveEvent[]>([]);
 
-  useEffect(() => {
-    loadData();
-    startPulseAnimation();
-    
-    const statusInterval = setInterval(() => {
-      loadRadioStatus();
-    }, 30000);
-    
-    return () => clearInterval(statusInterval);
-  }, []);
-
-  const loadRadioStatus = async () => {
+  const loadData = useCallback(async () => {
     try {
-      const data = await fetchRadioStatusFromAzuraCast();
-      setRadioStatus(data);
-    } catch (err) {
-      console.error('Error auto-loading radio status:', err);
-    }
-  };
-
-  const loadData = async () => {
-    try {
-      setLoading(true);
       setError(null);
-      
-      const [statusRes, scheduleRes] = await Promise.all([
-        fetchRadioStatusFromAzuraCast(),
-        fetchRadioSchedule()
+      const [current, upcoming] = await Promise.all([
+        fetchCurrentLiveEvent(),
+        fetchUpcomingLiveEvents(6),
       ]);
-
-      setRadioStatus(statusRes);
-      if (scheduleRes) setSchedule(scheduleRes);
-      
+      setLiveEvent(current);
+      setUpcomingEvents(upcoming);
     } catch (err) {
-      console.error('Error loading live data:', err);
-      setError('Unable to load data. Pull down to retry.');
+      console.error('Error loading live video data:', err);
+      setError('Unable to load live shows right now. Pull down to retry.');
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    loadData();
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulseAnim, { toValue: 1.22, duration: 780, useNativeDriver: true }),
+        Animated.timing(pulseAnim, { toValue: 1, duration: 780, useNativeDriver: true }),
+      ])
+    ).start();
+  }, [loadData, pulseAnim]);
 
   useFocusEffect(
     useCallback(() => {
       if (!loading) {
         loadData();
       }
-    }, [])
+    }, [loadData, loading])
   );
-
-  const startPulseAnimation = () => {
-    Animated.loop(
-      Animated.sequence([
-        Animated.timing(pulseAnim, {
-          toValue: 1.2,
-          duration: 800,
-          useNativeDriver: true,
-        }),
-        Animated.timing(pulseAnim, {
-          toValue: 1,
-          duration: 800,
-          useNativeDriver: true,
-        }),
-      ])
-    ).start();
-
-    Animated.loop(
-      Animated.sequence([
-        Animated.timing(glowAnim, {
-          toValue: 0.8,
-          duration: 1200,
-          useNativeDriver: true,
-        }),
-        Animated.timing(glowAnim, {
-          toValue: 0.4,
-          duration: 1200,
-          useNativeDriver: true,
-        }),
-      ])
-    ).start();
-  };
 
   const onRefresh = () => {
     setRefreshing(true);
     loadData();
   };
 
-  const isLive = radioStatus?.is_live || false;
-  const isOnline = !!radioStatus?.now_playing;
-  const heroTitle = radioStatus?.now_playing?.title || radioStatus?.current_show || 'Kingdom Principles Radio';
-  const heroDescription = isLive 
-    ? 'Live Broadcast with Host' 
-    : isOnline 
-      ? `Now Playing: ${radioStatus?.now_playing?.artist || 'Worship Music'}`
-      : 'Tune in for our next broadcast';
-  const heroImage = 'https://images.unsplash.com/photo-1507692049790-de58290a4334?w=1200';
+  const upcomingWithoutCurrent = useMemo(
+    () => upcomingEvents.filter((event) => event.id !== liveEvent?.id),
+    [upcomingEvents, liveEvent?.id]
+  );
+
+  const openLiveVideo = async (eventToOpen: BackendLiveEvent | null) => {
+    if (!eventToOpen?.video_url) return;
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    if (isPlaying) {
+      await pause();
+    }
+    navigation.navigate('VideoPlayer', {
+      liveEvent: {
+        ...eventToOpen,
+        status: eventToOpen.status || 'live',
+      },
+    });
+  };
 
   const heroImageScale = scrollY.interpolate({
-    inputRange: [-100, 0, HERO_HEIGHT],
-    outputRange: [1.3, 1, 1.1],
+    inputRange: [-120, 0, HERO_HEIGHT],
+    outputRange: [1.25, 1, 1.05],
     extrapolate: 'clamp',
   });
 
   const heroOpacity = scrollY.interpolate({
-    inputRange: [0, HERO_HEIGHT * 0.6],
+    inputRange: [0, HERO_HEIGHT * 0.66],
     outputRange: [1, 0],
     extrapolate: 'clamp',
   });
-
-  const scheduleImageUrl = schedule?.image_url;
 
   if (loading) {
     return (
       <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={theme.colors.primary} />
-          <Text style={[styles.loadingText, { color: theme.colors.textMuted }]}>
-            Loading live data...
-          </Text>
+          <Text style={[styles.loadingText, { color: theme.colors.textMuted }]}>Loading live video...</Text>
         </View>
       </View>
     );
   }
 
+  const hasLiveNow = Boolean(liveEvent);
+  const heroTitle = liveEvent?.title || 'No Live Show Right Now';
+  const heroDescription =
+    liveEvent?.description ||
+    'The stream is offline right now. Check upcoming events below or configure a fallback live stream URL.';
+  const heroImage = liveEvent?.thumbnail_url || FALLBACK_HERO_IMAGE;
+
   return (
     <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
       <Animated.ScrollView
-        style={styles.scrollView}
         showsVerticalScrollIndicator={false}
-        onScroll={Animated.event(
-          [{ nativeEvent: { contentOffset: { y: scrollY } } }],
-          { useNativeDriver: true }
-        )}
+        onScroll={Animated.event([{ nativeEvent: { contentOffset: { y: scrollY } } }], {
+          useNativeDriver: true,
+        })}
         scrollEventThrottle={16}
         refreshControl={
-          <RefreshControl 
-            refreshing={refreshing} 
-            onRefresh={onRefresh} 
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
             tintColor={theme.colors.primary}
             progressViewOffset={HERO_HEIGHT * 0.3}
           />
@@ -188,20 +160,15 @@ export function LiveScreen() {
       >
         <Animated.View style={[styles.heroContainer, { opacity: heroOpacity }]}>
           <Animated.View style={[styles.heroImageWrapper, { transform: [{ scale: heroImageScale }] }]}>
-            <ImageBackground
-              source={{ uri: heroImage }}
-              style={styles.heroImage}
-              resizeMode="cover"
-            >
+            <ImageBackground source={{ uri: heroImage }} style={styles.heroImage} resizeMode="cover">
               <LinearGradient
                 colors={
-                  isLive 
+                  hasLiveNow
                     ? ['transparent', 'rgba(220, 38, 38, 0.3)', 'rgba(127, 29, 29, 0.95)']
                     : isDark
                       ? ['transparent', 'rgba(0,0,0,0.5)', 'rgba(0,0,0,0.95)']
                       : ['transparent', 'rgba(4, 120, 87, 0.2)', 'rgba(4, 120, 87, 0.9)']
                 }
-                locations={[0, 0.5, 1]}
                 style={styles.heroGradient}
               />
             </ImageBackground>
@@ -210,60 +177,32 @@ export function LiveScreen() {
           <SafeAreaView style={styles.heroContent}>
             <View style={styles.heroTopBar}>
               <Text style={styles.heroPageTitle}>Live</Text>
-              {isLive && (
-                <View style={styles.viewerPill}>
-                  <Ionicons name="radio" size={14} color="#fff" />
-                  <Text style={styles.viewerPillText}>On Air</Text>
+              {hasLiveNow && (
+                <View style={styles.livePill}>
+                  <Animated.View style={[styles.liveDot, { transform: [{ scale: pulseAnim }] }]} />
+                  <Text style={styles.livePillText}>Video Live</Text>
                 </View>
               )}
             </View>
 
             <View style={styles.heroMainContent}>
-              {isLive ? (
-                <View style={styles.liveIndicatorContainer}>
-                  <Animated.View style={[styles.liveGlow, { opacity: glowAnim }]} />
-                  <View style={styles.liveBadge}>
-                    <Animated.View style={[styles.liveDot, { transform: [{ scale: pulseAnim }] }]} />
-                    <Text style={styles.liveBadgeText}>LIVE</Text>
-                  </View>
-                </View>
-              ) : (
-                <View style={styles.upcomingBadge}>
-                  <Ionicons name="time-outline" size={14} color="#fff" />
-                  <Text style={styles.upcomingBadgeText}>Broadcasting Live</Text>
-                </View>
-              )}
-
-              <Text style={styles.heroTitle}>{heroTitle}</Text>
-              <Text style={styles.heroDescription} numberOfLines={2}>
+              <Text style={styles.heroTitle} numberOfLines={2}>
+                {heroTitle}
+              </Text>
+              <Text style={styles.heroDescription} numberOfLines={3}>
                 {heroDescription}
               </Text>
-
               <Pressable
-                style={({ pressed }) => [
-                  styles.heroButton,
-                  isLive && styles.heroButtonLive,
-                  pressed && styles.heroButtonPressed,
-                ]}
-                onPress={async () => {
-                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
-                  if (isPlaying) {
-                    await pause();
-                  } else {
-                    await play();
-                  }
-                }}
+                style={({ pressed }) => [styles.heroButton, pressed && styles.heroButtonPressed]}
+                onPress={() => openLiveVideo(liveEvent)}
+                disabled={!hasLiveNow}
               >
                 <LinearGradient
-                  colors={isLive ? ['#ef4444', '#dc2626'] : [theme.colors.primary, '#059669']}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 0 }}
+                  colors={hasLiveNow ? ['#ef4444', '#dc2626'] : ['#6b7280', '#4b5563']}
                   style={styles.heroButtonGradient}
                 >
-                  <Ionicons name={isPlaying ? 'pause' : 'play'} size={24} color="#fff" />
-                  <Text style={styles.heroButtonText}>
-                    {isPlaying ? 'Pause' : isLive ? 'Listen Now' : 'Tune In'}
-                  </Text>
+                  <Ionicons name="videocam" size={22} color="#fff" />
+                  <Text style={styles.heroButtonText}>{hasLiveNow ? 'Watch Live Show' : 'No Stream Available'}</Text>
                 </LinearGradient>
               </Pressable>
             </View>
@@ -271,48 +210,53 @@ export function LiveScreen() {
         </Animated.View>
 
         <View style={[styles.contentContainer, { backgroundColor: theme.colors.background }]}>
-          {scheduleImageUrl ? (
-            <View style={styles.section}>
-              <View style={styles.sectionHeader}>
-                <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>
-                  Radio Schedule
+          <View style={styles.section}>
+            <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>Upcoming Live Shows</Text>
+            {upcomingWithoutCurrent.length === 0 ? (
+              <View style={styles.emptyState}>
+                <Ionicons name="calendar-outline" size={42} color={theme.colors.textMuted} />
+                <Text style={[styles.emptyTitle, { color: theme.colors.text }]}>No upcoming shows</Text>
+                <Text style={[styles.emptyText, { color: theme.colors.textMuted }]}>
+                  Add events in the `live_events` table, or set `EXPO_PUBLIC_LIVE_VIDEO_URL` for a persistent stream.
                 </Text>
               </View>
-              <View style={styles.scheduleImageContainer}>
-                <Image
-                  source={{ uri: scheduleImageUrl }}
-                  style={styles.scheduleImage}
-                  resizeMode="contain"
-                />
-              </View>
-            </View>
-          ) : (
-            <View style={styles.emptyState}>
-              <Ionicons name="calendar-outline" size={48} color={theme.colors.textMuted} />
-              <Text style={[styles.emptyTitle, { color: theme.colors.text }]}>
-                No Schedule Available
-              </Text>
-              <Text style={[styles.emptyText, { color: theme.colors.textMuted }]}>
-                Check back later for updated program times
-              </Text>
-            </View>
-          )}
+            ) : (
+              upcomingWithoutCurrent.map((event) => (
+                <Pressable
+                  key={event.id}
+                  style={[styles.eventCard, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}
+                  onPress={() => openLiveVideo(event)}
+                >
+                  <View style={styles.eventTitleRow}>
+                    <Text style={[styles.eventTitle, { color: theme.colors.text }]} numberOfLines={1}>
+                      {event.title}
+                    </Text>
+                    <View style={[styles.statusBadge, event.status === 'live' && styles.statusBadgeLive]}>
+                      <Text style={styles.statusBadgeText}>{event.status.toUpperCase()}</Text>
+                    </View>
+                  </View>
+                  <Text style={[styles.eventDate, { color: theme.colors.textMuted }]}>
+                    {formatEventDate(event.scheduled_start)}
+                  </Text>
+                  {event.description ? (
+                    <Text style={[styles.eventDescription, { color: theme.colors.textMuted }]} numberOfLines={2}>
+                      {event.description}
+                    </Text>
+                  ) : null}
+                </Pressable>
+              ))
+            )}
+          </View>
 
-          {error && (
+          {error ? (
             <View style={styles.errorState}>
-              <Ionicons name="cloud-offline-outline" size={40} color={theme.colors.error || '#ef4444'} />
-              <Text style={[styles.errorText, { color: theme.colors.textMuted }]}>
-                {error}
-              </Text>
-              <Pressable 
-                style={[styles.retryButton, { backgroundColor: theme.colors.primary }]}
-                onPress={onRefresh}
-              >
-                <Ionicons name="refresh" size={18} color="#fff" />
+              <Ionicons name="cloud-offline-outline" size={36} color={theme.colors.error || '#ef4444'} />
+              <Text style={[styles.errorText, { color: theme.colors.textMuted }]}>{error}</Text>
+              <Pressable style={[styles.retryButton, { backgroundColor: theme.colors.primary }]} onPress={onRefresh}>
                 <Text style={styles.retryButtonText}>Try Again</Text>
               </Pressable>
             </View>
-          )}
+          ) : null}
 
           <View style={{ height: 140 }} />
         </View>
@@ -322,12 +266,7 @@ export function LiveScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  scrollView: {
-    flex: 1,
-  },
+  container: { flex: 1 },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
@@ -335,7 +274,7 @@ const styles = StyleSheet.create({
     padding: 20,
   },
   loadingText: {
-    marginTop: 16,
+    marginTop: 14,
     fontSize: 15,
     fontWeight: '500',
   },
@@ -368,48 +307,16 @@ const styles = StyleSheet.create({
     fontSize: 34,
     fontWeight: '800',
     color: '#fff',
-    letterSpacing: -0.5,
+    letterSpacing: -0.4,
   },
-  viewerPill: {
+  livePill: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    backgroundColor: 'rgba(255,255,255,0.2)',
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 20,
-  },
-  viewerPillText: {
-    color: '#fff',
-    fontSize: 13,
-    fontWeight: '600',
-  },
-  heroMainContent: {
-    paddingHorizontal: 24,
-    paddingBottom: 32,
-    gap: 16,
-  },
-  liveIndicatorContainer: {
-    alignSelf: 'flex-start',
-    position: 'relative',
-  },
-  liveGlow: {
-    position: 'absolute',
-    top: -8,
-    left: -8,
-    right: -8,
-    bottom: -8,
-    backgroundColor: '#ef4444',
-    borderRadius: 24,
-  },
-  liveBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    backgroundColor: '#ef4444',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
+    gap: 7,
+    backgroundColor: 'rgba(239,68,68,0.9)',
+    borderRadius: 18,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
   },
   liveDot: {
     width: 8,
@@ -417,138 +324,141 @@ const styles = StyleSheet.create({
     borderRadius: 4,
     backgroundColor: '#fff',
   },
-  liveBadgeText: {
+  livePillText: {
     color: '#fff',
-    fontSize: 13,
-    fontWeight: '800',
-    letterSpacing: 1.5,
+    fontSize: 12,
+    fontWeight: '700',
+    letterSpacing: 0.4,
   },
-  upcomingBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    backgroundColor: 'rgba(255,255,255,0.2)',
-    alignSelf: 'flex-start',
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 16,
-  },
-  upcomingBadgeText: {
-    color: '#fff',
-    fontSize: 13,
-    fontWeight: '600',
+  heroMainContent: {
+    paddingHorizontal: 24,
+    paddingBottom: 30,
+    gap: 14,
   },
   heroTitle: {
-    fontSize: 32,
-    fontWeight: '800',
     color: '#fff',
-    letterSpacing: -0.5,
-    lineHeight: 38,
+    fontSize: 30,
+    fontWeight: '800',
+    lineHeight: 37,
+    letterSpacing: -0.3,
   },
   heroDescription: {
-    fontSize: 16,
-    color: 'rgba(255,255,255,0.85)',
-    lineHeight: 24,
+    color: 'rgba(255,255,255,0.86)',
+    fontSize: 15,
+    lineHeight: 23,
   },
   heroButton: {
-    marginTop: 8,
-    borderRadius: 16,
-    overflow: 'hidden',
     alignSelf: 'flex-start',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.3,
-    shadowRadius: 16,
-    elevation: 12,
-  },
-  heroButtonLive: {
-    shadowColor: '#ef4444',
+    borderRadius: 14,
+    overflow: 'hidden',
   },
   heroButtonPressed: {
-    transform: [{ scale: 0.96 }],
+    transform: [{ scale: 0.97 }],
   },
   heroButtonGradient: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
-    paddingHorizontal: 28,
-    paddingVertical: 16,
+    gap: 9,
+    paddingHorizontal: 24,
+    paddingVertical: 14,
   },
   heroButtonText: {
     color: '#fff',
-    fontSize: 17,
+    fontSize: 16,
     fontWeight: '700',
   },
   contentContainer: {
-    borderTopLeftRadius: 28,
-    borderTopRightRadius: 28,
-    marginTop: -28,
-    paddingTop: 28,
-    minHeight: SCREEN_HEIGHT * 0.5,
+    marginTop: -24,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    paddingTop: 24,
+    minHeight: SCREEN_HEIGHT * 0.45,
   },
   section: {
-    marginBottom: 36,
-  },
-  sectionHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'baseline',
-    paddingHorizontal: 24,
-    marginBottom: 20,
+    paddingHorizontal: 20,
+    gap: 12,
   },
   sectionTitle: {
     fontSize: 22,
     fontWeight: '700',
     letterSpacing: -0.3,
+    marginBottom: 4,
   },
-  scheduleImageContainer: {
-    paddingHorizontal: 12,
-    alignItems: 'center',
-  },
-  scheduleImage: {
-    width: SCREEN_WIDTH - 24,
-    height: (SCREEN_WIDTH - 24) * 1.4,
+  eventCard: {
+    borderWidth: 1,
     borderRadius: 16,
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+    gap: 8,
+  },
+  eventTitleRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: 10,
+  },
+  eventTitle: {
+    flex: 1,
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  statusBadge: {
+    backgroundColor: '#4b5563',
+    borderRadius: 999,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+  },
+  statusBadgeLive: {
+    backgroundColor: '#ef4444',
+  },
+  statusBadgeText: {
+    color: '#fff',
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 0.5,
+  },
+  eventDate: {
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  eventDescription: {
+    fontSize: 13,
+    lineHeight: 19,
+  },
+  emptyState: {
+    alignItems: 'center',
+    paddingVertical: 42,
+    paddingHorizontal: 20,
+    gap: 10,
+  },
+  emptyTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+  },
+  emptyText: {
+    textAlign: 'center',
+    fontSize: 14,
+    lineHeight: 21,
   },
   errorState: {
-    paddingVertical: 40,
-    paddingHorizontal: 40,
     alignItems: 'center',
+    paddingHorizontal: 24,
+    paddingVertical: 34,
+    gap: 12,
   },
   errorText: {
-    fontSize: 15,
     textAlign: 'center',
-    marginTop: 16,
-    marginBottom: 20,
+    fontSize: 14,
+    lineHeight: 20,
   },
   retryButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    paddingHorizontal: 24,
-    paddingVertical: 12,
     borderRadius: 12,
+    paddingHorizontal: 18,
+    paddingVertical: 10,
   },
   retryButtonText: {
     color: '#fff',
-    fontSize: 15,
-    fontWeight: '600',
-  },
-  emptyState: {
-    paddingVertical: 60,
-    paddingHorizontal: 40,
-    alignItems: 'center',
-  },
-  emptyTitle: {
-    fontSize: 22,
     fontWeight: '700',
-    marginBottom: 12,
-    textAlign: 'center',
-  },
-  emptyText: {
-    fontSize: 15,
-    textAlign: 'center',
-    lineHeight: 22,
-    marginBottom: 28,
+    fontSize: 14,
   },
 });

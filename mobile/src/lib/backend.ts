@@ -47,6 +47,19 @@ export interface BackendMediaItem {
   is_featured?: boolean;
 }
 
+export interface BackendLiveEvent {
+  id: string;
+  title: string;
+  description: string;
+  video_url: string;
+  thumbnail_url?: string;
+  scheduled_start: string;
+  scheduled_end?: string;
+  status: 'scheduled' | 'live' | 'ended' | 'cancelled';
+  is_featured?: boolean;
+  viewer_count?: number;
+}
+
 export interface BackendRadioStatus {
   is_live: boolean;
   current_show?: string;
@@ -85,6 +98,17 @@ const AZURACAST_NOW_PLAYING_URL =
 const WORDPRESS_RADIO_STATUS_URL =
   process.env.EXPO_PUBLIC_WORDPRESS_RADIO_STATUS_URL ||
   'https://godkingdomprinciplesradio.com/apis/wp-json/custom-api/v1/radio-status';
+
+const LIVE_VIDEO_URL_FALLBACK =
+  process.env.EXPO_PUBLIC_LIVE_VIDEO_URL ||
+  process.env.EXPO_PUBLIC_OWNCAST_URL ||
+  '';
+
+const LIVE_VIDEO_TITLE_FALLBACK =
+  process.env.EXPO_PUBLIC_LIVE_VIDEO_TITLE ||
+  'Kingdom Principles Live Show';
+
+const LIVE_VIDEO_THUMBNAIL_FALLBACK = process.env.EXPO_PUBLIC_LIVE_VIDEO_THUMBNAIL_URL || undefined;
 
 const POST_TITLE_MIN = 3;
 const POST_TITLE_MAX = 100;
@@ -511,6 +535,74 @@ export async function fetchVideos(limit: number): Promise<BackendMediaItem[]> {
     video_url: v.video_url || undefined,
     duration: v.duration || undefined,
   }));
+}
+
+function mapLiveEvent(row: any): BackendLiveEvent {
+  return {
+    id: String(row.id),
+    title: row.title || 'Live Show',
+    description: row.description || '',
+    video_url: row.video_url,
+    thumbnail_url: row.thumbnail_url || undefined,
+    scheduled_start: row.scheduled_start,
+    scheduled_end: row.scheduled_end || undefined,
+    status: row.status,
+    is_featured: Boolean(row.is_featured),
+    viewer_count: typeof row.viewer_count === 'number' ? row.viewer_count : undefined,
+  };
+}
+
+export async function fetchCurrentLiveEvent(): Promise<BackendLiveEvent | null> {
+  const { data, error } = await supabase
+    .from('live_events')
+    .select(
+      'id,title,description,video_url,thumbnail_url,scheduled_start,scheduled_end,status,is_featured,viewer_count'
+    )
+    .eq('status', 'live')
+    .order('is_featured', { ascending: false })
+    .order('scheduled_start', { ascending: false })
+    .limit(1);
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  if (data && data.length > 0) {
+    return mapLiveEvent(data[0]);
+  }
+
+  if (LIVE_VIDEO_URL_FALLBACK) {
+    return {
+      id: 'fallback-live-stream',
+      title: LIVE_VIDEO_TITLE_FALLBACK,
+      description: 'Live video stream from your configured provider.',
+      video_url: LIVE_VIDEO_URL_FALLBACK,
+      thumbnail_url: LIVE_VIDEO_THUMBNAIL_FALLBACK,
+      scheduled_start: new Date().toISOString(),
+      status: 'live',
+    };
+  }
+
+  return null;
+}
+
+export async function fetchUpcomingLiveEvents(limit: number = 5): Promise<BackendLiveEvent[]> {
+  const nowIso = new Date().toISOString();
+  const { data, error } = await supabase
+    .from('live_events')
+    .select(
+      'id,title,description,video_url,thumbnail_url,scheduled_start,scheduled_end,status,is_featured,viewer_count'
+    )
+    .in('status', ['live', 'scheduled'])
+    .gte('scheduled_start', nowIso)
+    .order('scheduled_start', { ascending: true })
+    .limit(limit);
+
+  if (error || !data) {
+    throw new Error(error?.message || 'Failed to fetch upcoming live shows');
+  }
+
+  return data.map(mapLiveEvent);
 }
 
 export async function fetchRadioSchedule(): Promise<any | null> {

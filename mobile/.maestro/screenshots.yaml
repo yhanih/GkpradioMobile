@@ -1,0 +1,28 @@
+appId: com.gkpradio.mobile
+---
+- launchApp:
+    clearState: true
+- extendedWaitUntil:
+    visible: "Home"
+    timeout: 30000
+- takeScreenshot: Home
+- tapOn: "Live"
+- extendedWaitUntil:
+    visible: "Live"
+    timeout: 10000
+- takeScreenshot: Live
+- tapOn: "Media"
+- extendedWaitUntil:
+    visible: "Media"
+    timeout: 10000
+- takeScreenshot: Media
+- tapOn: "Community"
+- extendedWaitUntil:
+    visible: "Community"
+    timeout: 10000
+- takeScreenshot: Community
+- tapOn: "Profile"
+- extendedWaitUntil:
+    visible: "Profile"
+    timeout: 10000
+- takeScreenshot: Profile

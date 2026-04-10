@@ -20,6 +20,7 @@ import { RootStackParamList } from '../types/navigation';
 import { useTheme } from '../contexts/ThemeContext';
 import { useBookmarks } from '../contexts/BookmarksContext';
 import { useAuth } from '../contexts/AuthContext';
+import { useAudio } from '../contexts/AudioContext';
 
 type VideoPlayerRouteProp = RouteProp<RootStackParamList, 'VideoPlayer'>;
 type VideoPlayerNavProp = NativeStackNavigationProp<RootStackParamList, 'VideoPlayer'>;
@@ -32,6 +33,7 @@ export function VideoPlayerScreen() {
   const { theme, isDark } = useTheme();
   const { user } = useAuth();
   const { isBookmarked, toggleBookmark } = useBookmarks();
+  const { pauseForVideoSession, resumeAfterVideoSession } = useAudio();
   
   const { video, liveEvent } = route.params;
   const content = video || liveEvent;
@@ -64,6 +66,13 @@ export function VideoPlayerScreen() {
       player.play();
     }
   });
+
+  useEffect(() => {
+    void pauseForVideoSession();
+    return () => {
+      void resumeAfterVideoSession();
+    };
+  }, []);
 
   useEffect(() => {
     if (player) {
