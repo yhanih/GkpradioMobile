@@ -14,19 +14,22 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
+import { useNavigation } from '@react-navigation/native';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useAuth } from '../../contexts/AuthContext';
+import { RootStackParamList } from '../../types/navigation';
 
-interface LoginScreenProps {
-  onNavigateToSignup: () => void;
-  onNavigateToForgotPassword?: () => void;
-}
+type LoginNavigationProp = NativeStackNavigationProp<RootStackParamList>;
 
-export function LoginScreen({ onNavigateToSignup, onNavigateToForgotPassword }: LoginScreenProps) {
+export function LoginScreen() {
+  const navigation = useNavigation<LoginNavigationProp>();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const { signIn } = useAuth();
+
+  const canGoBack = navigation.canGoBack();
 
   const handleLogin = async () => {
     if (!email || !password) {
@@ -39,7 +42,12 @@ export function LoginScreen({ onNavigateToSignup, onNavigateToForgotPassword }: 
     setLoading(false);
 
     if (error) {
-      Alert.alert('Login Failed', error.message);
+      Alert.alert('Login Failed', typeof error === 'string' ? error : error.message || 'Please check your credentials.');
+    } else {
+      // Login success — pop the modal
+      if (navigation.canGoBack()) {
+        navigation.goBack();
+      }
     }
   };
 
@@ -56,6 +64,11 @@ export function LoginScreen({ onNavigateToSignup, onNavigateToForgotPassword }: 
             end={{ x: 1, y: 1 }}
             style={styles.header}
           >
+            {canGoBack && (
+              <Pressable style={styles.closeButton} onPress={() => navigation.goBack()} hitSlop={12}>
+                <Ionicons name="close" size={22} color="#fff" />
+              </Pressable>
+            )}
             <View style={styles.logoContainer}>
               <Text style={styles.logoText}>GKP</Text>
             </View>
@@ -84,11 +97,9 @@ export function LoginScreen({ onNavigateToSignup, onNavigateToForgotPassword }: 
             <View style={styles.inputGroup}>
               <View style={styles.passwordHeader}>
                 <Text style={styles.label}>Password</Text>
-                {onNavigateToForgotPassword && (
-                  <Pressable onPress={onNavigateToForgotPassword} disabled={loading}>
-                    <Text style={styles.forgotPasswordText}>Forgot Password?</Text>
-                  </Pressable>
-                )}
+                <Pressable onPress={() => navigation.navigate('ForgotPassword')} disabled={loading}>
+                  <Text style={styles.forgotPasswordText}>Forgot Password?</Text>
+                </Pressable>
               </View>
               <View style={styles.inputWrapper}>
                 <Ionicons name="lock-closed-outline" size={20} color="#71717a" style={styles.inputIcon} />
@@ -132,12 +143,18 @@ export function LoginScreen({ onNavigateToSignup, onNavigateToForgotPassword }: 
               <View style={styles.dividerLine} />
             </View>
 
-            <Pressable style={styles.signupPrompt} onPress={onNavigateToSignup}>
+            <Pressable style={styles.signupPrompt} onPress={() => navigation.navigate('Signup')}>
               <Text style={styles.signupPromptText}>
                 Don't have an account?{' '}
                 <Text style={styles.signupLink}>Sign up</Text>
               </Text>
             </Pressable>
+
+            {canGoBack && (
+              <Pressable style={styles.browsePrompt} onPress={() => navigation.goBack()}>
+                <Text style={styles.browseText}>Continue browsing without signing in</Text>
+              </Pressable>
+            )}
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -160,6 +177,17 @@ const styles = StyleSheet.create({
     paddingTop: 40,
     paddingBottom: 60,
     paddingHorizontal: 24,
+    alignItems: 'center',
+  },
+  closeButton: {
+    position: 'absolute',
+    top: 16,
+    right: 20,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    justifyContent: 'center',
     alignItems: 'center',
   },
   logoContainer: {
@@ -284,5 +312,15 @@ const styles = StyleSheet.create({
   signupLink: {
     color: '#047857',
     fontWeight: '600',
+  },
+  browsePrompt: {
+    alignItems: 'center',
+    paddingVertical: 12,
+    marginTop: 4,
+  },
+  browseText: {
+    fontSize: 13,
+    color: '#a1a1aa',
+    textDecorationLine: 'underline',
   },
 });

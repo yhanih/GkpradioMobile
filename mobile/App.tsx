@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { StatusBar, View, ActivityIndicator } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-import { NavigationContainer } from '@react-navigation/native';
+import { NavigationContainer, useNavigation } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { createNativeStackNavigator } from '@react-navigation/native-stack';
+import { createNativeStackNavigator, NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
 import * as Sentry from '@sentry/react-native';
 import Constants from 'expo-constants';
@@ -49,48 +49,13 @@ import { RootStackParamList, MainTabParamList } from './src/types/navigation';
 const Stack = createNativeStackNavigator<RootStackParamList>();
 const Tab = createBottomTabNavigator<MainTabParamList>();
 
-function ProfileScreenWrapper({
-  showSignup,
-  setShowSignup,
-  showForgotPassword,
-  setShowForgotPassword,
-  showResetPassword,
-  setShowResetPassword
-}: {
-  showSignup: boolean;
-  setShowSignup: (show: boolean) => void;
-  showForgotPassword: boolean;
-  setShowForgotPassword: (show: boolean) => void;
-  showResetPassword: boolean;
-  setShowResetPassword: (show: boolean) => void;
-}) {
-  const { user } = useAuth();
-
-  if (showResetPassword) {
-    return <ResetPasswordScreen onComplete={() => setShowResetPassword(false)} />;
-  }
-
-  if (!user) {
-    if (showForgotPassword) {
-      return <ForgotPasswordScreen onNavigateToLogin={() => setShowForgotPassword(false)} />;
-    }
-    if (showSignup) {
-      return <SignupScreen onNavigateToLogin={() => setShowSignup(false)} />;
-    }
-    return <LoginScreen
-      onNavigateToSignup={() => setShowSignup(true)}
-      onNavigateToForgotPassword={() => setShowForgotPassword(true)}
-    />;
-  }
-
-  return <ProfileScreen />;
-}
 
 function MainTabs() {
   const { theme } = useTheme();
 
   return (
     <>
+      <DeepLinkHandler />
       <Tab.Navigator
         screenOptions={({ route }) => ({
           tabBarIcon: ({ focused, color, size }) => {
@@ -144,90 +109,85 @@ function MainTabs() {
   );
 }
 
-function RootNavigator() {
-  const [showSignup, setShowSignup] = useState(false);
-  const [showForgotPassword, setShowForgotPassword] = useState(false);
-  const [showResetPassword, setShowResetPassword] = useState(false);
+function DeepLinkHandler() {
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
 
   useEffect(() => {
-    // Handle deep links for password reset
     const handleDeepLink = (url: string | null) => {
       if (!url) return;
       const parsed = Linking.parse(url);
       if (parsed.path === 'reset-password' || url.includes('reset-password')) {
-        setShowResetPassword(true);
+        navigation.navigate('ResetPassword');
       }
     };
 
-    // Listen for incoming links
     const subscription = Linking.addEventListener('url', (event: { url: string }) => {
       handleDeepLink(event.url);
     });
 
-    // Check for initial link
     Linking.getInitialURL().then(handleDeepLink);
 
     return () => {
       subscription.remove();
     };
-  }, []);
+  }, [navigation]);
 
+  return null;
+}
+
+function RootNavigator() {
   return (
     <Stack.Navigator screenOptions={{ headerShown: false }}>
       <Stack.Screen name="MainTabs" component={MainTabs} />
       <Stack.Screen
         name="PostDetail"
         component={PostDetailScreen}
-        options={{
-          animation: 'slide_from_right',
-        }}
+        options={{ animation: 'slide_from_right' }}
       />
       <Stack.Screen
         name="UserProfile"
         component={UserProfileScreen}
-        options={{
-          animation: 'slide_from_right',
-        }}
+        options={{ animation: 'slide_from_right' }}
       />
       <Stack.Screen
         name="Profile"
-        options={{
-          animation: 'slide_from_right',
-        }}
-      >
-        {() => (
-          <ProfileScreenWrapper
-            showSignup={showSignup}
-            setShowSignup={setShowSignup}
-            showForgotPassword={showForgotPassword}
-            setShowForgotPassword={setShowForgotPassword}
-            showResetPassword={showResetPassword}
-            setShowResetPassword={setShowResetPassword}
-          />
-        )}
-      </Stack.Screen>
+        component={ProfileScreen}
+        options={{ animation: 'slide_from_right' }}
+      />
+      <Stack.Screen
+        name="Login"
+        component={LoginScreen}
+        options={{ presentation: 'modal', animation: 'slide_from_bottom' }}
+      />
+      <Stack.Screen
+        name="Signup"
+        component={SignupScreen}
+        options={{ presentation: 'modal', animation: 'slide_from_bottom' }}
+      />
+      <Stack.Screen
+        name="ForgotPassword"
+        component={ForgotPasswordScreen}
+        options={{ presentation: 'modal', animation: 'slide_from_bottom' }}
+      />
+      <Stack.Screen
+        name="ResetPassword"
+        component={ResetPasswordScreen}
+        options={{ presentation: 'modal', animation: 'slide_from_bottom' }}
+      />
       <Stack.Screen
         name="VideoPlayer"
         component={VideoPlayerScreen}
-        options={{
-          animation: 'fade',
-          presentation: 'fullScreenModal',
-        }}
+        options={{ animation: 'fade', presentation: 'fullScreenModal' }}
       />
       <Stack.Screen
         name="EpisodePlayer"
         component={EpisodePlayerScreen}
-        options={{
-          animation: 'slide_from_bottom',
-          presentation: 'modal',
-        }}
+        options={{ animation: 'slide_from_bottom', presentation: 'modal' }}
       />
       <Stack.Screen
         name="LikedPosts"
         component={LikedPostsScreen}
-        options={{
-          animation: 'slide_from_right',
-        }}
+        options={{ animation: 'slide_from_right' }}
       />
     </Stack.Navigator>
   );

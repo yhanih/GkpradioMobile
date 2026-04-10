@@ -11,6 +11,10 @@ export type RootStackParamList = {
     user?: any;
   };
   Profile: undefined;
+  Login: { redirectBack?: boolean } | undefined;
+  Signup: undefined;
+  ForgotPassword: undefined;
+  ResetPassword: undefined;
   VideoPlayer: {
     video?: any;
     liveEvent?: any;
@@ -19,7 +23,6 @@ export type RootStackParamList = {
     episode: any;
     allEpisodes?: any[];
   };
-  PastBroadcasts: undefined;
   LikedPosts: undefined;
 };
 

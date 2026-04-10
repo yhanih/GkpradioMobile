@@ -14,13 +14,15 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
+import { useNavigation } from '@react-navigation/native';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useAuth } from '../../contexts/AuthContext';
+import { RootStackParamList } from '../../types/navigation';
 
-interface ForgotPasswordScreenProps {
-  onNavigateToLogin: () => void;
-}
+type ForgotPasswordNavigationProp = NativeStackNavigationProp<RootStackParamList>;
 
-export function ForgotPasswordScreen({ onNavigateToLogin }: ForgotPasswordScreenProps) {
+export function ForgotPasswordScreen() {
+  const navigation = useNavigation<ForgotPasswordNavigationProp>();
   const [email, setEmail] = useState('');
   const [loading, setLoading] = useState(false);
   const [emailSent, setEmailSent] = useState(false);
@@ -88,7 +90,7 @@ export function ForgotPasswordScreen({ onNavigateToLogin }: ForgotPasswordScreen
 
               <Pressable
                 style={styles.backButton}
-                onPress={onNavigateToLogin}
+                onPress={() => navigation.navigate('Login')}
               >
                 <Text style={styles.backButtonText}>Back to Login</Text>
               </Pressable>
@@ -112,6 +114,11 @@ export function ForgotPasswordScreen({ onNavigateToLogin }: ForgotPasswordScreen
             end={{ x: 1, y: 1 }}
             style={styles.header}
           >
+            {navigation.canGoBack() && (
+              <Pressable style={styles.closeButton} onPress={() => navigation.goBack()} hitSlop={12}>
+                <Ionicons name="close" size={22} color="#fff" />
+              </Pressable>
+            )}
             <View style={styles.logoContainer}>
               <Ionicons name="lock-closed-outline" size={40} color="#fff" />
             </View>
@@ -158,7 +165,7 @@ export function ForgotPasswordScreen({ onNavigateToLogin }: ForgotPasswordScreen
               <View style={styles.dividerLine} />
             </View>
 
-            <Pressable style={styles.loginPrompt} onPress={onNavigateToLogin}>
+            <Pressable style={styles.loginPrompt} onPress={() => navigation.navigate('Login')}>
               <Text style={styles.loginPromptText}>
                 Remember your password?{' '}
                 <Text style={styles.loginLink}>Sign in</Text>
@@ -186,6 +193,17 @@ const styles = StyleSheet.create({
     paddingTop: 40,
     paddingBottom: 60,
     paddingHorizontal: 24,
+    alignItems: 'center',
+  },
+  closeButton: {
+    position: 'absolute',
+    top: 16,
+    right: 20,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    justifyContent: 'center',
     alignItems: 'center',
   },
   logoContainer: {

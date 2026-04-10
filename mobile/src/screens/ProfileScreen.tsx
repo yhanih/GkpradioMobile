@@ -61,6 +61,15 @@ export function ProfileScreen() {
   const navigation = useNavigation<ProfileNavigationProp>();
   const { user, signOut } = useAuth();
   const { theme, isDark, toggleTheme } = useTheme();
+
+  const handleLeaveProfile = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    if (navigation.canGoBack()) {
+      navigation.goBack();
+    } else {
+      navigation.navigate('MainTabs');
+    }
+  };
   const { bookmarks, refreshBookmarks, toggleBookmark, isBookmarked } = useBookmarks();
   const [profile, setProfile] = useState<ProfileData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -263,9 +272,93 @@ export function ProfileScreen() {
     });
   };
 
+  const profileNavBar = (
+    <View
+      style={[
+        styles.profileNavBar,
+        { backgroundColor: theme.colors.surface, borderBottomColor: theme.colors.border },
+      ]}
+    >
+      <View style={styles.profileNavSide}>
+        <Pressable
+          onPress={handleLeaveProfile}
+          style={styles.profileNavBack}
+          hitSlop={12}
+          accessibilityRole="button"
+          accessibilityLabel="Go back to previous screen"
+        >
+          <Ionicons name="chevron-back" size={24} color={theme.colors.primary} />
+          <Text style={[styles.profileNavBackLabel, { color: theme.colors.primary }]}>Back</Text>
+        </Pressable>
+      </View>
+      <Text style={[styles.profileNavTitleCenter, { color: theme.colors.text }]} pointerEvents="none">
+        Profile
+      </Text>
+      <View style={styles.profileNavSide} />
+    </View>
+  );
+
+  if (!user) {
+    return (
+      <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
+        {profileNavBar}
+        <LinearGradient
+          colors={['#047857', '#059669', '#0d9488']}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={styles.authGateHeader}
+        >
+          <View style={styles.authGateLogo}>
+            <Text style={styles.authGateLogoText}>GKP</Text>
+          </View>
+          <Text style={styles.authGateTitle}>Your Profile</Text>
+          <Text style={styles.authGateSubtitle}>
+            Sign in to access your profile, saved content and community features
+          </Text>
+        </LinearGradient>
+
+        <View style={styles.authGateBody}>
+          <View style={styles.authGateFeatureList}>
+            {[
+              { icon: 'bookmark-outline', label: 'Save episodes & videos' },
+              { icon: 'heart-outline', label: 'Like & engage with posts' },
+              { icon: 'people-outline', label: 'Join the community' },
+              { icon: 'person-outline', label: 'Manage your profile' },
+            ].map((item) => (
+              <View key={item.label} style={styles.authGateFeatureRow}>
+                <View style={styles.authGateFeatureIcon}>
+                  <Ionicons name={item.icon as any} size={20} color="#047857" />
+                </View>
+                <Text style={styles.authGateFeatureLabel}>{item.label}</Text>
+              </View>
+            ))}
+          </View>
+
+          <Pressable
+            style={styles.authGateSignInBtn}
+            onPress={() => navigation.navigate('Login')}
+          >
+            <Text style={styles.authGateSignInBtnText}>Sign In</Text>
+            <Ionicons name="arrow-forward" size={20} color="#fff" />
+          </Pressable>
+
+          <Pressable
+            style={styles.authGateSignUpBtn}
+            onPress={() => navigation.navigate('Signup')}
+          >
+            <Text style={styles.authGateSignUpBtnText}>
+              Don't have an account? <Text style={{ color: '#047857', fontWeight: '700' }}>Sign Up</Text>
+            </Text>
+          </Pressable>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
   if (loading) {
     return (
       <SafeAreaView style={styles.container} edges={['top']}>
+        {profileNavBar}
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color="#047857" />
           <Text style={styles.loadingText}>Loading profile...</Text>
@@ -276,6 +369,7 @@ export function ProfileScreen() {
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
+      {profileNavBar}
       <ScrollView
         style={styles.scrollView}
         showsVerticalScrollIndicator={false}
@@ -677,6 +771,134 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#f9fafb',
   },
+  profileNavBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    minHeight: 52,
+    paddingHorizontal: 4,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    position: 'relative',
+  },
+  profileNavSide: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    minWidth: 0,
+  },
+  profileNavBack: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 8,
+    paddingHorizontal: 8,
+    gap: 2,
+  },
+  profileNavBackLabel: {
+    fontSize: 17,
+    fontWeight: '600',
+  },
+  profileNavTitleCenter: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    textAlign: 'center',
+    fontSize: 17,
+    fontWeight: '600',
+    zIndex: -1,
+  },
+  // Auth gate styles
+  authGateHeader: {
+    paddingTop: 48,
+    paddingBottom: 48,
+    paddingHorizontal: 28,
+    alignItems: 'center',
+  },
+  authGateLogo: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  authGateLogoText: {
+    fontSize: 32,
+    fontWeight: 'bold',
+    color: '#fff',
+  },
+  authGateTitle: {
+    fontSize: 26,
+    fontWeight: '700',
+    color: '#fff',
+    marginBottom: 10,
+  },
+  authGateSubtitle: {
+    fontSize: 15,
+    color: 'rgba(255,255,255,0.85)',
+    textAlign: 'center',
+    lineHeight: 22,
+  },
+  authGateBody: {
+    flex: 1,
+    backgroundColor: '#fff',
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    marginTop: -24,
+    paddingHorizontal: 28,
+    paddingTop: 36,
+  },
+  authGateFeatureList: {
+    gap: 16,
+    marginBottom: 36,
+  },
+  authGateFeatureRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+  },
+  authGateFeatureIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#f0fdf4',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  authGateFeatureLabel: {
+    fontSize: 15,
+    fontWeight: '500',
+    color: '#18181b',
+  },
+  authGateSignInBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#047857',
+    borderRadius: 14,
+    height: 56,
+    gap: 8,
+    shadowColor: '#047857',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 12,
+    elevation: 6,
+    marginBottom: 16,
+  },
+  authGateSignInBtnText: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#fff',
+  },
+  authGateSignUpBtn: {
+    alignItems: 'center',
+    paddingVertical: 12,
+  },
+  authGateSignUpBtnText: {
+    fontSize: 14,
+    color: '#71717a',
+  },
+  // Core layout
   scrollView: {
     flex: 1,
   },

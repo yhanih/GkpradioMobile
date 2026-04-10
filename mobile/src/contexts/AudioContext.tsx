@@ -38,6 +38,7 @@ const AudioContext = createContext<AudioContextType | undefined>(undefined);
 
 export function AudioProvider({ children }: { children: React.ReactNode }) {
     const soundRef = useRef<Audio.Sound | null>(null);
+    const streamUrlRef = useRef<string>('');
     const [isPlaying, setIsPlaying] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
     const [nowPlaying, setNowPlaying] = useState<NowPlayingData | null>(null);
@@ -67,6 +68,7 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
                 
                 if (data.stream_url) {
                     setStreamUrl(data.stream_url);
+                    streamUrlRef.current = data.stream_url;
                 }
             }
         } catch (error) {
@@ -85,12 +87,18 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
 
     const play = async () => {
         try {
-            if (!streamUrl) {
+            setIsLoading(true);
+
+            let url = streamUrlRef.current;
+            if (!url) {
                 await fetchNowPlayingData();
-                return;
+                url = streamUrlRef.current;
             }
 
-            setIsLoading(true);
+            if (!url) {
+                Alert.alert('Connection Error', 'Could not fetch the radio stream URL. Please check your connection and try again.');
+                return;
+            }
 
             await Audio.setAudioModeAsync({
                 playsInSilentModeIOS: true,
@@ -108,16 +116,16 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
             }
 
             const { sound } = await Audio.Sound.createAsync(
-                { uri: streamUrl },
+                { uri: url },
                 { shouldPlay: true },
                 onPlaybackStatusUpdate
             );
 
             soundRef.current = sound;
             setIsPlaying(true);
-        } catch (error) {
+        } catch (error: any) {
             console.error('Error playing sound:', error);
-            Alert.alert('Playback Error', 'Could not connect to the radio stream.');
+            Alert.alert('Playback Error', `Could not connect to the radio stream. (${error.message || 'Unknown error'})`);
         } finally {
             setIsLoading(false);
         }

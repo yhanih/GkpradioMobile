@@ -1,6 +1,6 @@
 {
   "cli": {
-    "version": ">= 13.4.1",
+    "version": ">= 18.4.0",
     "appVersionSource": "remote"
   },
   "build": {
@@ -9,17 +9,10 @@
       "distribution": "internal"
     },
     "preview": {
-      "distribution": "internal",
-      "ios": {
-        "simulator": true
-      }
+      "distribution": "internal"
     },
     "production": {
       "autoIncrement": true,
-      "env": {
-        "EXPO_PUBLIC_SUPABASE_URL": "$EXPO_PUBLIC_SUPABASE_URL",
-        "EXPO_PUBLIC_SUPABASE_ANON_KEY": "$EXPO_PUBLIC_SUPABASE_ANON_KEY"
-      },
       "android": {
         "buildType": "app-bundle"
       }

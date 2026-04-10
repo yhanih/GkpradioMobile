@@ -13,10 +13,16 @@ import {
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
+import { useNavigation } from '@react-navigation/native';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useAuth } from '../../contexts/AuthContext';
+import { RootStackParamList } from '../../types/navigation';
 import * as Haptics from 'expo-haptics';
 
-export default function ResetPasswordScreen({ onComplete }: { onComplete: () => void }) {
+type ResetNavProp = NativeStackNavigationProp<RootStackParamList>;
+
+export default function ResetPasswordScreen() {
+  const navigation = useNavigation<ResetNavProp>();
     const [password, setPassword] = useState('');
     const [confirmPassword, setConfirmPassword] = useState('');
     const [loading, setLoading] = useState(false);
@@ -49,7 +55,7 @@ export default function ResetPasswordScreen({ onComplete }: { onComplete: () => 
             Alert.alert(
                 'Success',
                 'Your password has been updated. You can now log in with your new password.',
-                [{ text: 'OK', onPress: onComplete }]
+                [{ text: 'OK', onPress: () => { if (navigation.canGoBack()) navigation.goBack(); } }]
             );
         } catch (error: any) {
             console.error('Reset password error:', error);
@@ -123,7 +129,7 @@ export default function ResetPasswordScreen({ onComplete }: { onComplete: () => 
 
                     <TouchableOpacity
                         style={styles.cancelButton}
-                        onPress={onComplete}
+                        onPress={() => { if (navigation.canGoBack()) navigation.goBack(); }}
                         disabled={loading}
                     >
                         <Text style={styles.cancelButtonText}>Cancel</Text>

@@ -2,12 +2,12 @@
   "expo": {
     "name": "GKP Radio",
     "slug": "gkp-radio",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "description": "God Kingdom Principles Radio - Broadcasting Truth, Building Community, Transforming Lives",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
-    "owner": "gkp-radio",
+    "owner": "scher01",
     "scheme": "gkpradio",
     "primaryColor": "#047857",
     "splash": {
@@ -18,7 +18,7 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.gkpradio.mobile",
-      "buildNumber": "1.0.1",
+      "buildNumber": "2",
       "config": {
         "usesNonExemptEncryption": false
       },
@@ -44,7 +44,7 @@
     },
     "android": {
       "package": "com.gkpradio.mobile",
-      "versionCode": 2,
+      "versionCode": 3,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#047857"
@@ -58,7 +58,8 @@
         "RECORD_AUDIO",
         "READ_EXTERNAL_STORAGE",
         "WRITE_EXTERNAL_STORAGE",
-        "FOREGROUND_SERVICE"
+        "FOREGROUND_SERVICE",
+        "FOREGROUND_SERVICE_MEDIA_PLAYBACK"
       ],
       "intentFilters": [
         {
@@ -85,11 +86,32 @@
       "supabaseAnonKey": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZ5Y2hqbmF4bGp3bWdvcHRqc3huIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTg2ODA5ODQsImV4cCI6MjA3NDI1Njk4NH0.PU002pqmbeCo_plcjaCP678Xo5dischMR3a_OTOqp_E",
       "azuracastBaseUrl": "http://74.208.102.89:8080",
       "privacyPolicyUrl": "https://godkingdomprinciplesradio.com/privacy-policy",
-      "expoProjectId": "3cc18e67-a1d7-4f5a-bcc5-48e3dde78f96"
+      "expoProjectId": "3cc18e67-a1d7-4f5a-bcc5-48e3dde78f96",
+      "eas": {
+        "projectId": "794ab331-d1c6-4158-ac8e-14ce9b083568"
+      }
     },
     "plugins": [
-      "expo-font",
-      "expo-video"
+      [
+        "expo-font"
+      ],
+      [
+        "expo-video"
+      ],
+      [
+        "expo-av",
+        {
+          "microphonePermission": "GKP Radio needs microphone access for audio features."
+        }
+      ],
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "usesCleartextTraffic": true
+          }
+        }
+      ]
     ]
   }
 }

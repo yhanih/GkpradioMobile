@@ -14,13 +14,15 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
+import { useNavigation } from '@react-navigation/native';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useAuth } from '../../contexts/AuthContext';
+import { RootStackParamList } from '../../types/navigation';
 
-interface SignupScreenProps {
-  onNavigateToLogin: () => void;
-}
+type SignupNavigationProp = NativeStackNavigationProp<RootStackParamList>;
 
-export function SignupScreen({ onNavigateToLogin }: SignupScreenProps) {
+export function SignupScreen() {
+  const navigation = useNavigation<SignupNavigationProp>();
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -50,13 +52,12 @@ export function SignupScreen({ onNavigateToLogin }: SignupScreenProps) {
     setLoading(false);
 
     if (error) {
-      Alert.alert('Signup Failed', error.message);
+      Alert.alert('Signup Failed', typeof error === 'string' ? error : error.message || 'Signup failed.');
     } else {
-      Alert.alert(
-        'Success',
-        'Account created! Please check your email to verify your account.',
-        [{ text: 'OK', onPress: onNavigateToLogin }]
-      );
+      // On success, sign in auto-runs inside signUp; pop back to wherever the user came from
+      if (navigation.canGoBack()) {
+        navigation.goBack();
+      }
     }
   };
 
@@ -73,6 +74,11 @@ export function SignupScreen({ onNavigateToLogin }: SignupScreenProps) {
             end={{ x: 1, y: 1 }}
             style={styles.header}
           >
+            {navigation.canGoBack() && (
+              <Pressable style={styles.closeButton} onPress={() => navigation.goBack()} hitSlop={12}>
+                <Ionicons name="close" size={22} color="#fff" />
+              </Pressable>
+            )}
             <View style={styles.logoContainer}>
               <Text style={styles.logoText}>GKP</Text>
             </View>
@@ -173,7 +179,7 @@ export function SignupScreen({ onNavigateToLogin }: SignupScreenProps) {
               <View style={styles.dividerLine} />
             </View>
 
-            <Pressable style={styles.loginPrompt} onPress={onNavigateToLogin}>
+            <Pressable style={styles.loginPrompt} onPress={() => navigation.navigate('Login')}>
               <Text style={styles.loginPromptText}>
                 Already have an account?{' '}
                 <Text style={styles.loginLink}>Sign in</Text>
@@ -201,6 +207,17 @@ const styles = StyleSheet.create({
     paddingTop: 40,
     paddingBottom: 60,
     paddingHorizontal: 24,
+    alignItems: 'center',
+  },
+  closeButton: {
+    position: 'absolute',
+    top: 16,
+    right: 20,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    justifyContent: 'center',
     alignItems: 'center',
   },
   logoContainer: {
