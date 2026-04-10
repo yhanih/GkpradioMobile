@@ -1,9 +1,20 @@
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 
-export function StatsStrip() {
+interface StatsStripProps {
+    familyMembers: number;
+    prayersLifted: number;
+    mediaItems: number;
+}
+
+function formatCompactCount(value: number): string {
+    if (value >= 1000000) return `${(value / 1000000).toFixed(1).replace('.0', '')}M`;
+    if (value >= 1000) return `${(value / 1000).toFixed(1).replace('.0', '')}K`;
+    return String(value);
+}
+
+export function StatsStrip({ familyMembers, prayersLifted, mediaItems }: StatsStripProps) {
     return (
         <View style={styles.container}>
             <LinearGradient
@@ -13,22 +24,22 @@ export function StatsStrip() {
                 style={styles.gradient}
             >
                 <View style={styles.statItem}>
-                    <Text style={styles.statValue}>2,500+</Text>
+                    <Text style={styles.statValue}>{formatCompactCount(familyMembers)}</Text>
                     <Text style={styles.statLabel}>Family Members</Text>
                 </View>
 
                 <View style={styles.separator} />
 
                 <View style={styles.statItem}>
-                    <Text style={styles.statValue}>45K+</Text>
+                    <Text style={styles.statValue}>{formatCompactCount(prayersLifted)}</Text>
                     <Text style={styles.statLabel}>Prayers Lifted</Text>
                 </View>
 
                 <View style={styles.separator} />
 
                 <View style={styles.statItem}>
-                    <Text style={styles.statValue}>24/7</Text>
-                    <Text style={styles.statLabel}>Live Ministry</Text>
+                    <Text style={styles.statValue}>{formatCompactCount(mediaItems)}</Text>
+                    <Text style={styles.statLabel}>Media Library</Text>
                 </View>
             </LinearGradient>
         </View>

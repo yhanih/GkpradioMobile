@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState, useRef, useEffect } from 'react';
 import { Audio, AVPlaybackStatus } from 'expo-av';
 import { Alert } from 'react-native';
-import { wpClient } from '../lib/wordpress';
+import { fetchRadioStatusFromAzuraCast } from '../lib/backend';
 // Local Episode interface for WordPress data
 export interface Episode {
   id: number;
@@ -58,7 +58,7 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
 
     const fetchNowPlayingData = async () => {
         try {
-            const { data } = await wpClient.getRadioStatus();
+            const data = await fetchRadioStatusFromAzuraCast();
             if (data) {
                 setNowPlaying({
                     station: { listen_url: data.stream_url, name: 'GKP Radio' },

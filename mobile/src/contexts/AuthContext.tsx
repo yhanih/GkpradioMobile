@@ -1,6 +1,5 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { wpClient } from '../lib/wordpress';
-import { AppState } from 'react-native';
+import { supabase } from '../lib/supabase';
 
 interface AuthContextType {
   user: any | null;
@@ -20,42 +19,57 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [session, setSession] = useState<any | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const loadSession = async () => {
-    try {
-      const token = await wpClient.getToken();
-      if (token) {
-        const { data, error } = await wpClient.getMe();
-        if (data) {
-          setUser(data);
-          setSession({ token });
-        } else {
-          await wpClient.logout();
-        }
-      }
-    } catch (error) {
-      console.error('Error loading session:', error);
-    } finally {
-      setLoading(false);
-    }
+  const mapUser = async (sessionUser: any | null) => {
+    if (!sessionUser) return null;
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('id,full_name,avatar_url,bio')
+      .eq('id', sessionUser.id)
+      .maybeSingle();
+
+    return {
+      id: sessionUser.id,
+      email: sessionUser.email,
+      fullname: profile?.full_name || sessionUser.user_metadata?.full_name || null,
+      avatarurl: profile?.avatar_url || null,
+      bio: profile?.bio || null,
+    };
   };
 
   useEffect(() => {
-    loadSession();
+    const initializeAuth = async () => {
+      try {
+        const { data, error } = await supabase.auth.getSession();
+        if (error) throw error;
+        setSession(data.session);
+        setUser(await mapUser(data.session?.user ?? null));
+      } catch (error) {
+        console.error('Error loading session:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    initializeAuth();
+
+    const { data: subscription } = supabase.auth.onAuthStateChange(async (_event, nextSession) => {
+      setSession(nextSession);
+      setUser(await mapUser(nextSession?.user ?? null));
+      setLoading(false);
+    });
+
+    return () => {
+      subscription.subscription.unsubscribe();
+    };
   }, []);
 
   const signIn = async (email: string, password: string) => {
     try {
-      const { data, error } = await wpClient.login(email, password);
-
-      if (!error && data) {
-        setSession(data);
-        const userRes = await wpClient.getMe();
-        if (userRes.data) {
-          setUser(userRes.data);
-        }
-      }
-
-      return { error };
+      const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+      if (error) return { error };
+      setSession(data.session);
+      setUser(await mapUser(data.user));
+      return { error: null };
     } catch (error) {
       console.error('Error signing in:', error);
       return { error };
@@ -64,13 +78,30 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const signUp = async (email: string, password: string, fullName?: string) => {
     try {
-      const { data, error } = await wpClient.register(email, password, fullName);
-
-      if (!error) {
-        return await signIn(email, password);
+      const { data, error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          data: { full_name: fullName || '' },
+        },
+      });
+      if (error) {
+        return { error };
       }
 
-      return { error };
+      if (data.user?.id && fullName) {
+        await supabase.from('profiles').upsert({
+          id: data.user.id,
+          full_name: fullName,
+        });
+      }
+
+      if (data.session) {
+        setSession(data.session);
+        setUser(await mapUser(data.session.user));
+      }
+
+      return { error: null };
     } catch (error) {
       console.error('Error signing up:', error);
       return { error };
@@ -79,7 +110,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const signOut = async () => {
     try {
-      await wpClient.logout();
+      await supabase.auth.signOut();
       setUser(null);
       setSession(null);
     } catch (error) {
@@ -89,13 +120,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const resetPassword = async (email: string) => {
-    console.warn('Reset password not implemented for WordPress yet');
-    return { error: 'Please use the website to reset your password' };
+    const { error } = await supabase.auth.resetPasswordForEmail(email);
+    return { error };
   };
 
   const updatePassword = async (password: string) => {
-    console.warn('Update password not implemented for WordPress yet');
-    return { error: 'Please use the website to update your password' };
+    const { error } = await supabase.auth.updateUser({ password });
+    return { error };
   };
 
   return (

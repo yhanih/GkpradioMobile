@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
     Modal,
     View,
@@ -16,17 +16,27 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
-import { wpClient } from '../lib/wordpress';
+import { BackendThread, CreatePostError, createCommunityPost } from '../lib/backend';
 import { useAuth } from '../contexts/AuthContext';
 import { getPostableCategories, Category, getCategoryLabel } from '../constants/categories';
 
 interface NewPostModalProps {
     visible: boolean;
     onClose: () => void;
-    onSuccess: () => void;
+    onSuccess: (createdPost: BackendThread) => Promise<void> | void;
+    onOptimisticCreate?: (tempPost: BackendThread) => void;
+    onCommitCreate?: (tempId: string, persistedPost: BackendThread) => void;
+    onCreateFailed?: (tempId: string) => void;
 }
 
-export function NewPostModal({ visible, onClose, onSuccess }: NewPostModalProps) {
+export function NewPostModal({
+    visible,
+    onClose,
+    onSuccess,
+    onOptimisticCreate,
+    onCommitCreate,
+    onCreateFailed
+}: NewPostModalProps) {
     const { user } = useAuth();
     const categories = getPostableCategories();
     const [selectedCategory, setSelectedCategory] = useState<Category>(categories[0]);
@@ -34,6 +44,14 @@ export function NewPostModal({ visible, onClose, onSuccess }: NewPostModalProps)
     const [content, setContent] = useState('');
     const [isAnonymous, setIsAnonymous] = useState(false);
     const [loading, setLoading] = useState(false);
+    const submitInFlightRef = useRef(false);
+    const isMountedRef = useRef(true);
+
+    useEffect(() => {
+        return () => {
+            isMountedRef.current = false;
+        };
+    }, []);
 
     const resetForm = () => {
         setSelectedCategory(categories[0]);
@@ -50,6 +68,10 @@ export function NewPostModal({ visible, onClose, onSuccess }: NewPostModalProps)
     };
 
     const handleSubmit = async () => {
+        if (loading || submitInFlightRef.current) {
+            return;
+        }
+
         if (!user) {
             Alert.alert('Authentication Required', 'Please sign in to post.');
             return;
@@ -75,29 +97,69 @@ export function NewPostModal({ visible, onClose, onSuccess }: NewPostModalProps)
             return;
         }
 
+        const normalizedTitle = title.trim();
+        const normalizedContent = content.trim();
+        const tempId = `temp-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+
+        const optimisticPost: BackendThread = {
+            id: tempId,
+            title: normalizedTitle,
+            content: normalizedContent,
+            category: selectedCategory.id,
+            createdat: new Date().toISOString(),
+            like_count: 0,
+            comment_count: 0,
+            user_has_liked: false,
+            userid: user.id,
+            is_anonymous: false,
+            ispinned: false,
+            users: {
+                id: user.id,
+                fullname: user.fullname || user.email?.split('@')[0] || 'You',
+                avatarurl: user.avatarurl || null,
+            },
+        };
+
+        onOptimisticCreate?.(optimisticPost);
+
         try {
+            submitInFlightRef.current = true;
             setLoading(true);
 
-            const { error } = await wpClient.createTestimony(
-                title.trim(),
-                content.trim(),
-                selectedCategory.id
-            );
+            const createdPost = await createCommunityPost({
+                title: normalizedTitle,
+                content: normalizedContent,
+                category: selectedCategory.id,
+                userId: user.id,
+            });
 
-            if (error) throw new Error(error);
+            onCommitCreate?.(tempId, createdPost);
 
             Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-            // Success will be shown via toast from parent component
+            await onSuccess(createdPost);
 
             resetForm();
-            onSuccess();
             onClose();
         } catch (error) {
             console.error('Error creating post:', error);
             Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-            throw error; // Let parent handle error display
+            onCreateFailed?.(tempId);
+
+            const createError = error instanceof CreatePostError ? error : null;
+            if (createError?.code === 'validation') {
+                Alert.alert('Unable to Post', createError.message);
+            } else if (createError?.code === 'auth') {
+                Alert.alert('Authentication Required', 'Please sign in again and try posting.');
+            } else if (createError?.code === 'timeout' || createError?.code === 'network') {
+                Alert.alert('Network Issue', 'We could not publish your post. Please try again.');
+            } else {
+                Alert.alert('Unable to Post', 'Something went wrong. Please try again.');
+            }
         } finally {
-            setLoading(false);
+            submitInFlightRef.current = false;
+            if (isMountedRef.current) {
+                setLoading(false);
+            }
         }
     };
 

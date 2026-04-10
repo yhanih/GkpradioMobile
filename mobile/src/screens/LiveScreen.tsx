@@ -18,9 +18,10 @@ import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import * as Haptics from 'expo-haptics';
-import { wpClient } from '../lib/wordpress';
+import { fetchRadioSchedule, fetchRadioStatusFromAzuraCast } from '../lib/backend';
 import { RootStackParamList } from '../types/navigation';
 import { useTheme } from '../contexts/ThemeContext';
+import { useAudio } from '../contexts/AudioContext';
 
 type LiveNavProp = NativeStackNavigationProp<RootStackParamList>;
 
@@ -30,6 +31,7 @@ const HERO_HEIGHT = SCREEN_HEIGHT * 0.55;
 export function LiveScreen() {
   const navigation = useNavigation<LiveNavProp>();
   const { theme, isDark } = useTheme();
+  const { isPlaying, play, pause } = useAudio();
   
   const [radioStatus, setRadioStatus] = useState<any>(null);
   const [schedule, setSchedule] = useState<any>(null);
@@ -54,8 +56,8 @@ export function LiveScreen() {
 
   const loadRadioStatus = async () => {
     try {
-      const { data } = await wpClient.getRadioStatus();
-      if (data) setRadioStatus(data);
+      const data = await fetchRadioStatusFromAzuraCast();
+      setRadioStatus(data);
     } catch (err) {
       console.error('Error auto-loading radio status:', err);
     }
@@ -67,12 +69,12 @@ export function LiveScreen() {
       setError(null);
       
       const [statusRes, scheduleRes] = await Promise.all([
-        wpClient.getRadioStatus(),
-        wpClient.getRadioSchedule()
+        fetchRadioStatusFromAzuraCast(),
+        fetchRadioSchedule()
       ]);
 
-      if (statusRes.data) setRadioStatus(statusRes.data);
-      if (scheduleRes.data) setSchedule(scheduleRes.data);
+      setRadioStatus(statusRes);
+      if (scheduleRes) setSchedule(scheduleRes);
       
     } catch (err) {
       console.error('Error loading live data:', err);
@@ -150,7 +152,7 @@ export function LiveScreen() {
     extrapolate: 'clamp',
   });
 
-  const scheduleImageUrl = schedule?.content?.rendered?.match(/src="([^"]+)"/)?.[1];
+  const scheduleImageUrl = schedule?.image_url;
 
   if (loading) {
     return (
@@ -243,10 +245,12 @@ export function LiveScreen() {
                   isLive && styles.heroButtonLive,
                   pressed && styles.heroButtonPressed,
                 ]}
-                onPress={() => {
+                onPress={async () => {
                   Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
-                  if (radioStatus?.stream_url) {
-                    navigation.navigate('VideoPlayer', { video: { video_url: radioStatus.stream_url } } as any);
+                  if (isPlaying) {
+                    await pause();
+                  } else {
+                    await play();
                   }
                 }}
               >
@@ -256,9 +260,9 @@ export function LiveScreen() {
                   end={{ x: 1, y: 0 }}
                   style={styles.heroButtonGradient}
                 >
-                  <Ionicons name="play" size={24} color="#fff" />
+                  <Ionicons name={isPlaying ? 'pause' : 'play'} size={24} color="#fff" />
                   <Text style={styles.heroButtonText}>
-                    {isLive ? 'Listen Now' : 'Tune In'}
+                    {isPlaying ? 'Pause' : isLive ? 'Listen Now' : 'Tune In'}
                   </Text>
                 </LinearGradient>
               </Pressable>

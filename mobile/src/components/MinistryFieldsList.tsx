@@ -5,6 +5,8 @@ import * as Haptics from 'expo-haptics';
 import { COMMUNITY_CATEGORIES, Category } from '../constants/categories';
 import { useTheme } from '../contexts/ThemeContext';
 import { AnimatedCount } from './AnimatedCount';
+import { fetchCommunityCategoryCounts } from '../lib/backend';
+import { supabase } from '../lib/supabase';
 
 interface MinistryFieldsListProps {
   onPressItem: (category: Category) => void;
@@ -17,26 +19,44 @@ interface Group {
 
 export function MinistryFieldsList({ onPressItem }: MinistryFieldsListProps) {
   const { theme } = useTheme();
-  
-  // Static counts for frontend-only demonstration
-  const counts: { [key: string]: number } = {
-    all: 156,
-    'Prayer Requests': 42,
-    'Pray for Others': 28,
-    'Testimonies': 18,
-    'Praise & Worship': 12,
-    'Words of Encouragement': 34,
-    'Born Again': 7,
-    'Youth Voices': 15,
-    'Sharing Hobbies': 24,
-    'Physical & Mental Health': 19,
-    'Money & Finances': 11,
-    'To My Wife': 8,
-    'To My Husband': 6,
-    'Bragging on My Child (ren)': 14,
-  };
+  const [counts, setCounts] = useState<Record<string, number>>({});
+  const [loading, setLoading] = useState(true);
 
-  const loading = false;
+  useEffect(() => {
+    let isMounted = true;
+    let refreshTimer: ReturnType<typeof setTimeout> | null = null;
+
+    const loadCounts = async () => {
+      try {
+        const next = await fetchCommunityCategoryCounts();
+        if (isMounted) setCounts(next);
+      } catch (error) {
+        console.error('Error loading category counts:', error);
+      } finally {
+        if (isMounted) setLoading(false);
+      }
+    };
+
+    const queueRefresh = () => {
+      if (refreshTimer) clearTimeout(refreshTimer);
+      refreshTimer = setTimeout(() => {
+        loadCounts();
+      }, 200);
+    };
+
+    loadCounts();
+
+    const channel = supabase
+      .channel('community-category-counts')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'posts' }, queueRefresh)
+      .subscribe();
+
+    return () => {
+      isMounted = false;
+      if (refreshTimer) clearTimeout(refreshTimer);
+      supabase.removeChannel(channel);
+    };
+  }, []);
 
   const groups: Group[] = [
     {

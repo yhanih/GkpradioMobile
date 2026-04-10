@@ -18,7 +18,14 @@ import { Ionicons } from '@expo/vector-icons';
 import { RootStackParamList, MainTabParamList } from '../types/navigation';
 import { ProfileAvatar } from '../components/ProfileAvatar';
 
-import { wpClient, WPPodcast, WPVideo, WPRadioStatus } from '../lib/wordpress';
+import {
+  fetchHomeStats,
+  fetchPodcasts,
+  fetchRadioSchedule,
+  fetchRadioStatusFromAzuraCast,
+  fetchVideos,
+} from '../lib/backend';
+import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { useAudio } from '../contexts/AudioContext';
 
@@ -65,7 +72,12 @@ export function HomeScreen() {
   const [featuredEpisodes, setFeaturedEpisodes] = useState<Episode[]>([]);
   const [recentVideos, setRecentVideos] = useState<Video[]>([]);
   const [schedule, setSchedule] = useState<any[]>([]);
-  const [radioStatus, setRadioStatus] = useState<WPRadioStatus | null>(null);
+  const [radioStatus, setRadioStatus] = useState<any>(null);
+  const [homeStats, setHomeStats] = useState({
+    familyMembers: 0,
+    prayersLifted: 0,
+    mediaItems: 0,
+  });
 
   // Animation State
   const fadeAnim = React.useRef(new Animated.Value(0)).current;
@@ -85,54 +97,85 @@ export function HomeScreen() {
     }
   }, [user]);
 
+  useEffect(() => {
+    let mounted = true;
+    let refreshTimer: ReturnType<typeof setTimeout> | null = null;
+
+    const refreshStats = async () => {
+      try {
+        const stats = await fetchHomeStats();
+        if (mounted) setHomeStats(stats);
+      } catch (error) {
+        console.error('[HomeScreen] Error fetching home stats:', error);
+      }
+    };
+
+    const queueStatsRefresh = () => {
+      if (refreshTimer) clearTimeout(refreshTimer);
+      refreshTimer = setTimeout(() => {
+        refreshStats();
+      }, 250);
+    };
+
+    refreshStats();
+
+    const channel = supabase
+      .channel('home-stats-realtime')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, queueStatsRefresh)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'posts' }, queueStatsRefresh)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'podcasts' }, queueStatsRefresh)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'videos' }, queueStatsRefresh)
+      .subscribe();
+
+    return () => {
+      mounted = false;
+      if (refreshTimer) clearTimeout(refreshTimer);
+      supabase.removeChannel(channel);
+    };
+  }, []);
+
   const fetchData = async () => {
     console.log('[HomeScreen] fetchData started');
     try {
       setLoading(true);
 
       const [podcastsRes, videosRes, radioRes, scheduleRes] = await Promise.all([
-        wpClient.getPodcasts(5),
-        wpClient.getVideos(3),
-        wpClient.getRadioStatus(),
-        wpClient.getRadioSchedule()
+        fetchPodcasts(5),
+        fetchVideos(3),
+        fetchRadioStatusFromAzuraCast(),
+        fetchRadioSchedule()
       ]);
 
-      if (radioRes.data) {
-        setRadioStatus(radioRes.data);
-      }
+      setRadioStatus(radioRes);
 
-      console.log('[HomeScreen] Radio status:', radioRes.data?.is_live ? 'Live' : 'Offline');
-      console.log('[HomeScreen] Schedule data:', scheduleRes.data ? 'Found' : 'Missing');
+      console.log('[HomeScreen] Radio status:', radioRes?.is_live ? 'Live' : 'Offline');
+      console.log('[HomeScreen] Schedule data:', scheduleRes ? 'Found' : 'Missing');
 
-      if (podcastsRes.data) {
-        setFeaturedEpisodes(podcastsRes.data.map((p: WPPodcast) => ({
-          id: String(p.id),
-          title: p.title.rendered,
-          description: p.content.rendered,
-          created_at: p.date,
-          thumbnail_url: p.thumbnail_url,
-          audio_url: p.audio_url
-        } as any)));
-      }
+      setFeaturedEpisodes(podcastsRes.map((p: any) => ({
+        id: String(p.id),
+        title: p.title,
+        description: p.description,
+        created_at: p.created_at,
+        thumbnail_url: p.thumbnail_url,
+        audio_url: p.audio_url
+      } as any)));
 
-      if (videosRes.data) {
-        setRecentVideos(videosRes.data.map((v: WPVideo) => ({
-          id: String(v.id),
-          title: v.title.rendered,
-          created_at: v.date,
-          thumbnail_url: v.thumbnail_url,
-          video_url: v.video_url
-        } as any)));
-      }
+      setRecentVideos(videosRes.map((v: any) => ({
+        id: String(v.id),
+        title: v.title,
+        created_at: v.created_at,
+        thumbnail_url: v.thumbnail_url,
+        video_url: v.video_url
+      } as any)));
 
-      if (scheduleRes.data) {
+      if (scheduleRes) {
         // Wrap single item in array for ScheduleCarousel
-        setSchedule([scheduleRes.data]);
+        setSchedule([scheduleRes]);
       } else {
         setSchedule([]);
       }
 
-      console.log(`[HomeScreen] State updated: ${podcastsRes.data?.length || 0} pods, ${videosRes.data?.length || 0} vids, ${scheduleRes.data ? 1 : 0} sched`);
+      console.log(`[HomeScreen] State updated: ${podcastsRes.length || 0} pods, ${videosRes.length || 0} vids, ${scheduleRes ? 1 : 0} sched`);
 
     } catch (error: any) {
       console.error('[HomeScreen] Error fetching dashboard data:', error);
@@ -242,7 +285,11 @@ export function HomeScreen() {
               />
 
               {/* Brand Stats */}
-              <StatsStrip />
+              <StatsStrip
+                familyMembers={homeStats.familyMembers}
+                prayersLifted={homeStats.prayersLifted}
+                mediaItems={homeStats.mediaItems}
+              />
 
               {/* Ministry Fields (Brand Element from Web) */}
               <MinistryFieldsList onPressItem={(category) => navigation.navigate('Community')} />

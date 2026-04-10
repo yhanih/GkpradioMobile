@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View,
   Text,
@@ -19,7 +19,13 @@ import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import * as Haptics from 'expo-haptics';
-import { wpClient, WPComment, WPTestimony, WPUser } from '../lib/wordpress';
+import {
+  createCommentForPost,
+  fetchCommentsForPost,
+  getPostById,
+  toggleCommunityPostLike,
+} from '../lib/backend';
+import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { useBookmarks } from '../contexts/BookmarksContext';
 import { RootStackParamList } from '../types/navigation';
@@ -77,10 +83,23 @@ export function PostDetailScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [newComment, setNewComment] = useState('');
   const [submittingComment, setSubmittingComment] = useState(false);
+  const submitCommentLockRef = useRef(false);
+  const realtimeDebounceRef = useRef<NodeJS.Timeout | null>(null);
+
+  const dedupeComments = useCallback((items: CommentWithUser[]) => {
+    const seen = new Set<string>();
+    const ordered: CommentWithUser[] = [];
+    for (const item of items) {
+      if (seen.has(item.id)) continue;
+      seen.add(item.id);
+      ordered.push(item);
+    }
+    return ordered;
+  }, []);
 
   const fetchThread = useCallback(async () => {
     try {
-      const threadId = Number(route.params.threadId);
+      const threadId = String(route.params.threadId);
       
       // If we have the thread in params, use it for immediate display
       if (route.params.thread && !thread) {
@@ -103,57 +122,21 @@ export function PostDetailScreen() {
 
       // Fetch fresh data from API
       // Since we don't have getTestimonyById yet, we'll use getTestimonies and filter
-      const { data, error } = await wpClient.getTestimonies(100);
-      if (data) {
-        const found = data.find(t => t.id === threadId);
-        if (found) {
-          setThread({
-            id: String(found.id),
-            title: found.title.rendered,
-            content: found.content.rendered.replace(/<[^>]*>?/gm, ''),
-            createdat: found.date,
-            category: 'general', // Default category for now
-            userid: String(found.author),
-            is_anonymous: false,
-            ispinned: false,
-            like_count: found.like_count || 0,
-            comment_count: found.comment_count || 0,
-            user_has_liked: found.user_has_liked || false,
-            users: { 
-              id: String(found.author), 
-              fullname: 'Member',
-              username: 'member'
-            } as any
-          });
-        }
-      }
+      const found = await getPostById(threadId, user?.id);
+      if (found) setThread(found as ThreadWithUser);
     } catch (error) {
       console.error('Error fetching thread:', error);
     }
-  }, [route.params.threadId, route.params.thread]);
+  }, [route.params.threadId, route.params.thread, user?.id]);
 
   const fetchComments = useCallback(async () => {
     try {
-      const { data, error } = await wpClient.getComments(Number(route.params.threadId));
-      if (data) {
-        const formatted = data.map((c: WPComment) => ({
-          id: String(c.id),
-          threadid: String(c.post),
-          userid: 'WP_USER',
-          content: c.content.rendered.replace(/<[^>]*>?/gm, ''),
-          createdat: c.date,
-          users: { 
-            id: 'WP_USER', 
-            fullname: c.author_name, 
-            avatarurl: c.author_avatar_urls?.['96'] 
-          }
-        }));
-        setComments(formatted);
-      }
+      const data = await fetchCommentsForPost(String(route.params.threadId));
+      setComments(dedupeComments(data as CommentWithUser[]));
     } catch (error) {
       console.error('Error fetching comments:', error);
     }
-  }, [route.params.threadId]);
+  }, [route.params.threadId, dedupeComments]);
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -164,6 +147,33 @@ export function PostDetailScreen() {
   useEffect(() => {
     loadData();
   }, [loadData]);
+
+  useEffect(() => {
+    const queueCommentsRefresh = () => {
+      if (realtimeDebounceRef.current) {
+        clearTimeout(realtimeDebounceRef.current);
+      }
+      realtimeDebounceRef.current = setTimeout(() => {
+        fetchComments();
+      }, 300);
+    };
+
+    const channel = supabase
+      .channel(`post-comments-${route.params.threadId}`)
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'comments', filter: `post_id=eq.${route.params.threadId}` },
+        queueCommentsRefresh
+      )
+      .subscribe();
+
+    return () => {
+      if (realtimeDebounceRef.current) {
+        clearTimeout(realtimeDebounceRef.current);
+      }
+      supabase.removeChannel(channel);
+    };
+  }, [route.params.threadId, fetchComments]);
 
   const onRefresh = async () => {
     setRefreshing(true);
@@ -191,8 +201,7 @@ export function PostDetailScreen() {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
 
     try {
-      const { error } = await wpClient.toggleLike(Number(thread.id));
-      if (error) throw new Error(error);
+      await toggleCommunityPostLike(thread.id, user.id);
     } catch (error: any) {
       console.error('Error toggling like:', error);
       // Rollback
@@ -244,30 +253,69 @@ export function PostDetailScreen() {
   };
 
   const handleSubmitComment = async () => {
+    if (submittingComment || submitCommentLockRef.current) return;
+
     if (!user) {
       Alert.alert('Sign In Required', 'Please sign in to comment.');
       return;
     }
     if (!thread || !newComment.trim()) return;
 
+    const trimmedComment = newComment.trim();
+    const optimisticCommentId = `temp-comment-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const optimisticComment: CommentWithUser = {
+      id: optimisticCommentId,
+      threadid: thread.id,
+      userid: user.id,
+      content: trimmedComment,
+      createdat: new Date().toISOString(),
+      users: {
+        id: user.id,
+        fullname: user.fullname || user.email?.split('@')[0] || 'You',
+        avatarurl: user.avatarurl || null,
+      },
+    };
+
+    submitCommentLockRef.current = true;
     setSubmittingComment(true);
+    setComments((prev) => dedupeComments([...prev, optimisticComment]));
+    setThread(prev => prev ? {
+      ...prev,
+      comment_count: (prev.comment_count || 0) + 1
+    } : null);
 
     try {
-      const { error } = await wpClient.createComment(Number(thread.id), newComment.trim());
-      if (error) throw new Error(error);
+      const createdComment = await createCommentForPost(thread.id, user.id, trimmedComment);
+      setComments((prev) =>
+        dedupeComments(
+          prev.map((comment) =>
+            comment.id === optimisticCommentId
+              ? ({
+                  ...createdComment,
+                  users: createdComment.users
+                    ? {
+                        ...createdComment.users,
+                        username: undefined,
+                      } as any
+                    : null,
+                } as CommentWithUser)
+              : comment
+          )
+        )
+      );
 
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       setNewComment('');
-      await fetchComments();
-      
-      setThread(prev => prev ? {
-        ...prev,
-        comment_count: (prev.comment_count || 0) + 1
-      } : null);
     } catch (error) {
       console.error('Error submitting comment:', error);
+      setComments((prev) => prev.filter((comment) => comment.id !== optimisticCommentId));
+      setThread(prev => prev ? {
+        ...prev,
+        comment_count: Math.max((prev.comment_count || 1) - 1, 0)
+      } : null);
       Alert.alert('Error', 'Unable to post comment. Please try again.');
     } finally {
+      submitCommentLockRef.current = false;
       setSubmittingComment(false);
     }
   };

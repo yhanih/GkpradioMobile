@@ -19,7 +19,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { wpClient, WPPodcast, WPVideo } from '../lib/wordpress';
+import { fetchPodcasts, fetchVideos } from '../lib/backend';
 import { RootStackParamList } from '../types/navigation';
 
 interface Episode {
@@ -140,35 +140,31 @@ export function MediaScreen() {
       setError(null);
 
       const [podcastsRes, videosRes] = await Promise.all([
-        wpClient.getPodcasts(20),
-        wpClient.getVideos(20)
+        fetchPodcasts(20),
+        fetchVideos(20)
       ]);
 
-      console.log(`[MediaScreen] Data received: ${podcastsRes.data?.length || 0} pods, ${videosRes.data?.length || 0} vids`);
+      console.log(`[MediaScreen] Data received: ${podcastsRes.length || 0} pods, ${videosRes.length || 0} vids`);
 
-      if (podcastsRes.data) {
-        setPodcasts(podcastsRes.data.map((p: WPPodcast) => ({
-          id: String(p.id),
-          title: p.title.rendered,
-          description: p.content.rendered,
-          created_at: p.date,
-          thumbnail_url: p.thumbnail_url,
-          audio_url: p.audio_url,
-          is_featured: false
-        } as any)));
-      }
+      setPodcasts(podcastsRes.map((p: any) => ({
+        id: String(p.id),
+        title: p.title,
+        description: p.description,
+        created_at: p.created_at,
+        thumbnail_url: p.thumbnail_url,
+        audio_url: p.audio_url,
+        is_featured: false
+      } as any)));
 
-      if (videosRes.data) {
-        setVideos(videosRes.data.map((v: WPVideo) => ({
-          id: String(v.id),
-          title: v.title.rendered,
-          description: v.content.rendered,
-          created_at: v.date,
-          thumbnail_url: v.thumbnail_url,
-          video_url: v.video_url,
-          is_featured: false
-        } as any)));
-      }
+      setVideos(videosRes.map((v: any) => ({
+        id: String(v.id),
+        title: v.title,
+        description: v.description,
+        created_at: v.created_at,
+        thumbnail_url: v.thumbnail_url,
+        video_url: v.video_url,
+        is_featured: false
+      } as any)));
       console.log('[MediaScreen] State updated');
     } catch (err: any) {
       console.error('[MediaScreen] Error fetching media:', err);

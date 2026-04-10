@@ -5,7 +5,13 @@ import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { LinearGradient } from 'expo-linear-gradient';
-import { wpClient, WPTestimony } from '../lib/wordpress';
+import {
+  BackendThread,
+  fetchCommunityPosts,
+  getCommunityStats,
+  toggleCommunityPostLike,
+} from '../lib/backend';
+import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { useBookmarks } from '../contexts/BookmarksContext';
 import { useTheme } from '../contexts/ThemeContext';
@@ -71,6 +77,26 @@ export function CommunityScreen() {
   const sortByRef = useRef(sortBy);
   const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const tabIndicatorAnim = useRef(new Animated.Value(0)).current;
+  const realtimeDebounceRef = useRef<NodeJS.Timeout | null>(null);
+
+  const dedupeThreads = useCallback((items: ThreadWithUser[]) => {
+    const seen = new Set<string>();
+    const result: ThreadWithUser[] = [];
+    for (const item of items) {
+      if (seen.has(item.id)) continue;
+      seen.add(item.id);
+      result.push(item);
+    }
+    return result;
+  }, []);
+
+  const sortByNewest = useCallback((items: ThreadWithUser[]) => {
+    return [...items].sort((a, b) => {
+      const aTime = new Date(a.createdat).getTime() || 0;
+      const bTime = new Date(b.createdat).getTime() || 0;
+      return bTime - aTime;
+    });
+  }, []);
 
   useEffect(() => {
     sortByRef.current = sortBy;
@@ -103,71 +129,49 @@ export function CommunityScreen() {
     };
   }, [searchQuery]);
 
-  useEffect(() => {
-    fetchData();
-    fetchStats();
-  }, [user, sortBy]);
+  const fetchStats = useCallback(async () => {
+    try {
+      const data = await getCommunityStats();
+      setStats(data);
+    } catch (_error) {
+      setStats({ prayers: 0, testimonies: 0, total: 0 });
+    }
+  }, []);
 
-  useFocusEffect(
-    useCallback(() => {
-      if (!loading) {
-        fetchData();
-        refreshBookmarks();
-      }
-    }, [sortBy])
-  );
-
-  const fetchStats = async () => {
-    setStats({
-      prayers: 70,
-      testimonies: 18,
-      total: 156,
-    });
-  };
-
-  const fetchData = async () => {
+  const fetchData = useCallback(async (silent = false) => {
     console.log('[CommunityScreen] fetchData started');
     try {
-      setLoading(true);
+      if (!silent) {
+        setLoading(true);
+      }
       setError(null);
 
-      const { data, error } = await wpClient.getTestimonies(20);
-      console.log(`[CommunityScreen] Testimonies fetched: ${data?.length || 0}`);
-
-      if (error) {
-        console.error('[CommunityScreen] API Error:', error);
-        throw new Error(error);
-      }
-
-      if (data) {
-        const formattedThreads: ThreadWithUser[] = data.map((t: WPTestimony) => ({
-          id: String(t.id),
-          title: t.title.rendered,
-          content: t.content.rendered.replace(/<[^>]*>?/gm, ''),
-          category: 'Testimonies',
-          createdat: t.date,
-          like_count: t.like_count || 0,
-          comment_count: t.comment_count || 0,
-          user_has_liked: t.user_has_liked || false,
-          userid: String(t.author),
-          users: {
-            id: String(t.author),
-            fullname: 'Member',
-            avatarurl: `https://i.pravatar.cc/150?u=${t.author}`
-          }
-        } as any));
-
-        console.log(`[CommunityScreen] State mapping complete: ${formattedThreads.length} items`);
-        setThreads(formattedThreads);
-      }
+      const data = await fetchCommunityPosts(sortBy, user?.id);
+      console.log(`[CommunityScreen] Posts fetched: ${data.length}`);
+      const ordered = sortByNewest(dedupeThreads(data as ThreadWithUser[]));
+      setThreads(ordered);
     } catch (err: any) {
       console.error('[CommunityScreen] Error fetching community data:', err);
       if (err.stack) console.error(err.stack);
       setError('Unable to load community content. Please try again.');
     } finally {
-      setLoading(false);
+      if (!silent) {
+        setLoading(false);
+      }
     }
-  };
+  }, [dedupeThreads, sortByNewest, sortBy, user?.id]);
+
+  useEffect(() => {
+    fetchData();
+    fetchStats();
+  }, [fetchData, fetchStats]);
+
+  useFocusEffect(
+    useCallback(() => {
+      fetchData(true);
+      refreshBookmarks();
+    }, [fetchData, refreshBookmarks])
+  );
 
   const getLikeAnimation = (threadId: string) => {
     if (!likeAnimations[threadId]) {
@@ -184,6 +188,32 @@ export function CommunityScreen() {
       }
     });
   }, [threads]);
+
+  useEffect(() => {
+    const queueRealtimeRefresh = () => {
+      if (realtimeDebounceRef.current) {
+        clearTimeout(realtimeDebounceRef.current);
+      }
+      realtimeDebounceRef.current = setTimeout(() => {
+        fetchData(true);
+        fetchStats();
+      }, 350);
+    };
+
+    const channel = supabase
+      .channel('community-feed-realtime')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'posts' }, queueRealtimeRefresh)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'post_likes' }, queueRealtimeRefresh)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'comments' }, queueRealtimeRefresh)
+      .subscribe();
+
+    return () => {
+      if (realtimeDebounceRef.current) {
+        clearTimeout(realtimeDebounceRef.current);
+      }
+      supabase.removeChannel(channel);
+    };
+  }, [fetchData, fetchStats]);
 
   const animateLike = (threadId: string) => {
     const anim = getLikeAnimation(threadId);
@@ -225,8 +255,7 @@ export function CommunityScreen() {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
 
     try {
-      const { error } = await wpClient.toggleLike(Number(threadId));
-      if (error) throw new Error(error);
+      await toggleCommunityPostLike(threadId, user.id);
     } catch (error: any) {
       console.error('Error toggling like:', error);
       setThreads(prev => prev.map(t => {
@@ -361,6 +390,15 @@ export function CommunityScreen() {
       setShowNewPostModal(true);
     });
   };
+
+  const focusFeedOnCreatedCategory = useCallback((category: string) => {
+    const isPrayer = PRAYER_CATEGORIES.includes(category);
+    setSortBy('newest');
+    setActiveMode(isPrayer ? 'prayers' : 'discussions');
+    setActiveCategory(category);
+    setSearchQuery('');
+    setDebouncedSearchQuery('');
+  }, []);
 
   const formatTimeAgo = (dateString: string) => {
     try {
@@ -875,12 +913,28 @@ export function CommunityScreen() {
       <NewPostModal
         visible={showNewPostModal}
         onClose={() => setShowNewPostModal(false)}
-        onSuccess={async () => {
+        onOptimisticCreate={(tempPost) => {
+          focusFeedOnCreatedCategory(tempPost.category);
+          setThreads((prev) => sortByNewest(dedupeThreads([tempPost as ThreadWithUser, ...prev])));
+        }}
+        onCommitCreate={(tempId, persistedPost) => {
+          focusFeedOnCreatedCategory(persistedPost.category);
+          setThreads((prev) => {
+            const withoutTemp = prev.filter((t) => t.id !== tempId);
+            return sortByNewest(
+              dedupeThreads([persistedPost as ThreadWithUser, ...withoutTemp])
+            );
+          });
+        }}
+        onCreateFailed={(tempId) => {
+          setThreads((prev) => prev.filter((t) => t.id !== tempId));
+        }}
+        onSuccess={async (_createdPost: BackendThread) => {
           try {
-            await Promise.all([fetchData(), fetchStats()]);
+            await Promise.all([fetchStats(), refreshBookmarks()]);
             showToast('Post shared successfully!', 'success');
           } catch (error) {
-            showToast('Post created but failed to refresh. Pull down to refresh.', 'warning');
+            showToast('Post created but some updates are pending. Pull to refresh.', 'warning');
           }
         }}
       />
