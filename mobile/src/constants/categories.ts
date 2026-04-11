@@ -1,5 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 
+export type PostType = 'prayer' | 'discussion';
+
 export interface Category {
   id: string;
   label: string;
@@ -169,8 +171,21 @@ export const COMMUNITY_CATEGORIES: Category[] = [
   },
 ];
 
+export const PRAYER_CATEGORY_IDS = ['Prayer Requests', 'Pray for Others'] as const;
+
+export const isPrayerCategory = (categoryId: string): boolean =>
+  PRAYER_CATEGORY_IDS.includes(categoryId as (typeof PRAYER_CATEGORY_IDS)[number]);
+
+export const getPostTypeForCategory = (categoryId: string): PostType =>
+  isPrayerCategory(categoryId) ? 'prayer' : 'discussion';
+
 export const getPostableCategories = () => 
   COMMUNITY_CATEGORIES.filter(cat => cat.id !== 'all');
+
+export const getPostableCategoriesByType = (postType: PostType) =>
+  getPostableCategories().filter((cat) =>
+    postType === 'prayer' ? isPrayerCategory(cat.id) : !isPrayerCategory(cat.id)
+  );
 
 export const getCategoryById = (id: string) => 
   COMMUNITY_CATEGORIES.find(cat => cat.id === id);

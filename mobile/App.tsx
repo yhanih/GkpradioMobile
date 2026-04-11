@@ -61,6 +61,7 @@ function MainTabs() {
     <>
       <DeepLinkHandler />
       <Tab.Navigator
+        initialRouteName="Community"
         screenOptions={({ route }) => ({
           tabBarIcon: ({ focused, color, size }) => {
             let iconName: keyof typeof Ionicons.glyphMap = 'home';

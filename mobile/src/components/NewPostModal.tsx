@@ -18,7 +18,12 @@ import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
 import { BackendThread, CreatePostError, createCommunityPost } from '../lib/backend';
 import { useAuth } from '../contexts/AuthContext';
-import { getPostableCategories, Category, getCategoryLabel } from '../constants/categories';
+import {
+    Category,
+    PostType,
+    getPostTypeForCategory,
+    getPostableCategoriesByType,
+} from '../constants/categories';
 
 interface NewPostModalProps {
     visible: boolean;
@@ -38,7 +43,8 @@ export function NewPostModal({
     onCreateFailed
 }: NewPostModalProps) {
     const { user } = useAuth();
-    const categories = getPostableCategories();
+    const [postType, setPostType] = useState<PostType>('prayer');
+    const categories = getPostableCategoriesByType(postType);
     const [selectedCategory, setSelectedCategory] = useState<Category>(categories[0]);
     const [title, setTitle] = useState('');
     const [content, setContent] = useState('');
@@ -54,11 +60,19 @@ export function NewPostModal({
     }, []);
 
     const resetForm = () => {
-        setSelectedCategory(categories[0]);
+        setPostType('prayer');
+        const prayerCategories = getPostableCategoriesByType('prayer');
+        setSelectedCategory(prayerCategories[0]);
         setTitle('');
         setContent('');
         setIsAnonymous(false);
     };
+
+    useEffect(() => {
+        if (!categories.some((cat) => cat.id === selectedCategory?.id)) {
+            setSelectedCategory(categories[0]);
+        }
+    }, [categories, selectedCategory?.id]);
 
     const handleClose = () => {
         if (!loading) {
@@ -106,12 +120,15 @@ export function NewPostModal({
             title: normalizedTitle,
             content: normalizedContent,
             category: selectedCategory.id,
+            post_type: postType,
             createdat: new Date().toISOString(),
             like_count: 0,
+            prayer_count: 0,
             comment_count: 0,
             user_has_liked: false,
+            user_has_prayed: false,
             userid: user.id,
-            is_anonymous: false,
+            is_anonymous: isAnonymous,
             ispinned: false,
             users: {
                 id: user.id,
@@ -131,6 +148,8 @@ export function NewPostModal({
                 content: normalizedContent,
                 category: selectedCategory.id,
                 userId: user.id,
+                postType,
+                isAnonymous,
             });
 
             onCommitCreate?.(tempId, createdPost);
@@ -185,6 +204,46 @@ export function NewPostModal({
 
                     <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
                         <View style={styles.section}>
+                            <Text style={styles.label}>Post Type</Text>
+                            <View style={styles.postTypeContainer}>
+                                <Pressable
+                                    style={[styles.postTypeButton, postType === 'prayer' && styles.postTypeButtonActive]}
+                                    onPress={() => {
+                                        Haptics.selectionAsync();
+                                        setPostType('prayer');
+                                    }}
+                                    disabled={loading}
+                                >
+                                    <Ionicons
+                                        name={postType === 'prayer' ? 'hand-right' : 'hand-right-outline'}
+                                        size={16}
+                                        color={postType === 'prayer' ? '#fff' : '#71717a'}
+                                    />
+                                    <Text style={[styles.postTypeText, postType === 'prayer' && styles.postTypeTextActive]}>
+                                        Prayer
+                                    </Text>
+                                </Pressable>
+                                <Pressable
+                                    style={[styles.postTypeButton, postType === 'discussion' && styles.postTypeButtonActive]}
+                                    onPress={() => {
+                                        Haptics.selectionAsync();
+                                        setPostType('discussion');
+                                    }}
+                                    disabled={loading}
+                                >
+                                    <Ionicons
+                                        name={postType === 'discussion' ? 'chatbubbles' : 'chatbubbles-outline'}
+                                        size={16}
+                                        color={postType === 'discussion' ? '#fff' : '#71717a'}
+                                    />
+                                    <Text style={[styles.postTypeText, postType === 'discussion' && styles.postTypeTextActive]}>
+                                        Discussion
+                                    </Text>
+                                </Pressable>
+                            </View>
+                        </View>
+
+                        <View style={styles.section}>
                             <Text style={styles.label}>Category</Text>
                             <ScrollView 
                                 horizontal 
@@ -201,6 +260,7 @@ export function NewPostModal({
                                         onPress={() => {
                                             Haptics.selectionAsync();
                                             setSelectedCategory(category);
+                                            setPostType(getPostTypeForCategory(category.id));
                                         }}
                                         disabled={loading}
                                     >
@@ -285,7 +345,9 @@ export function NewPostModal({
                             <Text style={styles.guidanceText}>
                                 {isAnonymous 
                                     ? 'Your post will be shared anonymously. Your identity will remain private.'
-                                    : 'Your post will be visible to the community. Others can interact, support, and pray with you.'
+                                    : postType === 'prayer'
+                                        ? 'Prayer posts invite the community to stand with you through prayer.'
+                                        : 'Discussion posts invite public conversation and replies from the community.'
                                 }
                             </Text>
                         </View>
@@ -307,7 +369,9 @@ export function NewPostModal({
                                     style={styles.submitGradient}
                                 >
                                     <Ionicons name="send" size={20} color="#fff" />
-                                    <Text style={styles.submitText}>Post {selectedCategory.label}</Text>
+                                    <Text style={styles.submitText}>
+                                        {postType === 'prayer' ? 'Share Prayer' : `Start ${selectedCategory.label}`}
+                                    </Text>
                                 </LinearGradient>
                             )}
                         </Pressable>
@@ -355,6 +419,34 @@ const styles = StyleSheet.create({
         fontWeight: '600',
         color: '#09090b',
         marginBottom: 12,
+    },
+    postTypeContainer: {
+        flexDirection: 'row',
+        gap: 10,
+    },
+    postTypeButton: {
+        flex: 1,
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 6,
+        borderRadius: 12,
+        borderWidth: 1,
+        borderColor: '#e4e4e7',
+        backgroundColor: '#f4f4f5',
+        paddingVertical: 10,
+    },
+    postTypeButtonActive: {
+        backgroundColor: '#047857',
+        borderColor: '#047857',
+    },
+    postTypeText: {
+        fontSize: 14,
+        fontWeight: '600',
+        color: '#71717a',
+    },
+    postTypeTextActive: {
+        color: '#fff',
     },
     categoryScrollContent: {
         gap: 10,

@@ -4,32 +4,25 @@ import {
   ScrollView,
   RefreshControl,
   StyleSheet,
-  ActivityIndicator,
   StatusBar,
   Text,
-  Pressable,
   Animated
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, CompositeNavigationProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
-import { Ionicons } from '@expo/vector-icons';
 import { RootStackParamList, MainTabParamList } from '../types/navigation';
 import { ProfileAvatar } from '../components/ProfileAvatar';
 
 import {
   fetchHomeStats,
   fetchPodcasts,
-  fetchRadioSchedule,
-  fetchRadioStatusFromAzuraCast,
   fetchVideos,
 } from '../lib/backend';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
-import { useAudio } from '../contexts/AudioContext';
 
-import { HeroPlayerCard } from '../components/HeroPlayerCard';
 import { MediaRail } from '../components/MediaRail';
 import { StatsStrip } from '../components/StatsStrip';
 import { MinistryFieldsList } from '../components/MinistryFieldsList';
@@ -61,7 +54,6 @@ type HomeNavigationProp = CompositeNavigationProp<
 
 export function HomeScreen() {
   const { user } = useAuth();
-  const { isPlaying, play, pause } = useAudio();
   const navigation = useNavigation<HomeNavigationProp>();
 
   const [loading, setLoading] = useState(true);
@@ -71,8 +63,6 @@ export function HomeScreen() {
   // Data State
   const [featuredEpisodes, setFeaturedEpisodes] = useState<Episode[]>([]);
   const [recentVideos, setRecentVideos] = useState<Video[]>([]);
-  const [schedule, setSchedule] = useState<any[]>([]);
-  const [radioStatus, setRadioStatus] = useState<any>(null);
   const [homeStats, setHomeStats] = useState({
     familyMembers: 0,
     prayersLifted: 0,
@@ -92,9 +82,9 @@ export function HomeScreen() {
 
   useEffect(() => {
     fetchData();
-    if (user?.email) {
-      setUserName(user.email.split('@')[0]);
-    }
+    const fullName = user?.fullname?.trim();
+    const emailName = user?.email?.split('@')?.[0];
+    setUserName(fullName || emailName || 'Friend');
   }, [user]);
 
   useEffect(() => {
@@ -139,17 +129,10 @@ export function HomeScreen() {
     try {
       setLoading(true);
 
-      const [podcastsRes, videosRes, radioRes, scheduleRes] = await Promise.all([
+      const [podcastsRes, videosRes] = await Promise.all([
         fetchPodcasts(5),
         fetchVideos(3),
-        fetchRadioStatusFromAzuraCast(),
-        fetchRadioSchedule()
       ]);
-
-      setRadioStatus(radioRes);
-
-      console.log('[HomeScreen] Radio status:', radioRes?.is_live ? 'Live' : 'Offline');
-      console.log('[HomeScreen] Schedule data:', scheduleRes ? 'Found' : 'Missing');
 
       setFeaturedEpisodes(podcastsRes.map((p: any) => ({
         id: String(p.id),
@@ -168,14 +151,7 @@ export function HomeScreen() {
         video_url: v.video_url
       } as any)));
 
-      if (scheduleRes) {
-        // Wrap single item in array for ScheduleCarousel
-        setSchedule([scheduleRes]);
-      } else {
-        setSchedule([]);
-      }
-
-      console.log(`[HomeScreen] State updated: ${podcastsRes.length || 0} pods, ${videosRes.length || 0} vids, ${scheduleRes ? 1 : 0} sched`);
+      console.log(`[HomeScreen] State updated: ${podcastsRes.length || 0} pods, ${videosRes.length || 0} vids`);
 
     } catch (error: any) {
       console.error('[HomeScreen] Error fetching dashboard data:', error);
@@ -189,14 +165,6 @@ export function HomeScreen() {
     setRefreshing(true);
     await fetchData();
     setRefreshing(false);
-  };
-
-  const handleTogglePlay = async () => {
-    if (isPlaying) {
-      await pause();
-    } else {
-      await play();
-    }
   };
 
   const getGreeting = () => {
@@ -243,11 +211,6 @@ export function HomeScreen() {
                 <View style={{ height: 22, width: '100%', backgroundColor: '#e4e4e7', borderRadius: 8, marginBottom: 12 }} />
               </View>
 
-              {/* Hero Section Skeleton */}
-              <View style={{ marginHorizontal: 20, marginBottom: 24 }}>
-                <View style={{ height: 200, backgroundColor: '#e4e4e7', borderRadius: 16 }} />
-              </View>
-
               {/* Stats Skeleton */}
               <View style={{ flexDirection: 'row', justifyContent: 'space-around', marginHorizontal: 20, marginBottom: 32 }}>
                 {[1, 2, 3].map((i) => (
@@ -273,16 +236,6 @@ export function HomeScreen() {
                   Join our community of believers in daily inspiration, powerful testimonies, and life-changing conversations.
                 </Text>
               </Animated.View>
-
-              {/* Hero Section - The Radio */}
-              <HeroPlayerCard
-                isPlaying={isPlaying}
-                onTogglePlay={handleTogglePlay}
-                currentShowTitle={radioStatus?.now_playing?.title || "Kingdom Principles Live"}
-                currentShowHost={radioStatus?.now_playing?.artist || "GKP Radio"}
-                schedule={schedule}
-                onPress={() => navigation.navigate('Live')}
-              />
 
               {/* Brand Stats */}
               <StatsStrip

@@ -1,4 +1,5 @@
 import { supabase } from './supabase';
+import { PostType, getPostTypeForCategory, isPrayerCategory } from '../constants/categories';
 
 export type SortOption = 'newest' | 'popular' | 'discussed';
 
@@ -7,10 +8,13 @@ export interface BackendThread {
   title: string;
   content: string;
   category: string;
+  post_type: PostType | null;
   createdat: string;
   like_count: number;
+  prayer_count: number;
   comment_count: number;
   user_has_liked: boolean;
+  user_has_prayed: boolean;
   userid: string;
   is_anonymous: boolean;
   ispinned: boolean;
@@ -78,6 +82,7 @@ export interface HomeStats {
 }
 
 export type CreatePostErrorCode = 'validation' | 'auth' | 'network' | 'timeout' | 'unknown';
+export type ReactionType = 'like' | 'pray';
 
 export class CreatePostError extends Error {
   code: CreatePostErrorCode;
@@ -146,6 +151,108 @@ function dedupeThreads(threads: BackendThread[]): BackendThread[] {
   return result;
 }
 
+function isMissingSchemaError(error: any, marker: string): boolean {
+  const message = String(error?.message || '').toLowerCase();
+  return message.includes(marker.toLowerCase()) || message.includes('does not exist');
+}
+
+async function loadPostsWithCompatibility() {
+  const selectWithTypeAndAnonymous =
+    'id,title,content,category,post_type,author_id,is_pinned,created_at,is_anonymous';
+  const withTypeAndAnonymous = await supabase
+    .from('posts')
+    .select(selectWithTypeAndAnonymous)
+    .order('created_at', { ascending: false })
+    .limit(100);
+
+  if (!withTypeAndAnonymous.error) {
+    return withTypeAndAnonymous;
+  }
+
+  const withTypeOnly = await supabase
+    .from('posts')
+    .select('id,title,content,category,post_type,author_id,is_pinned,created_at')
+    .order('created_at', { ascending: false })
+    .limit(100);
+
+  if (!withTypeOnly.error) {
+    return withTypeOnly;
+  }
+
+  if (!isMissingSchemaError(withTypeOnly.error, 'post_type')) {
+    return withTypeOnly;
+  }
+
+  return supabase
+    .from('posts')
+    .select('id,title,content,category,author_id,is_pinned,created_at')
+    .order('created_at', { ascending: false })
+    .limit(100);
+}
+
+async function getReactionAggregates(
+  postIds: string[],
+  currentUserId?: string
+): Promise<{
+  likeCounts: Map<string, number>;
+  prayCounts: Map<string, number>;
+  userLiked: Set<string>;
+  userPrayed: Set<string>;
+}> {
+  const likeCounts = new Map<string, number>();
+  const prayCounts = new Map<string, number>();
+  const userLiked = new Set<string>();
+  const userPrayed = new Set<string>();
+
+  if (!postIds.length) {
+    return { likeCounts, prayCounts, userLiked, userPrayed };
+  }
+
+  const reactionsRes = await supabase
+    .from('post_reactions')
+    .select('post_id,user_id,reaction_type')
+    .in('post_id', postIds);
+
+  if (!reactionsRes.error) {
+    (reactionsRes.data || []).forEach((row: { post_id: string; user_id: string; reaction_type: ReactionType }) => {
+      if (row.reaction_type === 'pray') {
+        prayCounts.set(row.post_id, (prayCounts.get(row.post_id) || 0) + 1);
+        if (currentUserId && row.user_id === currentUserId) {
+          userPrayed.add(row.post_id);
+        }
+      } else {
+        likeCounts.set(row.post_id, (likeCounts.get(row.post_id) || 0) + 1);
+        if (currentUserId && row.user_id === currentUserId) {
+          userLiked.add(row.post_id);
+        }
+      }
+    });
+
+    return { likeCounts, prayCounts, userLiked, userPrayed };
+  }
+
+  if (!isMissingSchemaError(reactionsRes.error, 'post_reactions')) {
+    throw new Error(reactionsRes.error.message);
+  }
+
+  // Backward compatibility fallback: legacy post_likes table.
+  const likesRes = await supabase.from('post_likes').select('post_id,user_id').in('post_id', postIds);
+  if (likesRes.error) {
+    throw new Error(likesRes.error.message);
+  }
+
+  (likesRes.data || []).forEach((row: { post_id: string; user_id: string }) => {
+    likeCounts.set(row.post_id, (likeCounts.get(row.post_id) || 0) + 1);
+    prayCounts.set(row.post_id, (prayCounts.get(row.post_id) || 0) + 1);
+    if (currentUserId && row.user_id === currentUserId) {
+      userLiked.add(row.post_id);
+      userPrayed.add(row.post_id);
+    }
+  });
+
+  return { likeCounts, prayCounts, userLiked, userPrayed };
+}
+
 function normalizePostTitle(value: string): string {
   return value.replace(/\s+/g, ' ').trim();
 }
@@ -192,11 +299,7 @@ export async function fetchCommunityPosts(
   sortBy: SortOption,
   currentUserId?: string
 ): Promise<BackendThread[]> {
-  const { data: posts, error } = await supabase
-    .from('posts')
-    .select('id,title,content,category,author_id,is_pinned,created_at')
-    .order('created_at', { ascending: false })
-    .limit(100);
+  const { data: posts, error } = await loadPostsWithCompatibility();
 
   if (error || !posts) {
     throw new Error(error?.message || 'Failed to load posts');
@@ -205,10 +308,8 @@ export async function fetchCommunityPosts(
   const postIds = posts.map((p) => p.id);
   const authorIds = [...new Set(posts.map((p) => p.author_id))];
 
-  const [likesRes, commentsRes, profilesRes] = await Promise.all([
-    postIds.length
-      ? supabase.from('post_likes').select('post_id,user_id').in('post_id', postIds)
-      : Promise.resolve({ data: [], error: null } as any),
+  const [reactionAgg, commentsRes, profilesRes] = await Promise.all([
+    getReactionAggregates(postIds, currentUserId),
     postIds.length
       ? supabase.from('comments').select('id,post_id').in('post_id', postIds)
       : Promise.resolve({ data: [], error: null } as any),
@@ -217,25 +318,14 @@ export async function fetchCommunityPosts(
       : Promise.resolve({ data: [], error: null } as any),
   ]);
 
-  if (likesRes.error) throw new Error(likesRes.error.message);
   if (commentsRes.error) throw new Error(commentsRes.error.message);
   if (profilesRes.error) throw new Error(profilesRes.error.message);
 
-  const likes = likesRes.data || [];
   const comments = commentsRes.data || [];
   const profiles = profilesRes.data || [];
 
-  const likesByPost = new Map<string, number>();
   const commentsByPost = new Map<string, number>();
-  const userLiked = new Set<string>();
   const profileById = new Map<string, { full_name: string | null; avatar_url: string | null }>();
-
-  likes.forEach((l: { post_id: string; user_id: string }) => {
-    likesByPost.set(l.post_id, (likesByPost.get(l.post_id) || 0) + 1);
-    if (currentUserId && l.user_id === currentUserId) {
-      userLiked.add(l.post_id);
-    }
-  });
 
   comments.forEach((c: { post_id: string }) => {
     commentsByPost.set(c.post_id, (commentsByPost.get(c.post_id) || 0) + 1);
@@ -247,17 +337,24 @@ export async function fetchCommunityPosts(
 
   const mapped = posts.map((p: any) => {
     const profile = profileById.get(p.author_id) || null;
+    const inferredType = getPostTypeForCategory(p.category || '');
+    const postType: PostType = p.post_type || inferredType;
+    const likeCount = reactionAgg.likeCounts.get(p.id) || 0;
+    const prayerCount = reactionAgg.prayCounts.get(p.id) || 0;
     return {
       id: p.id,
       title: sanitizeText(p.title),
       content: sanitizeText(p.content),
       category: p.category,
+      post_type: postType,
       createdat: p.created_at,
-      like_count: likesByPost.get(p.id) || 0,
+      like_count: likeCount,
+      prayer_count: prayerCount,
       comment_count: commentsByPost.get(p.id) || 0,
-      user_has_liked: userLiked.has(p.id),
+      user_has_liked: reactionAgg.userLiked.has(p.id),
+      user_has_prayed: reactionAgg.userPrayed.has(p.id),
       userid: p.author_id,
-      is_anonymous: false,
+      is_anonymous: Boolean(p.is_anonymous),
       ispinned: Boolean(p.is_pinned),
       users: profile
         ? {
@@ -270,7 +367,11 @@ export async function fetchCommunityPosts(
   });
 
   if (sortBy === 'popular') {
-    mapped.sort((a, b) => b.like_count - a.like_count || b.createdat.localeCompare(a.createdat));
+    mapped.sort(
+      (a, b) =>
+        Math.max(b.like_count, b.prayer_count) - Math.max(a.like_count, a.prayer_count) ||
+        b.createdat.localeCompare(a.createdat)
+    );
   } else if (sortBy === 'discussed') {
     mapped.sort(
       (a, b) => b.comment_count - a.comment_count || b.createdat.localeCompare(a.createdat)
@@ -283,14 +384,19 @@ export async function fetchCommunityPosts(
 }
 
 export async function getCommunityStats(): Promise<{ prayers: number; testimonies: number; total: number }> {
-  const { data, error } = await supabase.from('posts').select('category');
+  const withType = await supabase.from('posts').select('category,post_type');
+  const fallback = withType.error && isMissingSchemaError(withType.error, 'post_type')
+    ? await supabase.from('posts').select('category')
+    : withType;
+  const data = fallback.data as Array<{ category: string | null; post_type?: PostType | null }> | null;
+  const error = fallback.error;
   if (error || !data) {
     return { prayers: 0, testimonies: 0, total: 0 };
   }
-  const prayers = data.filter((p: any) =>
-    ['Prayer Requests', 'Pray for Others'].includes(p.category)
+  const prayers = data.filter((p) =>
+    p.post_type ? p.post_type === 'prayer' : isPrayerCategory(p.category || '')
   ).length;
-  const testimonies = data.filter((p: any) => p.category === 'Testimonies').length;
+  const testimonies = data.filter((p) => p.category === 'Testimonies').length;
   return { prayers, testimonies, total: data.length };
 }
 
@@ -299,11 +405,14 @@ export async function createCommunityPost(params: {
   content: string;
   category: string;
   userId: string;
+  postType?: PostType;
+  isAnonymous?: boolean;
 }): Promise<BackendThread> {
   const normalizedTitle = normalizePostTitle(params.title || '');
   const normalizedContent = normalizePostContent(params.content || '');
   const category = (params.category || '').trim();
   const userId = (params.userId || '').trim();
+  const postType = params.postType || getPostTypeForCategory(category);
 
   if (!userId) {
     throw new CreatePostError('auth', 'You must be signed in to create a post.');
@@ -337,17 +446,41 @@ export async function createCommunityPost(params: {
   }
 
   try {
-    const createPromise = supabase
-      .from('posts')
-      .insert({
-        title: normalizedTitle,
-        content: normalizedContent,
-        category,
-        author_id: userId,
-      })
-      .select('id,title,content,category,author_id,is_pinned,created_at')
-      .single()
-      .then((result) => result);
+    const baseInsert = {
+      title: normalizedTitle,
+      content: normalizedContent,
+      category,
+      author_id: userId,
+    };
+    const fullInsert = {
+      ...baseInsert,
+      post_type: postType,
+      is_anonymous: Boolean(params.isAnonymous),
+    };
+
+    const createPromise = (async () => {
+      const withPostType = await supabase
+        .from('posts')
+        .insert(fullInsert)
+        .select('id,title,content,category,post_type,author_id,is_pinned,created_at,is_anonymous')
+        .single();
+      if (!withPostType.error) {
+        return withPostType;
+      }
+
+      if (
+        !isMissingSchemaError(withPostType.error, 'post_type') &&
+        !isMissingSchemaError(withPostType.error, 'is_anonymous')
+      ) {
+        return withPostType;
+      }
+
+      return supabase
+        .from('posts')
+        .insert(baseInsert)
+        .select('id,title,content,category,author_id,is_pinned,created_at')
+        .single();
+    })();
 
     const { data, error } = await withTimeout(createPromise, CREATE_POST_TIMEOUT_MS);
     if (error || !data) {
@@ -360,18 +493,22 @@ export async function createCommunityPost(params: {
       .eq('id', data.author_id)
       .maybeSingle();
 
+    const created = data as any;
     return {
-      id: data.id,
-      title: sanitizeText(data.title),
-      content: sanitizeText(data.content),
-      category: data.category,
-      createdat: data.created_at,
+      id: created.id,
+      title: sanitizeText(created.title),
+      content: sanitizeText(created.content),
+      category: created.category,
+      post_type: created.post_type || postType || getPostTypeForCategory(created.category),
+      createdat: created.created_at,
       like_count: 0,
+      prayer_count: 0,
       comment_count: 0,
       user_has_liked: false,
-      userid: data.author_id,
-      is_anonymous: false,
-      ispinned: Boolean(data.is_pinned),
+      user_has_prayed: false,
+      userid: created.author_id,
+      is_anonymous: Boolean(created.is_anonymous),
+      ispinned: Boolean(created.is_pinned),
       users: profile
         ? {
             id: profile.id,
@@ -385,7 +522,45 @@ export async function createCommunityPost(params: {
   }
 }
 
-export async function toggleCommunityPostLike(postId: string, userId: string): Promise<void> {
+export async function togglePostReaction(
+  postId: string,
+  userId: string,
+  reactionType: ReactionType
+): Promise<void> {
+  const reactionLookup = await supabase
+    .from('post_reactions')
+    .select('post_id')
+    .eq('post_id', postId)
+    .eq('user_id', userId)
+    .eq('reaction_type', reactionType)
+    .maybeSingle();
+
+  if (!reactionLookup.error) {
+    if (reactionLookup.data) {
+      const { error } = await supabase
+        .from('post_reactions')
+        .delete()
+        .eq('post_id', postId)
+        .eq('user_id', userId)
+        .eq('reaction_type', reactionType);
+      if (error) throw new Error(error.message);
+      return;
+    }
+
+    const { error } = await supabase.from('post_reactions').insert({
+      post_id: postId,
+      user_id: userId,
+      reaction_type: reactionType,
+    });
+    if (error) throw new Error(error.message);
+    return;
+  }
+
+  if (!isMissingSchemaError(reactionLookup.error, 'post_reactions')) {
+    throw new Error(reactionLookup.error.message);
+  }
+
+  // Legacy fallback (no post_reactions table yet).
   const { data: existing, error: existingError } = await supabase
     .from('post_likes')
     .select('post_id')
@@ -410,6 +585,33 @@ export async function toggleCommunityPostLike(postId: string, userId: string): P
     user_id: userId,
   });
   if (error) throw new Error(error.message);
+}
+
+export async function toggleCommunityPostLike(postId: string, userId: string): Promise<void> {
+  return togglePostReaction(postId, userId, 'like');
+}
+
+export async function deleteCommunityPost(postId: string, userId: string): Promise<void> {
+  if (!postId?.trim()) {
+    throw new CreatePostError('validation', 'Post ID is required.');
+  }
+  if (!userId?.trim()) {
+    throw new CreatePostError('auth', 'You must be signed in to delete a post.');
+  }
+
+  const { data, error } = await supabase
+    .from('posts')
+    .delete()
+    .eq('id', postId)
+    .eq('author_id', userId)
+    .select('id');
+
+  if (error) {
+    throw new Error(error.message || 'Failed to delete post');
+  }
+  if (!data || data.length === 0) {
+    throw new CreatePostError('auth', 'You can only delete your own posts.');
+  }
 }
 
 export async function getPostById(postId: string, currentUserId?: string): Promise<BackendThread | null> {
@@ -499,6 +701,29 @@ export async function createCommentForPost(
         }
       : null,
   } as BackendComment;
+}
+
+export async function deleteCommunityComment(commentId: string, userId: string): Promise<void> {
+  if (!commentId?.trim()) {
+    throw new CreatePostError('validation', 'Comment ID is required.');
+  }
+  if (!userId?.trim()) {
+    throw new CreatePostError('auth', 'You must be signed in to delete a comment.');
+  }
+
+  const { data, error } = await supabase
+    .from('comments')
+    .delete()
+    .eq('id', commentId)
+    .eq('author_id', userId)
+    .select('id');
+
+  if (error) {
+    throw new Error(error.message || 'Failed to delete comment');
+  }
+  if (!data || data.length === 0) {
+    throw new CreatePostError('auth', 'You can only delete your own comments.');
+  }
 }
 
 export async function fetchPodcasts(limit: number): Promise<BackendMediaItem[]> {
@@ -661,12 +886,26 @@ export async function fetchRadioStatusFromAzuraCast(): Promise<BackendRadioStatu
 }
 
 export async function fetchHomeStats(): Promise<HomeStats> {
-  const [profilesCountRes, prayersCountRes, podcastsCountRes, videosCountRes] = await Promise.all([
-    supabase.from('profiles').select('id', { count: 'exact', head: true }),
-    supabase
+  const prayerCountPromise = (async () => {
+    const byType = await supabase
       .from('posts')
       .select('id', { count: 'exact', head: true })
-      .in('category', ['Prayer Requests', 'Pray for Others']),
+      .eq('post_type', 'prayer');
+    if (!byType.error) {
+      return byType;
+    }
+    if (!isMissingSchemaError(byType.error, 'post_type')) {
+      return byType;
+    }
+    return supabase
+      .from('posts')
+      .select('id', { count: 'exact', head: true })
+      .in('category', ['Prayer Requests', 'Pray for Others']);
+  })();
+
+  const [profilesCountRes, prayersCountRes, podcastsCountRes, videosCountRes] = await Promise.all([
+    supabase.from('profiles').select('id', { count: 'exact', head: true }),
+    prayerCountPromise,
     supabase.from('podcasts').select('id', { count: 'exact', head: true }),
     supabase.from('videos').select('id', { count: 'exact', head: true }),
   ]);

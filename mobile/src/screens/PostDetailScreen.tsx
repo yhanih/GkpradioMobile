@@ -20,16 +20,18 @@ import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import * as Haptics from 'expo-haptics';
 import {
+  deleteCommunityComment,
+  deleteCommunityPost,
   createCommentForPost,
   fetchCommentsForPost,
   getPostById,
-  toggleCommunityPostLike,
+  togglePostReaction,
 } from '../lib/backend';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { useBookmarks } from '../contexts/BookmarksContext';
 import { RootStackParamList } from '../types/navigation';
-import { getCategoryIcon, getCategoryLabel } from '../constants/categories';
+import { PostType, getCategoryIcon, getCategoryLabel, getPostTypeForCategory } from '../constants/categories';
 
 type PostDetailRouteProp = RouteProp<RootStackParamList, 'PostDetail'>;
 type PostDetailNavProp = NativeStackNavigationProp<RootStackParamList, 'PostDetail'>;
@@ -40,14 +42,15 @@ interface ThreadWithUser {
   content: string;
   createdat: string;
   category: string;
+  post_type: PostType | null;
   userid: string;
   is_anonymous: boolean;
   ispinned: boolean;
   like_count: number;
+  prayer_count: number;
   comment_count: number;
   user_has_liked?: boolean;
   user_has_prayed?: boolean;
-  prayer_count?: number;
   user_has_bookmarked?: boolean;
   users?: {
     id: string;
@@ -110,12 +113,15 @@ export function PostDetailScreen() {
           content: t.content,
           createdat: t.createdat,
           category: t.category,
+          post_type: t.post_type || getPostTypeForCategory(t.category),
           userid: t.userid,
           is_anonymous: t.is_anonymous,
           ispinned: t.ispinned,
           like_count: t.like_count,
+          prayer_count: t.prayer_count || 0,
           comment_count: t.comment_count,
           user_has_liked: t.user_has_liked,
+          user_has_prayed: t.user_has_prayed || false,
           users: t.users
         } as any);
       }
@@ -201,7 +207,7 @@ export function PostDetailScreen() {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
 
     try {
-      await toggleCommunityPostLike(thread.id, user.id);
+      await togglePostReaction(thread.id, user.id, 'like');
     } catch (error: any) {
       console.error('Error toggling like:', error);
       // Rollback
@@ -214,9 +220,34 @@ export function PostDetailScreen() {
   };
 
   const handlePray = async () => {
-    // Prayer feature can be implemented using same toggleLike logic with a different key 
-    // or just use Like for now. For GKP, "Amen" is equivalent to Like.
-    handleLike();
+    if (!user) {
+      Alert.alert('Sign In Required', 'Please sign in to pray with the community.');
+      return;
+    }
+    if (!thread) return;
+
+    const currentlyPrayed = thread.user_has_prayed;
+    const currentCount = thread.prayer_count ?? 0;
+    const newCount = currentlyPrayed ? Math.max(currentCount - 1, 0) : currentCount + 1;
+
+    setThread(prev => prev ? {
+      ...prev,
+      user_has_prayed: !currentlyPrayed,
+      prayer_count: newCount
+    } : null);
+
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+
+    try {
+      await togglePostReaction(thread.id, user.id, 'pray');
+    } catch (error: any) {
+      console.error('Error toggling prayer reaction:', error);
+      setThread(prev => prev ? {
+        ...prev,
+        user_has_prayed: currentlyPrayed,
+        prayer_count: currentCount
+      } : null);
+    }
   };
 
   const handleBookmark = async () => {
@@ -250,6 +281,40 @@ export function PostDetailScreen() {
     } catch (error) {
       console.error('Error sharing:', error);
     }
+  };
+
+  const handleDeletePost = async () => {
+    if (!user) {
+      Alert.alert('Sign In Required', 'Please sign in to delete posts.');
+      return;
+    }
+    if (!thread) return;
+    if (user.id !== thread.userid) {
+      Alert.alert('Not Allowed', 'You can only delete your own posts.');
+      return;
+    }
+
+    Alert.alert(
+      'Delete Post',
+      'Are you sure you want to delete this post? This action cannot be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await deleteCommunityPost(thread.id, user.id);
+              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+              navigation.goBack();
+            } catch (error) {
+              console.error('Error deleting post:', error);
+              Alert.alert('Error', 'Unable to delete post. Please try again.');
+            }
+          },
+        },
+      ]
+    );
   };
 
   const handleSubmitComment = async () => {
@@ -327,8 +392,40 @@ export function PostDetailScreen() {
   };
 
   const handleDeleteComment = async (commentId: string) => {
-    // Delete comment not yet implemented in wpClient for users
-    Alert.alert('Coming Soon', 'Comment deletion will be available soon.');
+    if (!user) {
+      Alert.alert('Sign In Required', 'Please sign in to delete comments.');
+      return;
+    }
+
+    Alert.alert(
+      'Delete Comment',
+      'Are you sure you want to delete this comment?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await deleteCommunityComment(commentId, user.id);
+              setComments((prev) => prev.filter((comment) => comment.id !== commentId));
+              setThread((prev) =>
+                prev
+                  ? {
+                      ...prev,
+                      comment_count: Math.max((prev.comment_count || 0) - 1, 0),
+                    }
+                  : null
+              );
+              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+            } catch (error) {
+              console.error('Error deleting comment:', error);
+              Alert.alert('Error', 'Unable to delete comment. Please try again.');
+            }
+          },
+        },
+      ]
+    );
   };
 
   const formatTimeAgo = (dateString: string) => {
@@ -384,6 +481,7 @@ export function PostDetailScreen() {
     ? 'Anonymous'
     : thread.users?.fullname || thread.users?.username || 'Member';
   const avatarUrl = thread.is_anonymous ? null : thread.users?.avatarurl;
+  const isPrayerPost = (thread.post_type || getPostTypeForCategory(thread.category)) === 'prayer';
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -392,9 +490,16 @@ export function PostDetailScreen() {
           <Ionicons name="arrow-back" size={24} color="#09090b" />
         </Pressable>
         <Text style={styles.headerTitle}>Post</Text>
-        <Pressable onPress={handleShare} style={styles.shareButton}>
-          <Ionicons name="share-outline" size={24} color="#09090b" />
-        </Pressable>
+        <View style={styles.headerActions}>
+          {user?.id === thread.userid && (
+            <Pressable onPress={handleDeletePost} style={styles.deletePostButton}>
+              <Ionicons name="trash-outline" size={22} color="#ef4444" />
+            </Pressable>
+          )}
+          <Pressable onPress={handleShare} style={styles.shareButton}>
+            <Ionicons name="share-outline" size={24} color="#09090b" />
+          </Pressable>
+        </View>
       </View>
 
       <KeyboardAvoidingView
@@ -450,27 +555,31 @@ export function PostDetailScreen() {
             <Text style={styles.content}>{thread.content}</Text>
 
             <View style={styles.actionsRow}>
-              <Pressable style={styles.actionButton} onPress={handleLike}>
-                <Ionicons
-                  name={thread.user_has_liked ? 'heart' : 'heart-outline'}
-                  size={22}
-                  color={thread.user_has_liked ? '#ef4444' : '#71717a'}
-                />
-                <Text style={[styles.actionText, thread.user_has_liked && styles.actionTextActive]}>
-                  {thread.like_count || 0}
-                </Text>
-              </Pressable>
+              {!isPrayerPost && (
+                <Pressable style={styles.actionButton} onPress={handleLike}>
+                  <Ionicons
+                    name={thread.user_has_liked ? 'heart' : 'heart-outline'}
+                    size={22}
+                    color={thread.user_has_liked ? '#ef4444' : '#71717a'}
+                  />
+                  <Text style={[styles.actionText, thread.user_has_liked && styles.actionTextActive]}>
+                    {thread.like_count || 0}
+                  </Text>
+                </Pressable>
+              )}
 
-              <Pressable style={styles.actionButton} onPress={handlePray}>
-                <Ionicons
-                  name={thread.user_has_prayed ? 'hand-right' : 'hand-right-outline'}
-                  size={22}
-                  color={thread.user_has_prayed ? '#047857' : '#71717a'}
-                />
-                <Text style={[styles.actionText, thread.user_has_prayed && styles.prayedText]}>
-                  {thread.prayer_count || 0} prayed
-                </Text>
-              </Pressable>
+              {isPrayerPost && (
+                <Pressable style={styles.actionButton} onPress={handlePray}>
+                  <Ionicons
+                    name={thread.user_has_prayed ? 'hand-right' : 'hand-right-outline'}
+                    size={22}
+                    color={thread.user_has_prayed ? '#047857' : '#71717a'}
+                  />
+                  <Text style={[styles.actionText, thread.user_has_prayed && styles.prayedText]}>
+                    {thread.prayer_count || 0} prayed
+                  </Text>
+                </Pressable>
+              )}
 
               <View style={styles.actionButton}>
                 <Ionicons name="chatbubble-outline" size={22} color="#71717a" />
@@ -594,6 +703,14 @@ const styles = StyleSheet.create({
   },
   shareButton: {
     padding: 8,
+  },
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  deletePostButton: {
+    padding: 8,
+    marginRight: 4,
   },
   keyboardAvoid: {
     flex: 1,

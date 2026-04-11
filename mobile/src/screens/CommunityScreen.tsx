@@ -7,9 +7,10 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { LinearGradient } from 'expo-linear-gradient';
 import {
   BackendThread,
+  deleteCommunityPost,
   fetchCommunityPosts,
   getCommunityStats,
-  toggleCommunityPostLike,
+  togglePostReaction,
 } from '../lib/backend';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
@@ -17,7 +18,15 @@ import { useBookmarks } from '../contexts/BookmarksContext';
 import { useTheme } from '../contexts/ThemeContext';
 import * as Haptics from 'expo-haptics';
 import { NewPostModal } from '../components/NewPostModal';
-import { COMMUNITY_CATEGORIES, getCategoryIcon, getCategoryLabel, Category } from '../constants/categories';
+import {
+  COMMUNITY_CATEGORIES,
+  PostType,
+  getCategoryIcon,
+  getCategoryLabel,
+  getPostTypeForCategory,
+  isPrayerCategory,
+  Category,
+} from '../constants/categories';
 import { RootStackParamList } from '../types/navigation';
 import { useToast } from '../components/Toast';
 
@@ -26,9 +35,8 @@ const { width: SCREEN_WIDTH } = Dimensions.get('window');
 type SortOption = 'newest' | 'popular' | 'discussed';
 type ModeType = 'prayers' | 'discussions';
 
-const PRAYER_CATEGORIES = ['Prayer Requests', 'Pray for Others'];
 const DISCUSSION_CATEGORIES = COMMUNITY_CATEGORIES
-  .filter(cat => cat.id !== 'all' && !PRAYER_CATEGORIES.includes(cat.id))
+  .filter(cat => cat.id !== 'all' && !isPrayerCategory(cat.id))
   .map(cat => cat.id);
 
 interface ThreadWithUser {
@@ -36,10 +44,13 @@ interface ThreadWithUser {
   title: string;
   content: string;
   category: string;
+  post_type: PostType | null;
   createdat: string;
   like_count: number;
+  prayer_count: number;
   comment_count: number;
   user_has_liked?: boolean;
+  user_has_prayed?: boolean;
   userid: string;
   is_anonymous?: boolean;
   ispinned?: boolean;
@@ -255,7 +266,7 @@ export function CommunityScreen() {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
 
     try {
-      await toggleCommunityPostLike(threadId, user.id);
+      await togglePostReaction(threadId, user.id, 'like');
     } catch (error: any) {
       console.error('Error toggling like:', error);
       setThreads(prev => prev.map(t => {
@@ -269,6 +280,57 @@ export function CommunityScreen() {
         return t;
       }));
       showToast('Unable to update like. Please try again.', 'error');
+    } finally {
+      setLikingThreadId(null);
+    }
+  };
+
+  const handlePray = async (threadId: string, currentlyPrayed: boolean) => {
+    if (!user) {
+      showToast('Please sign in to pray with the community', 'info');
+      return;
+    }
+
+    if (likingThreadId === threadId) {
+      return;
+    }
+
+    setLikingThreadId(threadId);
+
+    const currentThread = threads.find(t => t.id === threadId);
+    const currentCount = currentThread?.prayer_count ?? 0;
+    const newCount = currentlyPrayed ? Math.max(currentCount - 1, 0) : currentCount + 1;
+
+    animateLike(threadId);
+
+    setThreads(prev => prev.map(t => {
+      if (t.id === threadId) {
+        return {
+          ...t,
+          user_has_prayed: !currentlyPrayed,
+          prayer_count: newCount
+        };
+      }
+      return t;
+    }));
+
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+
+    try {
+      await togglePostReaction(threadId, user.id, 'pray');
+    } catch (error: any) {
+      console.error('Error toggling prayer reaction:', error);
+      setThreads(prev => prev.map(t => {
+        if (t.id === threadId) {
+          return {
+            ...t,
+            user_has_prayed: currentlyPrayed,
+            prayer_count: currentCount
+          };
+        }
+        return t;
+      }));
+      showToast('Unable to update prayer response. Please try again.', 'error');
     } finally {
       setLikingThreadId(null);
     }
@@ -368,14 +430,23 @@ export function CommunityScreen() {
 
     Alert.alert(
       'Delete Post',
-      'Please contact support to delete your post permanently.',
+      'Are you sure you want to delete this post? This action cannot be undone.',
       [
         { text: 'Cancel', style: 'cancel' },
         {
-          text: 'Contact Support',
-          onPress: () => {
-            Linking.openURL(`mailto:support@gkpradio.com?subject=Delete%20Post%20Request&body=I%20would%20like%20to%20delete%20post%20ID:%20${threadId}`);
-          }
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await deleteCommunityPost(threadId, user.id);
+              setThreads((prev) => prev.filter((thread) => thread.id !== threadId));
+              await fetchStats();
+              showToast('Post deleted successfully', 'success');
+            } catch (error) {
+              console.error('Error deleting post:', error);
+              showToast('Unable to delete post. Please try again.', 'error');
+            }
+          },
         }
       ]
     );
@@ -392,7 +463,7 @@ export function CommunityScreen() {
   };
 
   const focusFeedOnCreatedCategory = useCallback((category: string) => {
-    const isPrayer = PRAYER_CATEGORIES.includes(category);
+    const isPrayer = isPrayerCategory(category);
     setSortBy('newest');
     setActiveMode(isPrayer ? 'prayers' : 'discussions');
     setActiveCategory(category);
@@ -421,10 +492,11 @@ export function CommunityScreen() {
   const filteredThreads = useMemo(() => {
     // First filter by mode (prayers vs discussions)
     let modeFiltered = threads.filter(t => {
+      const postType = t.post_type || getPostTypeForCategory(t.category);
       if (activeMode === 'prayers') {
-        return PRAYER_CATEGORIES.includes(t.category);
+        return postType === 'prayer';
       } else {
-        return DISCUSSION_CATEGORIES.includes(t.category);
+        return postType === 'discussion';
       }
     });
 
@@ -440,7 +512,7 @@ export function CommunityScreen() {
     if (activeMode === 'prayers') {
       return [
         { id: 'all', label: 'All', icon: 'grid-outline' as const, iconActive: 'grid' as const },
-        ...COMMUNITY_CATEGORIES.filter(cat => PRAYER_CATEGORIES.includes(cat.id))
+        ...COMMUNITY_CATEGORIES.filter(cat => isPrayerCategory(cat.id))
       ];
     } else {
       return [
@@ -457,10 +529,11 @@ export function CommunityScreen() {
       if (cat.id === 'all') {
         // Count all threads in the current mode
         const modeFiltered = threads.filter(t => {
+          const postType = t.post_type || getPostTypeForCategory(t.category);
           if (activeMode === 'prayers') {
-            return PRAYER_CATEGORIES.includes(t.category);
+            return postType === 'prayer';
           } else {
-            return DISCUSSION_CATEGORIES.includes(t.category);
+            return postType === 'discussion';
           }
         });
         counts[cat.id] = modeFiltered.length;
@@ -529,6 +602,8 @@ export function CommunityScreen() {
   const regularThreads = filteredBySearch.filter(t => !t.ispinned);
 
   const renderThread = (thread: ThreadWithUser, isPinned = false) => {
+    const postType = thread.post_type || getPostTypeForCategory(thread.category);
+    const isPrayerPost = postType === 'prayer';
     const authorName = thread.is_anonymous
       ? 'Anonymous'
       : thread.users?.fullname || 'Member';
@@ -591,22 +666,44 @@ export function CommunityScreen() {
           <View style={styles.engagementStats}>
             <Pressable
               style={styles.statButton}
-              onPress={() => handleLike(thread.id, thread.user_has_liked || false)}
+              onPress={() =>
+                isPrayerPost
+                  ? handlePray(thread.id, thread.user_has_prayed || false)
+                  : handleLike(thread.id, thread.user_has_liked || false)
+              }
             >
               <Animated.View style={{ transform: [{ scale: getLikeAnimation(thread.id) }] }}>
                 <Ionicons
-                  name={thread.user_has_liked ? "heart" : "heart-outline"}
+                  name={
+                    isPrayerPost
+                      ? (thread.user_has_prayed ? 'hand-right' : 'hand-right-outline')
+                      : (thread.user_has_liked ? "heart" : "heart-outline")
+                  }
                   size={18}
-                  color={thread.user_has_liked ? "#ef4444" : "#71717a"}
+                  color={
+                    isPrayerPost
+                      ? (thread.user_has_prayed ? '#047857' : '#71717a')
+                      : (thread.user_has_liked ? "#ef4444" : "#71717a")
+                  }
                 />
               </Animated.View>
-              <Text style={[styles.statText, thread.user_has_liked && styles.statTextActive]}>
-                {thread.like_count || 0}
+              <Text
+                style={[
+                  styles.statText,
+                  isPrayerPost
+                    ? thread.user_has_prayed && styles.prayStatTextActive
+                    : thread.user_has_liked && styles.statTextActive
+                ]}
+              >
+                {isPrayerPost ? `${thread.prayer_count || 0} prayed` : (thread.like_count || 0)}
               </Text>
             </Pressable>
             <View style={styles.statButton}>
               <Ionicons name="chatbubble-outline" size={18} color="#71717a" />
-              <Text style={styles.statText}>{thread.comment_count || 0}</Text>
+              <Text style={styles.statText}>
+                {thread.comment_count || 0}
+                {!isPrayerPost ? ' replies' : ''}
+              </Text>
             </View>
             <Pressable
               style={styles.statButton}
@@ -1278,6 +1375,9 @@ const styles = StyleSheet.create({
   },
   statTextActive: {
     color: '#ef4444',
+  },
+  prayStatTextActive: {
+    color: '#047857',
   },
   cardActions: {
     flexDirection: 'row',
