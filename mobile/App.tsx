@@ -5,18 +5,22 @@ import { NavigationContainer, useNavigation } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator, NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
-import * as Sentry from '@sentry/react-native';
 import Constants from 'expo-constants';
 
 // Initialize Sentry for crash reporting (only if DSN is configured)
 const sentryDsn = Constants.expoConfig?.extra?.sentryDsn || process.env.EXPO_PUBLIC_SENTRY_DSN;
 if (sentryDsn && !sentryDsn.includes('placeholder')) {
-  Sentry.init({
-    dsn: sentryDsn,
-    environment: __DEV__ ? 'development' : 'production',
-    tracesSampleRate: __DEV__ ? 1.0 : 0.1,
-    enableAutoPerformanceTracing: true,
-  });
+  try {
+    const Sentry = require('@sentry/react-native');
+    Sentry.init({
+      dsn: sentryDsn,
+      environment: __DEV__ ? 'development' : 'production',
+      tracesSampleRate: __DEV__ ? 1.0 : 0.1,
+      enableAutoPerformanceTracing: true,
+    });
+  } catch (error) {
+    console.warn('Sentry failed to initialize:', error);
+  }
 } else {
   console.log('Sentry not configured - crash reporting disabled. Set EXPO_PUBLIC_SENTRY_DSN to enable.');
 }
