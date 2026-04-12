@@ -153,6 +153,8 @@ export function MediaScreen() {
         created_at: p.created_at,
         thumbnail_url: p.thumbnail_url,
         audio_url: p.audio_url,
+        duration: p.duration,
+        category: p.category,
         is_featured: false
       } as any)));
 
@@ -163,6 +165,8 @@ export function MediaScreen() {
         created_at: v.created_at,
         thumbnail_url: v.thumbnail_url,
         video_url: v.video_url,
+        duration: v.duration,
+        category: v.category,
         is_featured: false
       } as any)));
       console.log('[MediaScreen] State updated');
@@ -228,7 +232,7 @@ export function MediaScreen() {
         'Please sign in to save bookmarks.',
         [
           { text: 'Cancel', style: 'cancel' },
-          { text: 'Sign In', onPress: () => navigation.navigate('Profile') }
+          { text: 'Sign in', onPress: () => navigation.navigate('Login', { redirectBack: true }) }
         ]
       );
       return;

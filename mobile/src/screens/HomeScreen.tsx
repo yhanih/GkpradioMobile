@@ -1,12 +1,12 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   View,
   ScrollView,
   RefreshControl,
   StyleSheet,
-  StatusBar,
   Text,
-  Animated
+  Animated,
+  Pressable,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, CompositeNavigationProp } from '@react-navigation/native';
@@ -22,11 +22,13 @@ import {
 } from '../lib/backend';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
+import { useTheme, type Theme } from '../contexts/ThemeContext';
 
 import { MediaRail } from '../components/MediaRail';
 import { StatsStrip } from '../components/StatsStrip';
 import { MinistryFieldsList } from '../components/MinistryFieldsList';
 import { SkeletonList } from '../components/SkeletonLoader';
+import { Category, getPostTypeForCategory } from '../constants/categories';
 
 interface Episode {
   id: string;
@@ -54,7 +56,9 @@ type HomeNavigationProp = CompositeNavigationProp<
 
 export function HomeScreen() {
   const { user } = useAuth();
+  const { theme } = useTheme();
   const navigation = useNavigation<HomeNavigationProp>();
+  const styles = useMemo(() => createStyles(theme), [theme]);
 
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -174,9 +178,16 @@ export function HomeScreen() {
     return 'Good Evening';
   };
 
+  const handleMinistryCategoryPress = (category: Category) => {
+    const postType = getPostTypeForCategory(category.id);
+    navigation.navigate('Community', {
+      categoryId: category.id,
+      mode: postType === 'prayer' ? 'prayers' : 'discussions',
+    });
+  };
+
   return (
     <View style={styles.container}>
-      <StatusBar barStyle="dark-content" backgroundColor="#fff" />
       <SafeAreaView style={styles.safeArea} edges={['top']}>
 
         {/* Header with Greeting */}
@@ -185,18 +196,31 @@ export function HomeScreen() {
             <Text style={styles.brandingText}>GOD KINGDOM PRINCIPLES RADIO</Text>
             <Text style={styles.greetingText}>{getGreeting()}, {userName}</Text>
           </View>
-          <ProfileAvatar 
-            size="medium"
-            onPress={() => navigation.navigate('Profile')}
-            accessibilityLabel="Open profile"
-            accessibilityRole="button"
-          />
+          {user ? (
+            <ProfileAvatar
+              uri={user.avatarurl || null}
+              size="medium"
+              onPress={() => navigation.navigate('Profile')}
+              showOnlineIndicator
+              accessibilityLabel="Open profile"
+              accessibilityRole="button"
+            />
+          ) : (
+            <Pressable
+              style={styles.signInAvatar}
+              onPress={() => navigation.navigate('Login', { redirectBack: true })}
+              accessibilityRole="button"
+              accessibilityLabel="Sign in"
+            >
+              <Text style={styles.signInAvatarText}>Sign in</Text>
+            </Pressable>
+          )}
         </View>
 
         <ScrollView
           showsVerticalScrollIndicator={false}
           refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#047857" />
+            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.colors.primary} />
           }
           contentContainerStyle={{ paddingBottom: 100 }}
         >
@@ -206,17 +230,17 @@ export function HomeScreen() {
             <>
               {/* Welcome Text Skeleton */}
               <View style={styles.welcomeSection}>
-                <View style={{ height: 28, width: '60%', backgroundColor: '#e4e4e7', borderRadius: 8, marginBottom: 8 }} />
-                <View style={{ height: 28, width: '80%', backgroundColor: '#e4e4e7', borderRadius: 8, marginBottom: 8 }} />
-                <View style={{ height: 22, width: '100%', backgroundColor: '#e4e4e7', borderRadius: 8, marginBottom: 12 }} />
+                <View style={[styles.skeletonBar, { width: '60%', height: 28, marginBottom: 8 }]} />
+                <View style={[styles.skeletonBar, { width: '80%', height: 28, marginBottom: 8 }]} />
+                <View style={[styles.skeletonBar, { width: '100%', height: 22, marginBottom: 12 }]} />
               </View>
 
               {/* Stats Skeleton */}
               <View style={{ flexDirection: 'row', justifyContent: 'space-around', marginHorizontal: 20, marginBottom: 32 }}>
                 {[1, 2, 3].map((i) => (
                   <View key={i} style={{ alignItems: 'center' }}>
-                    <View style={{ height: 40, width: 40, backgroundColor: '#e4e4e7', borderRadius: 20, marginBottom: 8 }} />
-                    <View style={{ height: 12, width: 60, backgroundColor: '#e4e4e7', borderRadius: 6 }} />
+                    <View style={[styles.skeletonBar, { height: 40, width: 40, borderRadius: 20, marginBottom: 8 }]} />
+                    <View style={[styles.skeletonBar, { height: 12, width: 60, borderRadius: 6 }]} />
                   </View>
                 ))}
               </View>
@@ -227,16 +251,6 @@ export function HomeScreen() {
             </>
           ) : (
             <>
-              {/* Welcome Text */}
-              <Animated.View style={[styles.welcomeSection, { opacity: fadeAnim, transform: [{ translateY: fadeAnim.interpolate({ inputRange: [0, 1], outputRange: [20, 0] }) }] }]}>
-                <Text style={styles.welcomeTitle}>Welcome to</Text>
-                <Text style={styles.welcomeBrand}>God Kingdom Principles</Text>
-                <Text style={styles.welcomeBrandSuffix}>Radio.</Text>
-                <Text style={styles.welcomeSubtitle}>
-                  Join our community of believers in daily inspiration, powerful testimonies, and life-changing conversations.
-                </Text>
-              </Animated.View>
-
               {/* Brand Stats */}
               <StatsStrip
                 familyMembers={homeStats.familyMembers}
@@ -245,7 +259,7 @@ export function HomeScreen() {
               />
 
               {/* Ministry Fields (Brand Element from Web) */}
-              <MinistryFieldsList onPressItem={(category) => navigation.navigate('Community')} />
+              <MinistryFieldsList onPressItem={handleMinistryCategoryPress} />
 
               {/* Podcast Rail */}
               {console.log('[HomeScreen] Rendering podcast rail, count:', featuredEpisodes.length)}
@@ -301,59 +315,80 @@ export function HomeScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#fff',
-  },
-  safeArea: {
-    flex: 1,
-  },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingTop: 16,
-    paddingBottom: 8,
-  },
-  brandingText: {
-    fontSize: 10,
-    color: '#047857',
-    fontWeight: '700',
-    letterSpacing: 1,
-    marginBottom: 2,
-  },
-  greetingText: {
-    fontSize: 16,
-    color: '#09090b',
-    fontWeight: '600',
-  },
-  welcomeSection: {
-    paddingHorizontal: 20,
-    marginBottom: 24,
-  },
-  welcomeTitle: {
-    fontSize: 28,
-    fontWeight: '400',
-    color: '#09090b',
-  },
-  welcomeBrand: {
-    fontSize: 28,
-    fontWeight: '700',
-    color: '#eab308', // Gold color from brand
-    lineHeight: 34,
-  },
-  welcomeBrandSuffix: {
-    fontSize: 28,
-    fontWeight: '700',
-    color: '#09090b',
-    lineHeight: 34,
-    marginBottom: 12,
-  },
-  welcomeSubtitle: {
-    fontSize: 15,
-    color: '#52525b',
-    lineHeight: 22,
-  },
-});
+function createStyles(theme: Theme) {
+  return StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: theme.colors.background,
+    },
+    safeArea: {
+      flex: 1,
+      backgroundColor: theme.colors.background,
+    },
+    header: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      paddingHorizontal: 20,
+      paddingTop: 16,
+      paddingBottom: 8,
+    },
+    signInAvatar: {
+      minWidth: 74,
+      height: 40,
+      borderRadius: 20,
+      backgroundColor: theme.colors.primary,
+      justifyContent: 'center',
+      alignItems: 'center',
+      paddingHorizontal: 12,
+    },
+    signInAvatarText: {
+      color: '#fff',
+      fontSize: 13,
+      fontWeight: '700',
+    },
+    brandingText: {
+      fontSize: 10,
+      color: theme.colors.primary,
+      fontWeight: '700',
+      letterSpacing: 1,
+      marginBottom: 2,
+    },
+    greetingText: {
+      fontSize: 16,
+      color: theme.colors.text,
+      fontWeight: '600',
+    },
+    welcomeSection: {
+      paddingHorizontal: 20,
+      marginBottom: 24,
+    },
+    skeletonBar: {
+      backgroundColor: theme.colors.border,
+      borderRadius: 8,
+    },
+    welcomeTitle: {
+      fontSize: 28,
+      fontWeight: '400',
+      color: theme.colors.text,
+    },
+    welcomeBrand: {
+      fontSize: 28,
+      fontWeight: '700',
+      color: theme.colors.warning,
+      lineHeight: 34,
+    },
+    welcomeBrandSuffix: {
+      fontSize: 28,
+      fontWeight: '700',
+      color: theme.colors.text,
+      lineHeight: 34,
+      marginBottom: 12,
+    },
+    welcomeSubtitle: {
+      fontSize: 15,
+      color: theme.colors.textSecondary,
+      lineHeight: 22,
+    },
+  });
+}

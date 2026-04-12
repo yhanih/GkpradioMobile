@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   View,
   Text,
@@ -17,6 +17,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useAuth } from '../../contexts/AuthContext';
+import { useTheme, type Theme } from '../../contexts/ThemeContext';
 import { RootStackParamList } from '../../types/navigation';
 
 type SignupNavigationProp = NativeStackNavigationProp<RootStackParamList>;
@@ -30,6 +31,8 @@ export function SignupScreen() {
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const { signUp } = useAuth();
+  const { theme } = useTheme();
+  const styles = useMemo(() => createSignupStyles(theme), [theme]);
 
   const handleSignup = async () => {
     if (!fullName || !email || !password || !confirmPassword) {
@@ -90,10 +93,11 @@ export function SignupScreen() {
             <View style={styles.inputGroup}>
               <Text style={styles.label}>Full Name</Text>
               <View style={styles.inputWrapper}>
-                <Ionicons name="person-outline" size={20} color="#71717a" style={styles.inputIcon} />
+                <Ionicons name="person-outline" size={20} color={theme.colors.textMuted} style={styles.inputIcon} />
                 <TextInput
                   style={styles.input}
                   placeholder="John Doe"
+                  placeholderTextColor={theme.colors.textMuted}
                   value={fullName}
                   onChangeText={setFullName}
                   autoCapitalize="words"
@@ -105,10 +109,11 @@ export function SignupScreen() {
             <View style={styles.inputGroup}>
               <Text style={styles.label}>Email</Text>
               <View style={styles.inputWrapper}>
-                <Ionicons name="mail-outline" size={20} color="#71717a" style={styles.inputIcon} />
+                <Ionicons name="mail-outline" size={20} color={theme.colors.textMuted} style={styles.inputIcon} />
                 <TextInput
                   style={styles.input}
                   placeholder="your@email.com"
+                  placeholderTextColor={theme.colors.textMuted}
                   value={email}
                   onChangeText={setEmail}
                   autoCapitalize="none"
@@ -122,10 +127,11 @@ export function SignupScreen() {
             <View style={styles.inputGroup}>
               <Text style={styles.label}>Password</Text>
               <View style={styles.inputWrapper}>
-                <Ionicons name="lock-closed-outline" size={20} color="#71717a" style={styles.inputIcon} />
+                <Ionicons name="lock-closed-outline" size={20} color={theme.colors.textMuted} style={styles.inputIcon} />
                 <TextInput
                   style={[styles.input, { flex: 1 }]}
                   placeholder="At least 6 characters"
+                  placeholderTextColor={theme.colors.textMuted}
                   value={password}
                   onChangeText={setPassword}
                   secureTextEntry={!showPassword}
@@ -136,7 +142,7 @@ export function SignupScreen() {
                   <Ionicons
                     name={showPassword ? 'eye-outline' : 'eye-off-outline'}
                     size={20}
-                    color="#71717a"
+                    color={theme.colors.textMuted}
                   />
                 </Pressable>
               </View>
@@ -145,10 +151,11 @@ export function SignupScreen() {
             <View style={styles.inputGroup}>
               <Text style={styles.label}>Confirm Password</Text>
               <View style={styles.inputWrapper}>
-                <Ionicons name="lock-closed-outline" size={20} color="#71717a" style={styles.inputIcon} />
+                <Ionicons name="lock-closed-outline" size={20} color={theme.colors.textMuted} style={styles.inputIcon} />
                 <TextInput
                   style={styles.input}
                   placeholder="Confirm your password"
+                  placeholderTextColor={theme.colors.textMuted}
                   value={confirmPassword}
                   onChangeText={setConfirmPassword}
                   secureTextEntry={!showPassword}
@@ -192,10 +199,11 @@ export function SignupScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+function createSignupStyles(theme: Theme) {
+  return StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fff',
+    backgroundColor: theme.colors.background,
   },
   keyboardView: {
     flex: 1,
@@ -246,7 +254,7 @@ const styles = StyleSheet.create({
   },
   formContainer: {
     flex: 1,
-    backgroundColor: '#fff',
+    backgroundColor: theme.colors.surface,
     borderTopLeftRadius: 30,
     borderTopRightRadius: 30,
     marginTop: -30,
@@ -259,16 +267,16 @@ const styles = StyleSheet.create({
   label: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#18181b',
+    color: theme.colors.text,
     marginBottom: 8,
   },
   inputWrapper: {
     flexDirection: 'row',
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: '#e4e4e7',
+    borderColor: theme.colors.border,
     borderRadius: 12,
-    backgroundColor: '#fafafa',
+    backgroundColor: theme.colors.surfaceSecondary,
     paddingHorizontal: 16,
     height: 56,
   },
@@ -278,7 +286,7 @@ const styles = StyleSheet.create({
   input: {
     flex: 1,
     fontSize: 16,
-    color: '#18181b',
+    color: theme.colors.text,
   },
   eyeIcon: {
     padding: 8,
@@ -287,12 +295,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#047857',
+    backgroundColor: theme.colors.primary,
     borderRadius: 14,
     height: 56,
     marginTop: 12,
     gap: 8,
-    shadowColor: '#047857',
+    shadowColor: theme.colors.primary,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 12,
@@ -314,12 +322,12 @@ const styles = StyleSheet.create({
   dividerLine: {
     flex: 1,
     height: 1,
-    backgroundColor: '#e4e4e7',
+    backgroundColor: theme.colors.border,
   },
   dividerText: {
     paddingHorizontal: 16,
     fontSize: 14,
-    color: '#71717a',
+    color: theme.colors.textMuted,
   },
   loginPrompt: {
     alignItems: 'center',
@@ -327,10 +335,11 @@ const styles = StyleSheet.create({
   },
   loginPromptText: {
     fontSize: 14,
-    color: '#71717a',
+    color: theme.colors.textMuted,
   },
   loginLink: {
-    color: '#047857',
+    color: theme.colors.primary,
     fontWeight: '600',
   },
-});
+  });
+}

@@ -1,6 +1,7 @@
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useTheme } from '../contexts/ThemeContext';
 
 interface StatsStripProps {
     familyMembers: number;
@@ -15,10 +16,15 @@ function formatCompactCount(value: number): string {
 }
 
 export function StatsStrip({ familyMembers, prayersLifted, mediaItems }: StatsStripProps) {
+    const { theme, isDark } = useTheme();
+    const gradientColors: [string, string] = isDark
+        ? [theme.colors.primary, theme.colors.primaryLight]
+        : ['#047857', '#065f46'];
+
     return (
-        <View style={styles.container}>
+        <View style={[styles.container, { shadowColor: theme.colors.primary }]}>
             <LinearGradient
-                colors={['#047857', '#065f46']}
+                colors={gradientColors}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 0 }}
                 style={styles.gradient}

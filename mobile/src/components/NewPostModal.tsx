@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState, useMemo } from 'react';
 import {
     Modal,
     View,
@@ -16,8 +16,12 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
+import { useNavigation } from '@react-navigation/native';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { BackendThread, CreatePostError, createCommunityPost } from '../lib/backend';
 import { useAuth } from '../contexts/AuthContext';
+import { useTheme, type Theme } from '../contexts/ThemeContext';
+import { RootStackParamList } from '../types/navigation';
 import {
     Category,
     PostType,
@@ -28,6 +32,8 @@ import {
 interface NewPostModalProps {
     visible: boolean;
     onClose: () => void;
+    /** When set, opening the sheet starts on this type (e.g. match Community prayers vs discussions tab). */
+    defaultPostType?: PostType;
     onSuccess: (createdPost: BackendThread) => Promise<void> | void;
     onOptimisticCreate?: (tempPost: BackendThread) => void;
     onCommitCreate?: (tempId: string, persistedPost: BackendThread) => void;
@@ -37,12 +43,16 @@ interface NewPostModalProps {
 export function NewPostModal({
     visible,
     onClose,
+    defaultPostType,
     onSuccess,
     onOptimisticCreate,
     onCommitCreate,
     onCreateFailed
 }: NewPostModalProps) {
+    const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
     const { user } = useAuth();
+    const { theme } = useTheme();
+    const styles = useMemo(() => createNewPostModalStyles(theme), [theme]);
     const [postType, setPostType] = useState<PostType>('prayer');
     const categories = getPostableCategoriesByType(postType);
     const [selectedCategory, setSelectedCategory] = useState<Category>(categories[0]);
@@ -52,6 +62,7 @@ export function NewPostModal({
     const [loading, setLoading] = useState(false);
     const submitInFlightRef = useRef(false);
     const isMountedRef = useRef(true);
+    const wasVisibleRef = useRef(false);
 
     useEffect(() => {
         return () => {
@@ -59,14 +70,21 @@ export function NewPostModal({
         };
     }, []);
 
-    const resetForm = () => {
-        setPostType('prayer');
-        const prayerCategories = getPostableCategoriesByType('prayer');
-        setSelectedCategory(prayerCategories[0]);
+    const resetForm = useCallback(() => {
+        const t = defaultPostType ?? 'prayer';
+        setPostType(t);
+        setSelectedCategory(getPostableCategoriesByType(t)[0]);
         setTitle('');
         setContent('');
         setIsAnonymous(false);
-    };
+    }, [defaultPostType]);
+
+    useEffect(() => {
+        if (visible && !wasVisibleRef.current) {
+            resetForm();
+        }
+        wasVisibleRef.current = visible;
+    }, [visible, resetForm]);
 
     useEffect(() => {
         if (!categories.some((cat) => cat.id === selectedCategory?.id)) {
@@ -87,7 +105,10 @@ export function NewPostModal({
         }
 
         if (!user) {
-            Alert.alert('Authentication Required', 'Please sign in to post.');
+            Alert.alert('Authentication Required', 'Please sign in to post.', [
+                { text: 'Cancel', style: 'cancel' },
+                { text: 'Sign in', onPress: () => navigation.navigate('Login', { redirectBack: true }) },
+            ]);
             return;
         }
 
@@ -168,7 +189,10 @@ export function NewPostModal({
             if (createError?.code === 'validation') {
                 Alert.alert('Unable to Post', createError.message);
             } else if (createError?.code === 'auth') {
-                Alert.alert('Authentication Required', 'Please sign in again and try posting.');
+                Alert.alert('Authentication Required', 'Please sign in again and try posting.', [
+                    { text: 'Cancel', style: 'cancel' },
+                    { text: 'Sign in', onPress: () => navigation.navigate('Login', { redirectBack: true }) },
+                ]);
             } else if (createError?.code === 'timeout' || createError?.code === 'network') {
                 Alert.alert('Network Issue', 'We could not publish your post. Please try again.');
             } else {
@@ -196,7 +220,7 @@ export function NewPostModal({
                 >
                     <View style={styles.header}>
                         <Pressable onPress={handleClose} style={styles.closeButton} disabled={loading}>
-                            <Ionicons name="close" size={28} color="#09090b" />
+                            <Ionicons name="close" size={28} color={theme.colors.text} />
                         </Pressable>
                         <Text style={styles.headerTitle}>New Post</Text>
                         <View style={{ width: 28 }} />
@@ -217,7 +241,7 @@ export function NewPostModal({
                                     <Ionicons
                                         name={postType === 'prayer' ? 'hand-right' : 'hand-right-outline'}
                                         size={16}
-                                        color={postType === 'prayer' ? '#fff' : '#71717a'}
+                                        color={postType === 'prayer' ? '#fff' : theme.colors.textMuted}
                                     />
                                     <Text style={[styles.postTypeText, postType === 'prayer' && styles.postTypeTextActive]}>
                                         Prayer
@@ -234,7 +258,7 @@ export function NewPostModal({
                                     <Ionicons
                                         name={postType === 'discussion' ? 'chatbubbles' : 'chatbubbles-outline'}
                                         size={16}
-                                        color={postType === 'discussion' ? '#fff' : '#71717a'}
+                                        color={postType === 'discussion' ? '#fff' : theme.colors.textMuted}
                                     />
                                     <Text style={[styles.postTypeText, postType === 'discussion' && styles.postTypeTextActive]}>
                                         Discussion
@@ -269,7 +293,7 @@ export function NewPostModal({
                                                 ? category.iconActive 
                                                 : category.icon}
                                             size={18}
-                                            color={selectedCategory.id === category.id ? '#fff' : '#047857'}
+                                            color={selectedCategory.id === category.id ? '#fff' : theme.colors.primary}
                                         />
                                         <Text
                                             style={[
@@ -290,7 +314,7 @@ export function NewPostModal({
                             <TextInput
                                 style={styles.titleInput}
                                 placeholder={selectedCategory.placeholder.title}
-                                placeholderTextColor="#a1a1aa"
+                                placeholderTextColor={theme.colors.textMuted}
                                 value={title}
                                 onChangeText={setTitle}
                                 maxLength={100}
@@ -304,7 +328,7 @@ export function NewPostModal({
                             <TextInput
                                 style={styles.contentInput}
                                 placeholder={selectedCategory.placeholder.content}
-                                placeholderTextColor="#a1a1aa"
+                                placeholderTextColor={theme.colors.textMuted}
                                 value={content}
                                 onChangeText={setContent}
                                 maxLength={1000}
@@ -319,7 +343,7 @@ export function NewPostModal({
                         <View style={styles.section}>
                             <View style={styles.anonymousRow}>
                                 <View style={styles.anonymousInfo}>
-                                    <Ionicons name="eye-off" size={20} color={isAnonymous ? '#047857' : '#71717a'} />
+                                    <Ionicons name="eye-off" size={20} color={isAnonymous ? theme.colors.primary : theme.colors.textMuted} />
                                     <View>
                                         <Text style={styles.anonymousLabel}>Post Anonymously</Text>
                                         <Text style={styles.anonymousDescription}>
@@ -341,7 +365,7 @@ export function NewPostModal({
                         </View>
 
                         <View style={styles.guidanceContainer}>
-                            <Ionicons name="information-circle" size={20} color="#047857" />
+                            <Ionicons name="information-circle" size={20} color={theme.colors.primary} />
                             <Text style={styles.guidanceText}>
                                 {isAnonymous 
                                     ? 'Your post will be shared anonymously. Your identity will remain private.'
@@ -363,7 +387,7 @@ export function NewPostModal({
                                 <ActivityIndicator color="#fff" />
                             ) : (
                                 <LinearGradient
-                                    colors={['#047857', '#059669']}
+                                    colors={[theme.colors.primary, '#059669']}
                                     start={{ x: 0, y: 0 }}
                                     end={{ x: 1, y: 0 }}
                                     style={styles.submitGradient}
@@ -382,10 +406,13 @@ export function NewPostModal({
     );
 }
 
-const styles = StyleSheet.create({
+function createNewPostModalStyles(theme: Theme) {
+    const guidanceBorder = theme.dark ? 'rgba(16, 185, 129, 0.35)' : '#bbf7d0';
+
+    return StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: '#fff',
+        backgroundColor: theme.colors.background,
     },
     keyboardAvoid: {
         flex: 1,
@@ -397,7 +424,7 @@ const styles = StyleSheet.create({
         paddingHorizontal: 20,
         paddingVertical: 16,
         borderBottomWidth: 1,
-        borderBottomColor: '#e4e4e7',
+        borderBottomColor: theme.colors.border,
     },
     closeButton: {
         padding: 4,
@@ -405,7 +432,7 @@ const styles = StyleSheet.create({
     headerTitle: {
         fontSize: 18,
         fontWeight: '600',
-        color: '#09090b',
+        color: theme.colors.text,
     },
     scrollView: {
         flex: 1,
@@ -417,7 +444,7 @@ const styles = StyleSheet.create({
     label: {
         fontSize: 15,
         fontWeight: '600',
-        color: '#09090b',
+        color: theme.colors.text,
         marginBottom: 12,
     },
     postTypeContainer: {
@@ -432,18 +459,18 @@ const styles = StyleSheet.create({
         gap: 6,
         borderRadius: 12,
         borderWidth: 1,
-        borderColor: '#e4e4e7',
-        backgroundColor: '#f4f4f5',
+        borderColor: theme.colors.border,
+        backgroundColor: theme.colors.borderLight,
         paddingVertical: 10,
     },
     postTypeButtonActive: {
-        backgroundColor: '#047857',
-        borderColor: '#047857',
+        backgroundColor: theme.colors.primary,
+        borderColor: theme.colors.primary,
     },
     postTypeText: {
         fontSize: 14,
         fontWeight: '600',
-        color: '#71717a',
+        color: theme.colors.textMuted,
     },
     postTypeTextActive: {
         color: '#fff',
@@ -458,52 +485,52 @@ const styles = StyleSheet.create({
         paddingVertical: 10,
         paddingHorizontal: 14,
         borderRadius: 20,
-        backgroundColor: '#f4f4f5',
+        backgroundColor: theme.colors.borderLight,
         borderWidth: 2,
         borderColor: 'transparent',
     },
     categoryButtonActive: {
-        backgroundColor: '#047857',
-        borderColor: '#047857',
+        backgroundColor: theme.colors.primary,
+        borderColor: theme.colors.primary,
     },
     categoryButtonText: {
         fontSize: 13,
         fontWeight: '600',
-        color: '#047857',
+        color: theme.colors.primary,
     },
     categoryButtonTextActive: {
         color: '#fff',
     },
     categoryDescription: {
         fontSize: 13,
-        color: '#71717a',
+        color: theme.colors.textMuted,
         marginTop: 12,
         fontStyle: 'italic',
     },
     titleInput: {
-        backgroundColor: '#f4f4f5',
+        backgroundColor: theme.colors.borderLight,
         borderRadius: 12,
         paddingHorizontal: 16,
         paddingVertical: 14,
         fontSize: 16,
-        color: '#09090b',
+        color: theme.colors.text,
         borderWidth: 1,
         borderColor: 'transparent',
     },
     contentInput: {
-        backgroundColor: '#f4f4f5',
+        backgroundColor: theme.colors.borderLight,
         borderRadius: 12,
         paddingHorizontal: 16,
         paddingVertical: 14,
         fontSize: 15,
-        color: '#09090b',
+        color: theme.colors.text,
         minHeight: 160,
         borderWidth: 1,
         borderColor: 'transparent',
     },
     charCount: {
         fontSize: 12,
-        color: '#a1a1aa',
+        color: theme.colors.textMuted,
         textAlign: 'right',
         marginTop: 6,
     },
@@ -514,21 +541,21 @@ const styles = StyleSheet.create({
         paddingVertical: 16,
         marginHorizontal: 20,
         marginTop: 20,
-        backgroundColor: '#f0fdf4',
+        backgroundColor: theme.colors.primaryLight,
         borderRadius: 12,
         borderWidth: 1,
-        borderColor: '#bbf7d0',
+        borderColor: guidanceBorder,
     },
     guidanceText: {
         flex: 1,
         fontSize: 13,
-        color: '#047857',
+        color: theme.colors.primary,
         lineHeight: 18,
     },
     footer: {
         padding: 20,
         borderTopWidth: 1,
-        borderTopColor: '#e4e4e7',
+        borderTopColor: theme.colors.border,
     },
     submitButton: {
         borderRadius: 12,
@@ -553,7 +580,7 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'space-between',
-        backgroundColor: '#f4f4f5',
+        backgroundColor: theme.colors.borderLight,
         borderRadius: 12,
         padding: 16,
     },
@@ -566,29 +593,29 @@ const styles = StyleSheet.create({
     anonymousLabel: {
         fontSize: 15,
         fontWeight: '600',
-        color: '#09090b',
+        color: theme.colors.text,
     },
     anonymousDescription: {
         fontSize: 12,
-        color: '#71717a',
+        color: theme.colors.textMuted,
         marginTop: 2,
     },
     toggle: {
         width: 50,
         height: 28,
         borderRadius: 14,
-        backgroundColor: '#e4e4e7',
+        backgroundColor: theme.colors.border,
         padding: 2,
         justifyContent: 'center',
     },
     toggleActive: {
-        backgroundColor: '#047857',
+        backgroundColor: theme.colors.primary,
     },
     toggleKnob: {
         width: 24,
         height: 24,
         borderRadius: 12,
-        backgroundColor: '#fff',
+        backgroundColor: theme.colors.surface,
         shadowColor: '#000',
         shadowOffset: { width: 0, height: 2 },
         shadowOpacity: 0.1,
@@ -598,4 +625,5 @@ const styles = StyleSheet.create({
     toggleKnobActive: {
         alignSelf: 'flex-end',
     },
-});
+    });
+}

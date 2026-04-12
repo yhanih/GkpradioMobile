@@ -1,6 +1,7 @@
 import React, { useEffect, useRef } from 'react';
 import { View, StyleSheet, Animated, Dimensions } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useTheme } from '../contexts/ThemeContext';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -12,6 +13,7 @@ interface SkeletonProps {
 }
 
 export function Skeleton({ width = '100%', height = 20, borderRadius = 8, style }: SkeletonProps) {
+  const { theme, isDark } = useTheme();
   const shimmerAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
@@ -31,6 +33,8 @@ export function Skeleton({ width = '100%', height = 20, borderRadius = 8, style 
     outputRange: [-SCREEN_WIDTH, SCREEN_WIDTH],
   });
 
+  const shimmerMid = isDark ? 'rgba(255,255,255,0.12)' : 'rgba(255,255,255,0.4)';
+
   return (
     <View
       style={[
@@ -39,6 +43,7 @@ export function Skeleton({ width = '100%', height = 20, borderRadius = 8, style 
           width: width as any,
           height,
           borderRadius,
+          backgroundColor: theme.colors.border,
         },
         style,
       ]}
@@ -52,7 +57,7 @@ export function Skeleton({ width = '100%', height = 20, borderRadius = 8, style 
         ]}
       >
         <LinearGradient
-          colors={['transparent', 'rgba(255,255,255,0.4)', 'transparent']}
+          colors={['transparent', shimmerMid, 'transparent']}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 0 }}
           style={styles.gradient}
@@ -63,8 +68,9 @@ export function Skeleton({ width = '100%', height = 20, borderRadius = 8, style 
 }
 
 export function SkeletonCard() {
+  const { theme } = useTheme();
   return (
-    <View style={styles.card}>
+    <View style={[styles.card, { backgroundColor: theme.colors.surface }]}>
       <Skeleton width={140} height={100} borderRadius={12} />
       <View style={styles.cardContent}>
         <Skeleton width="80%" height={14} style={{ marginBottom: 8 }} />
@@ -75,8 +81,9 @@ export function SkeletonCard() {
 }
 
 export function SkeletonPostCard() {
+  const { theme } = useTheme();
   return (
-    <View style={styles.postCard}>
+    <View style={[styles.postCard, { backgroundColor: theme.colors.surface }]}>
       <View style={styles.postHeader}>
         <Skeleton width={40} height={40} borderRadius={20} />
         <View style={styles.postHeaderText}>
@@ -97,8 +104,9 @@ export function SkeletonPostCard() {
 }
 
 export function SkeletonEventCard() {
+  const { theme } = useTheme();
   return (
-    <View style={styles.eventCard}>
+    <View style={[styles.eventCard, { backgroundColor: theme.colors.surface }]}>
       <Skeleton width="100%" height={160} borderRadius={16} />
       <View style={styles.eventContent}>
         <Skeleton width="70%" height={18} style={{ marginBottom: 8 }} />
@@ -123,6 +131,7 @@ export function SkeletonMediaCard() {
 }
 
 export function SkeletonList({ count = 3, type = 'post' }: { count?: number; type?: 'post' | 'card' | 'event' | 'media' }) {
+  const { theme } = useTheme();
   const items = Array.from({ length: count }, (_, i) => i);
 
   const renderItem = (index: number) => {
@@ -140,7 +149,7 @@ export function SkeletonList({ count = 3, type = 'post' }: { count?: number; typ
   };
 
   return (
-    <View style={styles.list}>
+    <View style={[styles.list, { backgroundColor: theme.colors.background }]}>
       {items.map(renderItem)}
     </View>
   );
@@ -148,7 +157,6 @@ export function SkeletonList({ count = 3, type = 'post' }: { count?: number; typ
 
 const styles = StyleSheet.create({
   skeleton: {
-    backgroundColor: '#e4e4e7',
     overflow: 'hidden',
   },
   shimmer: {
@@ -162,7 +170,6 @@ const styles = StyleSheet.create({
   },
   card: {
     flexDirection: 'row',
-    backgroundColor: '#fff',
     borderRadius: 16,
     padding: 12,
     marginBottom: 12,
@@ -178,7 +185,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   postCard: {
-    backgroundColor: '#fff',
     borderRadius: 16,
     padding: 16,
     marginBottom: 12,
@@ -202,7 +208,6 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   eventCard: {
-    backgroundColor: '#fff',
     borderRadius: 20,
     overflow: 'hidden',
     marginBottom: 16,

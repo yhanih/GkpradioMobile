@@ -23,7 +23,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (!sessionUser) return null;
     const { data: profile } = await supabase
       .from('profiles')
-      .select('id,full_name,avatar_url,bio')
+      .select('id,full_name,avatar_url,bio,created_at')
       .eq('id', sessionUser.id)
       .maybeSingle();
 
@@ -33,6 +33,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       fullname: profile?.full_name || sessionUser.user_metadata?.full_name || null,
       avatarurl: profile?.avatar_url || null,
       bio: profile?.bio || null,
+      created_at: profile?.created_at || sessionUser.created_at || null,
     };
   };
 

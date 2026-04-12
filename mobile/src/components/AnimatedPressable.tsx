@@ -1,6 +1,7 @@
 import React, { useRef } from 'react';
 import { Animated, Pressable, StyleSheet, ViewStyle, PressableProps } from 'react-native';
 import * as Haptics from 'expo-haptics';
+import { useTheme } from '../contexts/ThemeContext';
 
 interface AnimatedPressableProps extends PressableProps {
   children: React.ReactNode;
@@ -93,10 +94,13 @@ export function AnimatedCard({
   onPress,
   ...props
 }: AnimatedPressableProps) {
-  const combinedStyle = style ? [styles.card, ...(Array.isArray(style) ? style : [style])] : styles.card;
+  const { theme } = useTheme();
+  const combinedStyle = style
+    ? [{ backgroundColor: theme.colors.surface }, styles.card, ...(Array.isArray(style) ? style : [style])]
+    : [{ backgroundColor: theme.colors.surface }, styles.card];
   return (
     <AnimatedPressable
-      style={combinedStyle as ViewStyle}
+      style={combinedStyle as ViewStyle | ViewStyle[]}
       scaleValue={0.98}
       haptic="light"
       onPress={onPress}
@@ -116,16 +120,27 @@ export function AnimatedButton({
   variant = 'primary',
   ...props
 }: AnimatedPressableProps & { variant?: 'primary' | 'secondary' | 'ghost' }) {
-  const buttonStyle = variant === 'primary' 
-    ? styles.primaryButton 
-    : variant === 'secondary' 
-    ? styles.secondaryButton 
-    : styles.ghostButton;
+  const { theme } = useTheme();
+  const buttonStyle =
+    variant === 'primary'
+      ? [styles.primaryButton, { backgroundColor: theme.colors.primary }]
+      : variant === 'secondary'
+        ? [
+            styles.secondaryButton,
+            {
+              backgroundColor: theme.colors.surfaceSecondary,
+              borderColor: theme.colors.border,
+            },
+          ]
+        : styles.ghostButton;
 
-  const combinedStyle = style ? [buttonStyle, ...(Array.isArray(style) ? style : [style])] : buttonStyle;
+  const baseStyle = Array.isArray(buttonStyle) ? buttonStyle : [buttonStyle];
+  const combinedStyle = style
+    ? [...baseStyle, ...(Array.isArray(style) ? style : [style])]
+    : baseStyle;
   return (
     <AnimatedPressable
-      style={combinedStyle as ViewStyle}
+      style={combinedStyle as ViewStyle | ViewStyle[]}
       scaleValue={0.96}
       haptic="medium"
       onPress={onPress}
@@ -140,7 +155,6 @@ export function AnimatedButton({
 
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: '#fff',
     borderRadius: 16,
     padding: 16,
     shadowColor: '#000',
@@ -150,7 +164,6 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   primaryButton: {
-    backgroundColor: '#047857',
     borderRadius: 12,
     paddingVertical: 14,
     paddingHorizontal: 24,
@@ -158,14 +171,12 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   secondaryButton: {
-    backgroundColor: '#f4f4f5',
     borderRadius: 12,
     paddingVertical: 14,
     paddingHorizontal: 24,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
-    borderColor: '#e4e4e7',
   },
   ghostButton: {
     paddingVertical: 14,

@@ -9,6 +9,7 @@ interface ProfileAvatarProps {
   onPress?: () => void;
   showBorder?: boolean;
   isAnonymous?: boolean;
+  showOnlineIndicator?: boolean;
   accessibilityLabel?: string;
   accessibilityRole?: string;
 }
@@ -27,12 +28,20 @@ const ICON_SIZES = {
   xlarge: 48,
 };
 
+const DOT_SIZES = {
+  small: 8,
+  medium: 10,
+  large: 14,
+  xlarge: 18,
+};
+
 export function ProfileAvatar({
   uri,
   size = 'medium',
   onPress,
   showBorder = false,
   isAnonymous = false,
+  showOnlineIndicator = false,
   accessibilityLabel,
   accessibilityRole
 }: ProfileAvatarProps) {
@@ -106,6 +115,27 @@ export function ProfileAvatar({
     );
   };
 
+  const dotSize = DOT_SIZES[size];
+
+  const renderWithIndicator = (content: React.ReactNode) => (
+    <View style={{ width: dimension, height: dimension }}>
+      {content}
+      {showOnlineIndicator && (
+        <View
+          style={[
+            styles.onlineDot,
+            {
+              width: dotSize,
+              height: dotSize,
+              borderRadius: dotSize / 2,
+              borderWidth: dotSize > 10 ? 2 : 1.5,
+            },
+          ]}
+        />
+      )}
+    </View>
+  );
+
   if (onPress) {
     return (
       <Pressable
@@ -114,12 +144,12 @@ export function ProfileAvatar({
         accessibilityLabel={accessibilityLabel}
         accessibilityRole={accessibilityRole as any || 'button'}
       >
-        {avatarContent()}
+        {renderWithIndicator(avatarContent())}
       </Pressable>
     );
   }
 
-  return avatarContent();
+  return renderWithIndicator(avatarContent());
 }
 
 const styles = StyleSheet.create({
@@ -144,5 +174,12 @@ const styles = StyleSheet.create({
   pressed: {
     opacity: 0.8,
     transform: [{ scale: 0.95 }],
+  },
+  onlineDot: {
+    position: 'absolute',
+    bottom: 0,
+    right: 0,
+    backgroundColor: '#22c55e',
+    borderColor: '#fff',
   },
 });

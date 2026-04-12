@@ -14,10 +14,12 @@ import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import * as Haptics from 'expo-haptics';
-import { wpClient, WPUser, WPTestimony } from '../lib/wordpress';
+import { supabase } from '../lib/supabase';
+import { fetchBlockedUserIds, unblockCommunityUser } from '../lib/backend';
 import { RootStackParamList } from '../types/navigation';
 import { getCategoryIcon, getCategoryLabel } from '../constants/categories';
 import { useTheme } from '../contexts/ThemeContext';
+import { useAuth } from '../contexts/AuthContext';
 
 type UserProfileRouteProp = RouteProp<RootStackParamList, 'UserProfile'>;
 type UserProfileNavProp = NativeStackNavigationProp<RootStackParamList, 'UserProfile'>;
@@ -26,33 +28,103 @@ export function UserProfileScreen() {
   const navigation = useNavigation<UserProfileNavProp>();
   const route = useRoute<UserProfileRouteProp>();
   const { theme } = useTheme();
+  const { user: authUser } = useAuth();
 
-  const [userProfile, setUserProfile] = useState<WPUser | null>(route.params.user || null);
-  const [testimonies, setTestimonies] = useState<WPTestimony[]>([]);
+  const [userProfile, setUserProfile] = useState<any | null>(route.params.user || null);
+  const [posts, setPosts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [stats, setStats] = useState({ posts: 0, testimonies: 0 });
+  const [youHaveBlocked, setYouHaveBlocked] = useState(false);
 
   const fetchUserProfile = useCallback(async () => {
     try {
-      const { data, error } = await wpClient.getUserById(route.params.userId);
-      if (error) throw new Error(error);
-      if (data) setUserProfile(data);
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('id,full_name,avatar_url,bio,created_at')
+        .eq('id', String(route.params.userId))
+        .maybeSingle();
+
+      if (error) throw error;
+
+      if (data) {
+        setUserProfile({
+          id: data.id,
+          fullname: data.full_name,
+          avatarurl: data.avatar_url,
+          bio: data.bio,
+          created_at: data.created_at,
+        });
+      }
     } catch (error) {
       console.error('Error fetching user profile:', error);
     }
   }, [route.params.userId]);
 
-  const fetchUserTestimonies = useCallback(async () => {
+  const fetchUserPosts = useCallback(async () => {
     try {
-      const { data, error } = await wpClient.getTestimonies(20, 1, route.params.userId);
-      if (error) throw new Error(error);
-      
-      const items = data || [];
-      setTestimonies(items);
+      const userId = String(route.params.userId);
+
+      const { data: postsData, error: postsError } = await supabase
+        .from('posts')
+        .select('id,title,content,category,post_type,author_id,is_pinned,created_at,is_anonymous')
+        .eq('author_id', userId)
+        .order('created_at', { ascending: false })
+        .limit(50);
+
+      if (postsError) throw postsError;
+
+      const rows = postsData || [];
+      const postIds = rows.map((p: any) => p.id);
+
+      const [reactionsRes, commentsRes] = await Promise.all([
+        postIds.length
+          ? supabase
+              .from('post_reactions')
+              .select('post_id,reaction_type')
+              .in('post_id', postIds)
+          : Promise.resolve({ data: [], error: null } as any),
+        postIds.length
+          ? supabase
+              .from('comments')
+              .select('post_id')
+              .in('post_id', postIds)
+          : Promise.resolve({ data: [], error: null } as any),
+      ]);
+
+      if (reactionsRes.error) throw reactionsRes.error;
+      if (commentsRes.error) throw commentsRes.error;
+
+      const likeCounts = new Map<string, number>();
+      (reactionsRes.data || []).forEach((r: any) => {
+        if (r.reaction_type !== 'like') return;
+        likeCounts.set(r.post_id, (likeCounts.get(r.post_id) || 0) + 1);
+      });
+
+      const commentCounts = new Map<string, number>();
+      (commentsRes.data || []).forEach((c: any) => {
+        commentCounts.set(c.post_id, (commentCounts.get(c.post_id) || 0) + 1);
+      });
+
+      const mapped = rows.map((p: any) => ({
+        id: String(p.id),
+        title: String(p.title || ''),
+        content: String(p.content || ''),
+        category: String(p.category || ''),
+        post_type: p.post_type || null,
+        createdat: p.created_at,
+        userid: String(p.author_id),
+        is_anonymous: Boolean(p.is_anonymous),
+        ispinned: Boolean(p.is_pinned),
+        like_count: likeCounts.get(p.id) || 0,
+        prayer_count: 0,
+        comment_count: commentCounts.get(p.id) || 0,
+      }));
+
+      setPosts(mapped);
       setStats({
-        posts: items.length,
-        testimonies: items.length,
+        posts: mapped.length,
+        testimonies: mapped.length,
       });
     } catch (error) {
       console.error('Error fetching user testimonies:', error);
@@ -61,9 +133,22 @@ export function UserProfileScreen() {
 
   const loadData = useCallback(async () => {
     setLoading(true);
-    await Promise.all([fetchUserProfile(), fetchUserTestimonies()]);
+    await Promise.all([fetchUserProfile(), fetchUserPosts()]);
+    const viewedId = String(route.params.userId);
+    if (authUser?.id && viewedId !== String(authUser.id)) {
+      const blocked = await fetchBlockedUserIds(authUser.id);
+      if (blocked.includes(viewedId)) {
+        setYouHaveBlocked(true);
+        setPosts([]);
+        setStats({ posts: 0, testimonies: 0 });
+      } else {
+        setYouHaveBlocked(false);
+      }
+    } else {
+      setYouHaveBlocked(false);
+    }
     setLoading(false);
-  }, [fetchUserProfile, fetchUserTestimonies]);
+  }, [fetchUserProfile, fetchUserPosts, authUser?.id, route.params.userId]);
 
   useEffect(() => {
     loadData();
@@ -71,8 +156,34 @@ export function UserProfileScreen() {
 
   const onRefresh = async () => {
     setRefreshing(true);
-    await Promise.all([fetchUserProfile(), fetchUserTestimonies()]);
+    await Promise.all([fetchUserProfile(), fetchUserPosts()]);
+    const viewedId = String(route.params.userId);
+    if (authUser?.id && viewedId !== String(authUser.id)) {
+      const blocked = await fetchBlockedUserIds(authUser.id);
+      if (blocked.includes(viewedId)) {
+        setYouHaveBlocked(true);
+        setPosts([]);
+        setStats({ posts: 0, testimonies: 0 });
+      } else {
+        setYouHaveBlocked(false);
+      }
+    } else {
+      setYouHaveBlocked(false);
+    }
     setRefreshing(false);
+  };
+
+  const handleUnblock = async () => {
+    if (!authUser?.id) return;
+    const viewedId = String(route.params.userId);
+    try {
+      await unblockCommunityUser(authUser.id, viewedId);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      setYouHaveBlocked(false);
+      await fetchUserPosts();
+    } catch (e) {
+      console.error('Unblock failed:', e);
+    }
   };
 
   const formatTimeAgo = (dateString: string) => {
@@ -86,15 +197,15 @@ export function UserProfileScreen() {
     return `${Math.floor(diffInSeconds / 86400)}d ago`;
   };
 
-  const navigateToPost = (testimony: WPTestimony) => {
+  const navigateToPost = (post: any) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    navigation.navigate('PostDetail', { threadId: testimony.id, testimony });
+    navigation.navigate('PostDetail', { threadId: post.id, thread: post });
   };
 
   if (loading) {
     return (
       <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.background }]} edges={['top']}>
-        <View style={styles.header}>
+        <View style={[styles.header, { borderBottomColor: theme.colors.border }]}>
           <Pressable onPress={() => navigation.goBack()} style={styles.backButton}>
             <Ionicons name="arrow-back" size={24} color={theme.colors.text} />
           </Pressable>
@@ -111,7 +222,7 @@ export function UserProfileScreen() {
   if (!userProfile) {
     return (
       <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.background }]} edges={['top']}>
-        <View style={styles.header}>
+        <View style={[styles.header, { borderBottomColor: theme.colors.border }]}>
           <Pressable onPress={() => navigation.goBack()} style={styles.backButton}>
             <Ionicons name="arrow-back" size={24} color={theme.colors.text} />
           </Pressable>
@@ -129,12 +240,12 @@ export function UserProfileScreen() {
     );
   }
 
-  const avatarUrl = userProfile.avatar_urls?.['96'];
-  const displayName = userProfile.name || userProfile.nickname || 'Community Member';
+  const avatarUrl = userProfile.avatarurl;
+  const displayName = userProfile.fullname || 'Community Member';
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.background }]} edges={['top']}>
-      <View style={styles.header}>
+      <View style={[styles.header, { borderBottomColor: theme.colors.border }]}>
         <Pressable onPress={() => navigation.goBack()} style={styles.backButton}>
           <Ionicons name="arrow-back" size={24} color={theme.colors.text} />
         </Pressable>
@@ -153,7 +264,7 @@ export function UserProfileScreen() {
           {avatarUrl ? (
             <Image source={{ uri: avatarUrl }} style={styles.avatar} />
           ) : (
-            <View style={styles.avatarPlaceholder}>
+            <View style={[styles.avatarPlaceholder, { backgroundColor: theme.colors.surfaceSecondary }]}>
               <Ionicons name="person" size={40} color={theme.colors.textMuted} />
             </View>
           )}
@@ -162,10 +273,10 @@ export function UserProfileScreen() {
             {displayName}
           </Text>
           
-          <Text style={[styles.username, { color: theme.colors.textMuted }]}>@{userProfile.username || userProfile.nickname}</Text>
+          <Text style={[styles.username, { color: theme.colors.textMuted }]}>@{String(userProfile.id).slice(0, 8)}</Text>
           
-          {userProfile.description && (
-            <Text style={[styles.bio, { color: theme.colors.textMuted }]}>{userProfile.description}</Text>
+          {userProfile.bio && (
+            <Text style={[styles.bio, { color: theme.colors.textMuted }]}>{userProfile.bio}</Text>
           )}
         </View>
 
@@ -176,40 +287,63 @@ export function UserProfileScreen() {
           </View>
         </View>
 
+        {youHaveBlocked ? (
+          <View style={[styles.blockedBanner, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}>
+            <Ionicons name="eye-off-outline" size={28} color={theme.colors.textMuted} />
+            <Text style={[styles.blockedTitle, { color: theme.colors.text }]}>You blocked this member</Text>
+            <Text style={[styles.blockedSubtitle, { color: theme.colors.textMuted }]}>
+              Their posts are hidden from your community feed. You can unblock them anytime.
+            </Text>
+            <Pressable
+              style={[styles.unblockButton, { backgroundColor: theme.colors.primary }]}
+              onPress={handleUnblock}
+            >
+              <Text style={styles.unblockButtonText}>Unblock</Text>
+            </Pressable>
+          </View>
+        ) : null}
+
         <View style={styles.postsSection}>
           <Text style={[styles.postsTitle, { color: theme.colors.text }]}>Public Testimonies</Text>
           
-          {testimonies.length === 0 ? (
+          {youHaveBlocked ? (
+            <View style={styles.emptyPosts}>
+              <Ionicons name="lock-closed-outline" size={36} color={theme.colors.textMuted} />
+              <Text style={[styles.emptyPostsText, { color: theme.colors.textMuted }]}>
+                Posts are hidden while this member is blocked
+              </Text>
+            </View>
+          ) : posts.length === 0 ? (
             <View style={styles.emptyPosts}>
               <Ionicons name="document-text-outline" size={36} color={theme.colors.textMuted} />
               <Text style={[styles.emptyPostsText, { color: theme.colors.textMuted }]}>No public testimonies yet</Text>
             </View>
           ) : (
-            testimonies.map(testimony => (
+            posts.map(post => (
               <Pressable
-                key={testimony.id}
+                key={post.id}
                 style={[styles.postCard, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}
-                onPress={() => navigateToPost(testimony)}
+                onPress={() => navigateToPost(post)}
               >
                 <View style={styles.postHeader}>
-                  <Text style={[styles.postTime, { color: theme.colors.textMuted }]}>{formatTimeAgo(testimony.date)}</Text>
+                  <Text style={[styles.postTime, { color: theme.colors.textMuted }]}>{formatTimeAgo(post.createdat)}</Text>
                 </View>
                 
                 <Text style={[styles.postTitle, { color: theme.colors.text }]} numberOfLines={2}>
-                  {testimony.title.rendered}
+                  {post.title}
                 </Text>
                 <Text style={[styles.postContent, { color: theme.colors.textMuted }]} numberOfLines={2}>
-                  {testimony.content.rendered.replace(/<[^>]*>?/gm, '')}
+                  {post.content}
                 </Text>
                 
                 <View style={styles.postStats}>
                   <View style={styles.postStat}>
                     <Ionicons name="heart-outline" size={16} color={theme.colors.textMuted} />
-                    <Text style={[styles.postStatText, { color: theme.colors.textMuted }]}>{testimony.like_count || 0}</Text>
+                    <Text style={[styles.postStatText, { color: theme.colors.textMuted }]}>{post.like_count || 0}</Text>
                   </View>
                   <View style={styles.postStat}>
                     <Ionicons name="chatbubble-outline" size={16} color={theme.colors.textMuted} />
-                    <Text style={[styles.postStatText, { color: theme.colors.textMuted }]}>{testimony.comment_count || 0}</Text>
+                    <Text style={[styles.postStatText, { color: theme.colors.textMuted }]}>{post.comment_count || 0}</Text>
                   </View>
                 </View>
               </Pressable>
@@ -233,8 +367,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingHorizontal: 16,
     paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#e4e4e7',
+    borderBottomWidth: StyleSheet.hairlineWidth,
   },
   backButton: {
     padding: 8,
@@ -288,7 +421,6 @@ const styles = StyleSheet.create({
     width: 100,
     height: 100,
     borderRadius: 50,
-    backgroundColor: '#f4f4f5',
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 16,
@@ -382,5 +514,36 @@ const styles = StyleSheet.create({
   },
   postStatText: {
     fontSize: 13,
+  },
+  blockedBanner: {
+    marginHorizontal: 20,
+    marginTop: 16,
+    padding: 20,
+    borderRadius: 16,
+    borderWidth: 1,
+    alignItems: 'center',
+  },
+  blockedTitle: {
+    fontSize: 17,
+    fontWeight: '600',
+    marginTop: 12,
+    textAlign: 'center',
+  },
+  blockedSubtitle: {
+    fontSize: 14,
+    lineHeight: 20,
+    marginTop: 8,
+    textAlign: 'center',
+  },
+  unblockButton: {
+    marginTop: 16,
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 10,
+  },
+  unblockButtonText: {
+    color: '#fff',
+    fontSize: 15,
+    fontWeight: '600',
   },
 });

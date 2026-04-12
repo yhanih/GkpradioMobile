@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
     View,
     Text,
@@ -16,6 +16,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useAuth } from '../../contexts/AuthContext';
+import { useTheme, type Theme } from '../../contexts/ThemeContext';
 import { RootStackParamList } from '../../types/navigation';
 import * as Haptics from 'expo-haptics';
 
@@ -27,6 +28,8 @@ export default function ResetPasswordScreen() {
     const [confirmPassword, setConfirmPassword] = useState('');
     const [loading, setLoading] = useState(false);
     const { updatePassword } = useAuth();
+    const { theme } = useTheme();
+    const styles = useMemo(() => createResetPasswordStyles(theme), [theme]);
 
     const handleResetPassword = async () => {
         if (!password || !confirmPassword) {
@@ -73,7 +76,7 @@ export default function ResetPasswordScreen() {
             <ScrollView contentContainerStyle={styles.scrollContent}>
                 <View style={styles.header}>
                     <View style={styles.iconContainer}>
-                        <Ionicons name="lock-closed" size={40} color="#FFD700" />
+                        <Ionicons name="lock-closed" size={40} color={theme.colors.warning} />
                     </View>
                     <Text style={styles.title}>Reset Password</Text>
                     <Text style={styles.subtitle}>
@@ -83,11 +86,11 @@ export default function ResetPasswordScreen() {
 
                 <View style={styles.form}>
                     <View style={styles.inputContainer}>
-                        <Ionicons name="lock-closed-outline" size={20} color="#666" style={styles.inputIcon} />
+                        <Ionicons name="lock-closed-outline" size={20} color={theme.colors.textMuted} style={styles.inputIcon} />
                         <TextInput
                             style={styles.input}
                             placeholder="New Password"
-                            placeholderTextColor="#666"
+                            placeholderTextColor={theme.colors.textMuted}
                             value={password}
                             onChangeText={setPassword}
                             secureTextEntry
@@ -96,11 +99,11 @@ export default function ResetPasswordScreen() {
                     </View>
 
                     <View style={styles.inputContainer}>
-                        <Ionicons name="lock-closed-outline" size={20} color="#666" style={styles.inputIcon} />
+                        <Ionicons name="lock-closed-outline" size={20} color={theme.colors.textMuted} style={styles.inputIcon} />
                         <TextInput
                             style={styles.input}
                             placeholder="Confirm New Password"
-                            placeholderTextColor="#666"
+                            placeholderTextColor={theme.colors.textMuted}
                             value={confirmPassword}
                             onChangeText={setConfirmPassword}
                             secureTextEntry
@@ -114,13 +117,13 @@ export default function ResetPasswordScreen() {
                         disabled={loading}
                     >
                         <LinearGradient
-                            colors={['#FFD700', '#FFA500']}
+                            colors={[theme.colors.primary, '#059669']}
                             style={styles.gradient}
                             start={{ x: 0, y: 0 }}
                             end={{ x: 1, y: 0 }}
                         >
                             {loading ? (
-                                <ActivityIndicator color="#000" />
+                                <ActivityIndicator color="#fff" />
                             ) : (
                                 <Text style={styles.buttonText}>Update Password</Text>
                             )}
@@ -140,10 +143,11 @@ export default function ResetPasswordScreen() {
     );
 }
 
-const styles = StyleSheet.create({
+function createResetPasswordStyles(theme: Theme) {
+  return StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: '#000',
+        backgroundColor: theme.colors.background,
     },
     scrollContent: {
         flexGrow: 1,
@@ -158,7 +162,7 @@ const styles = StyleSheet.create({
         width: 80,
         height: 80,
         borderRadius: 40,
-        backgroundColor: 'rgba(255, 215, 0, 0.1)',
+        backgroundColor: theme.colors.primaryLight,
         justifyContent: 'center',
         alignItems: 'center',
         marginBottom: 20,
@@ -166,12 +170,12 @@ const styles = StyleSheet.create({
     title: {
         fontSize: 28,
         fontWeight: 'bold',
-        color: '#FFF',
+        color: theme.colors.text,
         marginBottom: 10,
     },
     subtitle: {
         fontSize: 16,
-        color: '#AAA',
+        color: theme.colors.textMuted,
         textAlign: 'center',
         paddingHorizontal: 20,
     },
@@ -181,12 +185,12 @@ const styles = StyleSheet.create({
     inputContainer: {
         flexDirection: 'row',
         alignItems: 'center',
-        backgroundColor: '#1A1A1A',
+        backgroundColor: theme.colors.surfaceSecondary,
         borderRadius: 12,
         marginBottom: 16,
         paddingHorizontal: 16,
         borderWidth: 1,
-        borderColor: '#333',
+        borderColor: theme.colors.border,
     },
     inputIcon: {
         marginRight: 12,
@@ -194,7 +198,7 @@ const styles = StyleSheet.create({
     input: {
         flex: 1,
         height: 56,
-        color: '#FFF',
+        color: theme.colors.text,
         fontSize: 16,
     },
     button: {
@@ -209,7 +213,7 @@ const styles = StyleSheet.create({
         alignItems: 'center',
     },
     buttonText: {
-        color: '#000',
+        color: '#fff',
         fontSize: 18,
         fontWeight: 'bold',
     },
@@ -218,7 +222,8 @@ const styles = StyleSheet.create({
         alignItems: 'center',
     },
     cancelButtonText: {
-        color: '#666',
+        color: theme.colors.textMuted,
         fontSize: 16,
     },
-});
+  });
+}

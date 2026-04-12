@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import {
   View,
   TextInput,
@@ -9,6 +9,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
+import { useTheme, type Theme } from '../contexts/ThemeContext';
 
 interface SearchBarProps {
   value: string;
@@ -33,6 +34,8 @@ export function SearchBar({
   showCancelButton = false,
   onCancel,
 }: SearchBarProps) {
+  const { theme } = useTheme();
+  const styles = useMemo(() => createSearchBarStyles(theme), [theme]);
   const [isFocused, setIsFocused] = useState(false);
   const inputRef = useRef<TextInput>(null);
   const focusAnim = useRef(new Animated.Value(0)).current;
@@ -79,7 +82,7 @@ export function SearchBar({
 
   const borderColor = focusAnim.interpolate({
     inputRange: [0, 1],
-    outputRange: ['#e4e4e7', '#047857'],
+    outputRange: [theme.colors.border, theme.colors.primary],
   });
 
   return (
@@ -96,7 +99,7 @@ export function SearchBar({
         <Ionicons
           name="search"
           size={20}
-          color={isFocused ? '#047857' : '#a1a1aa'}
+          color={isFocused ? theme.colors.primary : theme.colors.textMuted}
           style={styles.searchIcon}
         />
         <TextInput
@@ -105,7 +108,7 @@ export function SearchBar({
           value={value}
           onChangeText={onChangeText}
           placeholder={placeholder}
-          placeholderTextColor="#a1a1aa"
+          placeholderTextColor={theme.colors.textMuted}
           onFocus={handleFocus}
           onBlur={handleBlur}
           onSubmitEditing={onSubmit}
@@ -141,7 +144,7 @@ export function SearchBar({
           ]}
         >
           <Pressable onPress={handleCancel} style={styles.cancelButton}>
-            <Ionicons name="close-circle" size={28} color="#71717a" />
+            <Ionicons name="close-circle" size={28} color={theme.colors.textMuted} />
           </Pressable>
         </Animated.View>
       )}
@@ -156,23 +159,26 @@ export function CompactSearchBar({
   onPress: () => void;
   placeholder?: string;
 }) {
+  const { theme } = useTheme();
+  const styles = useMemo(() => createSearchBarStyles(theme), [theme]);
   return (
     <Pressable
       style={({ pressed }) => [
         styles.compactContainer,
-        pressed && styles.compactPressed,
+        pressed && { backgroundColor: theme.colors.border },
       ]}
       onPress={() => {
         Haptics.selectionAsync();
         onPress();
       }}
     >
-      <Ionicons name="search" size={18} color="#a1a1aa" />
+      <Ionicons name="search" size={18} color={theme.colors.textMuted} />
     </Pressable>
   );
 }
 
-const styles = StyleSheet.create({
+function createSearchBarStyles(theme: Theme) {
+  return StyleSheet.create({
   container: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -180,7 +186,7 @@ const styles = StyleSheet.create({
   inputContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#f9fafb',
+    backgroundColor: theme.colors.surfaceSecondary,
     borderRadius: 12,
     borderWidth: 1.5,
     paddingHorizontal: 12,
@@ -192,7 +198,7 @@ const styles = StyleSheet.create({
   input: {
     flex: 1,
     fontSize: 16,
-    color: '#18181b',
+    color: theme.colors.text,
     paddingVertical: 12,
   },
   clearButton: {
@@ -202,7 +208,7 @@ const styles = StyleSheet.create({
     width: 20,
     height: 20,
     borderRadius: 10,
-    backgroundColor: '#a1a1aa',
+    backgroundColor: theme.colors.textMuted,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -216,11 +222,9 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: '#f4f4f5',
+    backgroundColor: theme.colors.borderLight,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  compactPressed: {
-    backgroundColor: '#e4e4e7',
-  },
-});
+  });
+}

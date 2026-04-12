@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useMemo } from 'react';
 import {
   View,
   Text,
@@ -13,6 +13,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useTheme, type Theme } from '../contexts/ThemeContext';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -65,6 +66,8 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
   const [currentIndex, setCurrentIndex] = useState(0);
   const flatListRef = useRef<FlatList>(null);
   const scrollX = useRef(new Animated.Value(0)).current;
+  const { theme } = useTheme();
+  const styles = useMemo(() => createOnboardingStyles(theme), [theme]);
 
   const handleNext = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -213,7 +216,7 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
           onPress={handleNext}
         >
           <LinearGradient
-            colors={['#047857', '#059669']}
+            colors={[theme.colors.primary, '#059669']}
             style={styles.nextButtonGradient}
           >
             <Text style={styles.nextButtonText}>
@@ -240,10 +243,11 @@ export async function checkOnboardingComplete(): Promise<boolean> {
   }
 }
 
-const styles = StyleSheet.create({
+function createOnboardingStyles(theme: Theme) {
+  return StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fff',
+    backgroundColor: theme.colors.background,
   },
   header: {
     flexDirection: 'row',
@@ -256,7 +260,7 @@ const styles = StyleSheet.create({
     width: 48,
     height: 48,
     borderRadius: 24,
-    backgroundColor: '#047857',
+    backgroundColor: theme.colors.primary,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -272,7 +276,7 @@ const styles = StyleSheet.create({
   skipText: {
     fontSize: 15,
     fontWeight: '600',
-    color: '#71717a',
+    color: theme.colors.textMuted,
   },
   slide: {
     width: SCREEN_WIDTH,
@@ -289,7 +293,7 @@ const styles = StyleSheet.create({
     borderRadius: 80,
     justifyContent: 'center',
     alignItems: 'center',
-    shadowColor: '#047857',
+    shadowColor: theme.colors.primary,
     shadowOffset: { width: 0, height: 12 },
     shadowOpacity: 0.3,
     shadowRadius: 24,
@@ -298,13 +302,13 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 32,
     fontWeight: '800',
-    color: '#18181b',
+    color: theme.colors.text,
     textAlign: 'center',
     marginBottom: 16,
   },
   description: {
     fontSize: 17,
-    color: '#52525b',
+    color: theme.colors.textSecondary,
     textAlign: 'center',
     lineHeight: 26,
   },
@@ -317,7 +321,7 @@ const styles = StyleSheet.create({
   dot: {
     height: 8,
     borderRadius: 4,
-    backgroundColor: '#047857',
+    backgroundColor: theme.colors.primary,
     marginHorizontal: 4,
   },
   footer: {
@@ -344,4 +348,5 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#fff',
   },
-});
+  });
+}

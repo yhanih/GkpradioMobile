@@ -75,6 +75,16 @@ export interface BackendRadioStatus {
   };
 }
 
+export interface RadioQueueItem {
+  title: string;
+  artist: string;
+}
+
+export interface RadioQueueInfo {
+  upNext: RadioQueueItem | null;
+  recent: RadioQueueItem[];
+}
+
 export interface HomeStats {
   familyMembers: number;
   prayersLifted: number;
@@ -103,6 +113,9 @@ const AZURACAST_NOW_PLAYING_URL =
 const WORDPRESS_RADIO_STATUS_URL =
   process.env.EXPO_PUBLIC_WORDPRESS_RADIO_STATUS_URL ||
   'https://godkingdomprinciplesradio.com/apis/wp-json/custom-api/v1/radio-status';
+const WORDPRESS_API_BASE_URL =
+  process.env.EXPO_PUBLIC_WORDPRESS_API_BASE_URL ||
+  'https://godkingdomprinciplesradio.com/apis/wp-json';
 
 const LIVE_VIDEO_URL_FALLBACK =
   process.env.EXPO_PUBLIC_LIVE_VIDEO_URL ||
@@ -140,6 +153,59 @@ function sanitizeText(value: string | null | undefined): string {
   return (value || '').replace(/<[^>]*>?/gm, '');
 }
 
+function parseDurationToSeconds(value: unknown): number | undefined {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value;
+  }
+  if (typeof value !== 'string' || !value.trim()) {
+    return undefined;
+  }
+
+  const parts = value
+    .trim()
+    .split(':')
+    .map((part) => Number(part));
+
+  if (parts.some((part) => Number.isNaN(part))) {
+    return undefined;
+  }
+
+  if (parts.length === 3) {
+    return parts[0] * 3600 + parts[1] * 60 + parts[2];
+  }
+  if (parts.length === 2) {
+    return parts[0] * 60 + parts[1];
+  }
+  if (parts.length === 1) {
+    return parts[0];
+  }
+  return undefined;
+}
+
+function extractEmbeddedMediaUrl(html: string, type: 'audio' | 'video'): string | undefined {
+  if (!html) return undefined;
+  const sourceRegex = /<source[^>]+src=["']([^"']+)["']/i;
+  const tagRegex = type === 'audio'
+    ? /<audio[^>]+src=["']([^"']+)["']/i
+    : /<video[^>]+src=["']([^"']+)["']/i;
+  const sourceMatch = html.match(sourceRegex);
+  if (sourceMatch?.[1]) return sourceMatch[1];
+  const tagMatch = html.match(tagRegex);
+  return tagMatch?.[1];
+}
+
+async function fetchWordPressCollection(postType: 'podcasts' | 'videos', limit: number): Promise<any[]> {
+  const perPage = Math.max(1, Math.min(limit, 100));
+  const response = await fetch(
+    `${WORDPRESS_API_BASE_URL}/wp/v2/${postType}?per_page=${perPage}&_embed=1`
+  );
+  if (!response.ok) {
+    throw new Error(`WordPress ${postType} fetch failed (${response.status})`);
+  }
+  const payload = await response.json();
+  return Array.isArray(payload) ? payload : [];
+}
+
 function dedupeThreads(threads: BackendThread[]): BackendThread[] {
   const seen = new Set<string>();
   const result: BackendThread[] = [];
@@ -154,6 +220,18 @@ function dedupeThreads(threads: BackendThread[]): BackendThread[] {
 function isMissingSchemaError(error: any, marker: string): boolean {
   const message = String(error?.message || '').toLowerCase();
   return message.includes(marker.toLowerCase()) || message.includes('does not exist');
+}
+
+/** True when the error likely means this column is absent on public.posts (PostgREST/Postgres wording). */
+function errorSuggestsMissingPostsColumn(error: any, column: string): boolean {
+  const message = String(error?.message || '').toLowerCase();
+  const col = column.toLowerCase();
+  if (!message.includes(col)) return false;
+  return (
+    message.includes('does not exist') ||
+    message.includes('schema cache') ||
+    message.includes('could not find')
+  );
 }
 
 async function loadPostsWithCompatibility() {
@@ -188,6 +266,71 @@ async function loadPostsWithCompatibility() {
     .select('id,title,content,category,author_id,is_pinned,created_at')
     .order('created_at', { ascending: false })
     .limit(100);
+}
+
+function isMissingTableError(error: any, tableName: string): boolean {
+  return isMissingSchemaError(error, tableName);
+}
+
+export async function fetchBlockedUserIds(blockerId: string): Promise<string[]> {
+  if (!blockerId?.trim()) return [];
+  const { data, error } = await supabase
+    .from('blocked_users')
+    .select('blocked_id')
+    .eq('blocker_id', blockerId);
+  if (error) {
+    if (isMissingTableError(error, 'blocked_users')) {
+      return [];
+    }
+    console.warn('[backend] fetchBlockedUserIds:', error.message);
+    return [];
+  }
+  return (data || []).map((row: { blocked_id: string }) => row.blocked_id);
+}
+
+export async function blockCommunityUser(blockerId: string, blockedId: string): Promise<void> {
+  if (!blockerId?.trim() || !blockedId?.trim()) {
+    throw new CreatePostError('validation', 'Missing user.');
+  }
+  if (blockerId === blockedId) {
+    throw new CreatePostError('validation', 'You cannot block yourself.');
+  }
+  const { error } = await supabase.from('blocked_users').insert({
+    blocker_id: blockerId,
+    blocked_id: blockedId,
+  });
+  if (error) {
+    if (error.code === '23505') {
+      return;
+    }
+    throw new Error(error.message || 'Failed to block user');
+  }
+}
+
+export async function unblockCommunityUser(blockerId: string, blockedId: string): Promise<void> {
+  const { error } = await supabase
+    .from('blocked_users')
+    .delete()
+    .eq('blocker_id', blockerId)
+    .eq('blocked_id', blockedId);
+  if (error) throw new Error(error.message || 'Failed to unblock user');
+}
+
+export type CommunityReportTarget = 'post' | 'comment';
+
+export async function reportCommunityContent(params: {
+  reporterId: string;
+  targetType: CommunityReportTarget;
+  targetId: string;
+  reason?: string | null;
+}): Promise<void> {
+  const { error } = await supabase.from('reports').insert({
+    reporter_id: params.reporterId,
+    target_type: params.targetType,
+    target_id: params.targetId,
+    reason: params.reason?.trim() || null,
+  });
+  if (error) throw new Error(error.message || 'Failed to submit report');
 }
 
 async function getReactionAggregates(
@@ -305,8 +448,11 @@ export async function fetchCommunityPosts(
     throw new Error(error?.message || 'Failed to load posts');
   }
 
-  const postIds = posts.map((p) => p.id);
-  const authorIds = [...new Set(posts.map((p) => p.author_id))];
+  const blockedIds = currentUserId ? new Set(await fetchBlockedUserIds(currentUserId)) : new Set<string>();
+  const visiblePosts = posts.filter((p: { author_id: string }) => !blockedIds.has(p.author_id));
+
+  const postIds = visiblePosts.map((p) => p.id);
+  const authorIds = [...new Set(visiblePosts.map((p) => p.author_id))];
 
   const [reactionAgg, commentsRes, profilesRes] = await Promise.all([
     getReactionAggregates(postIds, currentUserId),
@@ -335,7 +481,7 @@ export async function fetchCommunityPosts(
     profileById.set(p.id, { full_name: p.full_name, avatar_url: p.avatar_url });
   });
 
-  const mapped = posts.map((p: any) => {
+  const mapped = visiblePosts.map((p: any) => {
     const profile = profileById.get(p.author_id) || null;
     const inferredType = getPostTypeForCategory(p.category || '');
     const postType: PostType = p.post_type || inferredType;
@@ -459,27 +605,50 @@ export async function createCommunityPost(params: {
     };
 
     const createPromise = (async () => {
-      const withPostType = await supabase
-        .from('posts')
-        .insert(fullInsert)
-        .select('id,title,content,category,post_type,author_id,is_pinned,created_at,is_anonymous')
-        .single();
-      if (!withPostType.error) {
-        return withPostType;
+      const selectFull =
+        'id,title,content,category,post_type,author_id,is_pinned,created_at,is_anonymous';
+      const selectWithType =
+        'id,title,content,category,post_type,author_id,is_pinned,created_at';
+      const selectBase = 'id,title,content,category,author_id,is_pinned,created_at';
+
+      let attempt = await supabase.from('posts').insert(fullInsert).select(selectFull).single();
+      if (!attempt.error) {
+        return attempt;
       }
 
       if (
-        !isMissingSchemaError(withPostType.error, 'post_type') &&
-        !isMissingSchemaError(withPostType.error, 'is_anonymous')
+        !isMissingSchemaError(attempt.error, 'post_type') &&
+        !isMissingSchemaError(attempt.error, 'is_anonymous')
       ) {
-        return withPostType;
+        return attempt;
       }
 
-      return supabase
-        .from('posts')
-        .insert(baseInsert)
-        .select('id,title,content,category,author_id,is_pinned,created_at')
-        .single();
+      const anonMissing = errorSuggestsMissingPostsColumn(attempt.error, 'is_anonymous');
+      const typeMissing = errorSuggestsMissingPostsColumn(attempt.error, 'post_type');
+
+      if (anonMissing && !typeMissing) {
+        attempt = await supabase
+          .from('posts')
+          .insert({ ...baseInsert, post_type: postType })
+          .select(selectWithType)
+          .single();
+        if (!attempt.error) {
+          return attempt;
+        }
+      }
+
+      if (typeMissing && !anonMissing) {
+        attempt = await supabase
+          .from('posts')
+          .insert({ ...baseInsert, is_anonymous: Boolean(params.isAnonymous) })
+          .select(`${selectBase},is_anonymous`)
+          .single();
+        if (!attempt.error) {
+          return attempt;
+        }
+      }
+
+      return supabase.from('posts').insert(baseInsert).select(selectBase).single();
     })();
 
     const { data, error } = await withTimeout(createPromise, CREATE_POST_TIMEOUT_MS);
@@ -615,11 +784,92 @@ export async function deleteCommunityPost(postId: string, userId: string): Promi
 }
 
 export async function getPostById(postId: string, currentUserId?: string): Promise<BackendThread | null> {
-  const posts = await fetchCommunityPosts('newest', currentUserId);
-  return posts.find((p) => p.id === postId) || null;
+  const blockedIds = currentUserId ? new Set(await fetchBlockedUserIds(currentUserId)) : new Set<string>();
+
+  const selectFull =
+    'id,title,content,category,post_type,author_id,is_pinned,created_at,is_anonymous';
+  let post: any = null;
+
+  let row = await supabase.from('posts').select(selectFull).eq('id', postId).maybeSingle();
+  if (!row.error && row.data) {
+    post = row.data;
+  } else if (row.error && errorSuggestsMissingPostsColumn(row.error, 'is_anonymous')) {
+    row = await supabase
+      .from('posts')
+      .select('id,title,content,category,post_type,author_id,is_pinned,created_at')
+      .eq('id', postId)
+      .maybeSingle();
+    if (row.error) throw new Error(row.error.message);
+    post = row.data;
+  } else if (row.error && errorSuggestsMissingPostsColumn(row.error, 'post_type')) {
+    row = await supabase
+      .from('posts')
+      .select('id,title,content,category,author_id,is_pinned,created_at')
+      .eq('id', postId)
+      .maybeSingle();
+    if (row.error) throw new Error(row.error.message);
+    post = row.data;
+  } else if (row.error) {
+    throw new Error(row.error.message);
+  } else {
+    post = row.data;
+  }
+
+  if (!post) return null;
+  if (blockedIds.has(post.author_id)) return null;
+
+  const postIds = [post.id];
+  const [reactionAgg, commentsRes, profileRes] = await Promise.all([
+    getReactionAggregates(postIds, currentUserId),
+    supabase.from('comments').select('id,post_id').eq('post_id', postId),
+    supabase
+      .from('profiles')
+      .select('id,full_name,avatar_url')
+      .eq('id', post.author_id)
+      .maybeSingle(),
+  ]);
+
+  if (commentsRes.error) throw new Error(commentsRes.error.message);
+  if (profileRes.error) throw new Error(profileRes.error.message);
+
+  const comments = commentsRes.data || [];
+  const commentsByPost = comments.length;
+  const profile = profileRes.data;
+
+  const inferredType = getPostTypeForCategory(post.category || '');
+  const postType: PostType = post.post_type || inferredType;
+  const likeCount = reactionAgg.likeCounts.get(post.id) || 0;
+  const prayerCount = reactionAgg.prayCounts.get(post.id) || 0;
+
+  return {
+    id: post.id,
+    title: sanitizeText(post.title),
+    content: sanitizeText(post.content),
+    category: post.category,
+    post_type: postType,
+    createdat: post.created_at,
+    like_count: likeCount,
+    prayer_count: prayerCount,
+    comment_count: commentsByPost,
+    user_has_liked: reactionAgg.userLiked.has(post.id),
+    user_has_prayed: reactionAgg.userPrayed.has(post.id),
+    userid: post.author_id,
+    is_anonymous: Boolean(post.is_anonymous),
+    ispinned: Boolean(post.is_pinned),
+    users: profile
+      ? {
+          id: post.author_id,
+          fullname: profile.full_name,
+          avatarurl: profile.avatar_url,
+        }
+      : null,
+  } as BackendThread;
 }
 
-export async function fetchCommentsForPost(postId: string): Promise<BackendComment[]> {
+export async function fetchCommentsForPost(
+  postId: string,
+  viewerUserId?: string
+): Promise<BackendComment[]> {
   const { data: comments, error } = await supabase
     .from('comments')
     .select('id,post_id,author_id,content,created_at')
@@ -628,18 +878,24 @@ export async function fetchCommentsForPost(postId: string): Promise<BackendComme
 
   if (error || !comments) throw new Error(error?.message || 'Failed to load comments');
 
-  const userIds = [...new Set(comments.map((c) => c.author_id))];
-  const { data: profiles, error: profilesError } = await supabase
-    .from('profiles')
-    .select('id,full_name,avatar_url')
-    .in('id', userIds);
+  const blockedIds = viewerUserId ? new Set(await fetchBlockedUserIds(viewerUserId)) : new Set<string>();
+  const visible = comments.filter((c: { author_id: string }) => !blockedIds.has(c.author_id));
 
-  if (profilesError) throw new Error(profilesError.message);
+  const userIds = [...new Set(visible.map((c) => c.author_id))];
+  let profiles: { id: string; full_name: string | null; avatar_url: string | null }[] = [];
+  if (userIds.length) {
+    const { data, error: profilesError } = await supabase
+      .from('profiles')
+      .select('id,full_name,avatar_url')
+      .in('id', userIds);
+    if (profilesError) throw new Error(profilesError.message);
+    profiles = data || [];
+  }
   const profileById = new Map(
-    (profiles || []).map((p: any) => [p.id, { full_name: p.full_name, avatar_url: p.avatar_url }])
+    profiles.map((p: any) => [p.id, { full_name: p.full_name, avatar_url: p.avatar_url }])
   );
 
-  return comments.map((c: any) => {
+  return visible.map((c: any) => {
     const profile = profileById.get(c.author_id);
     return {
       id: c.id,
@@ -727,6 +983,22 @@ export async function deleteCommunityComment(commentId: string, userId: string):
 }
 
 export async function fetchPodcasts(limit: number): Promise<BackendMediaItem[]> {
+  try {
+    const wpData = await fetchWordPressCollection('podcasts', limit);
+    return wpData.map((item: any) => ({
+      id: String(item.id),
+      title: sanitizeText(item.title?.rendered || item.title || 'Untitled podcast'),
+      description: sanitizeText(item.excerpt?.rendered || item.content?.rendered || ''),
+      created_at: item.date || new Date().toISOString(),
+      thumbnail_url: item._embedded?.['wp:featuredmedia']?.[0]?.source_url || undefined,
+      audio_url: item.audio_url || extractEmbeddedMediaUrl(item.content?.rendered || '', 'audio') || undefined,
+      duration: parseDurationToSeconds(item.duration),
+      category: item.podcast_category || undefined,
+    }));
+  } catch (_wpError) {
+    // Fall back to Supabase during WP outages/migrations.
+  }
+
   const { data, error } = await supabase
     .from('podcasts')
     .select('id,title,description,audio_url,thumbnail_url,duration,created_at')
@@ -745,6 +1017,22 @@ export async function fetchPodcasts(limit: number): Promise<BackendMediaItem[]> 
 }
 
 export async function fetchVideos(limit: number): Promise<BackendMediaItem[]> {
+  try {
+    const wpData = await fetchWordPressCollection('videos', limit);
+    return wpData.map((item: any) => ({
+      id: String(item.id),
+      title: sanitizeText(item.title?.rendered || item.title || 'Untitled video'),
+      description: sanitizeText(item.excerpt?.rendered || item.content?.rendered || ''),
+      created_at: item.date || new Date().toISOString(),
+      thumbnail_url: item._embedded?.['wp:featuredmedia']?.[0]?.source_url || undefined,
+      video_url: item.video_url || extractEmbeddedMediaUrl(item.content?.rendered || '', 'video') || undefined,
+      duration: parseDurationToSeconds(item.video_duration ?? item.duration),
+      category: item.video_category || undefined,
+    }));
+  } catch (_wpError) {
+    // Fall back to Supabase during WP outages/migrations.
+  }
+
   const { data, error } = await supabase
     .from('videos')
     .select('id,title,description,video_url,thumbnail_url,duration,created_at')
@@ -789,7 +1077,21 @@ export async function fetchCurrentLiveEvent(): Promise<BackendLiveEvent | null> 
     .limit(1);
 
   if (error) {
-    throw new Error(error.message);
+    if (!isMissingTableError(error, 'live_events')) {
+      throw new Error(error.message);
+    }
+    if (LIVE_VIDEO_URL_FALLBACK) {
+      return {
+        id: 'fallback-live-stream',
+        title: LIVE_VIDEO_TITLE_FALLBACK,
+        description: 'Live video stream from your configured provider.',
+        video_url: LIVE_VIDEO_URL_FALLBACK,
+        thumbnail_url: LIVE_VIDEO_THUMBNAIL_FALLBACK,
+        scheduled_start: new Date().toISOString(),
+        status: 'live',
+      };
+    }
+    return null;
   }
 
   if (data && data.length > 0) {
@@ -823,8 +1125,14 @@ export async function fetchUpcomingLiveEvents(limit: number = 5): Promise<Backen
     .order('scheduled_start', { ascending: true })
     .limit(limit);
 
-  if (error || !data) {
-    throw new Error(error?.message || 'Failed to fetch upcoming live shows');
+  if (error) {
+    if (isMissingTableError(error, 'live_events')) {
+      return [];
+    }
+    throw new Error(error.message || 'Failed to fetch upcoming live shows');
+  }
+  if (!data) {
+    return [];
   }
 
   return data.map(mapLiveEvent);
@@ -885,7 +1193,52 @@ export async function fetchRadioStatusFromAzuraCast(): Promise<BackendRadioStatu
   }
 }
 
+/** Upcoming + recent tracks from AzuraCast now-playing API (playing_next, song_history). */
+export async function fetchRadioQueueInfo(): Promise<RadioQueueInfo | null> {
+  try {
+    const response = await fetch(AZURACAST_NOW_PLAYING_URL);
+    if (!response.ok) return null;
+    const data = (await response.json()) as Record<string, unknown>;
+
+    const nextSong = (data.playing_next as { song?: Record<string, string> } | null)?.song;
+    const upNext: RadioQueueItem | null = nextSong
+      ? {
+          title: String(nextSong.title || nextSong.text || 'Unknown').trim() || 'Unknown',
+          artist: String(nextSong.artist || '').trim(),
+        }
+      : null;
+
+    const rawHistory = data.song_history;
+    const recent: RadioQueueItem[] = [];
+    if (Array.isArray(rawHistory)) {
+      for (const entry of rawHistory.slice(0, 5)) {
+        const s = (entry as { song?: Record<string, string> })?.song;
+        if (!s) continue;
+        recent.push({
+          title: String(s.title || s.text || 'Unknown').trim() || 'Unknown',
+          artist: String(s.artist || '').trim(),
+        });
+      }
+    }
+
+    return { upNext, recent };
+  } catch {
+    return null;
+  }
+}
+
 export async function fetchHomeStats(): Promise<HomeStats> {
+  const safeCount = async (table: string): Promise<number> => {
+    const { count, error } = await supabase.from(table).select('id', { count: 'exact', head: true });
+    if (error) {
+      if (isMissingTableError(error, table)) return 0;
+      const detail = error.message || (error as { code?: string }).code || 'unknown';
+      console.warn(`[fetchHomeStats] count "${table}" failed:`, detail);
+      return 0;
+    }
+    return count || 0;
+  };
+
   const prayerCountPromise = (async () => {
     const byType = await supabase
       .from('posts')
@@ -894,31 +1247,41 @@ export async function fetchHomeStats(): Promise<HomeStats> {
     if (!byType.error) {
       return byType;
     }
-    if (!isMissingSchemaError(byType.error, 'post_type')) {
-      return byType;
+    if (isMissingTableError(byType.error, 'posts')) {
+      return { count: 0, error: null } as any;
     }
-    return supabase
+
+    const fallback = await supabase
       .from('posts')
       .select('id', { count: 'exact', head: true })
       .in('category', ['Prayer Requests', 'Pray for Others']);
+    if (!fallback.error) {
+      return fallback;
+    }
+    if (isMissingTableError(fallback.error, 'posts')) {
+      return { count: 0, error: null } as any;
+    }
+
+    const msg =
+      byType.error.message ||
+      fallback.error.message ||
+      (byType.error as { code?: string }).code ||
+      'prayer count';
+    console.warn('[fetchHomeStats] prayer count failed:', msg);
+    return { count: 0, error: null } as any;
   })();
 
-  const [profilesCountRes, prayersCountRes, podcastsCountRes, videosCountRes] = await Promise.all([
-    supabase.from('profiles').select('id', { count: 'exact', head: true }),
+  const [profilesCount, prayersCountRes, podcastsCount, videosCount] = await Promise.all([
+    safeCount('profiles'),
     prayerCountPromise,
-    supabase.from('podcasts').select('id', { count: 'exact', head: true }),
-    supabase.from('videos').select('id', { count: 'exact', head: true }),
+    safeCount('podcasts'),
+    safeCount('videos'),
   ]);
 
-  if (profilesCountRes.error) throw new Error(profilesCountRes.error.message);
-  if (prayersCountRes.error) throw new Error(prayersCountRes.error.message);
-  if (podcastsCountRes.error) throw new Error(podcastsCountRes.error.message);
-  if (videosCountRes.error) throw new Error(videosCountRes.error.message);
-
   return {
-    familyMembers: profilesCountRes.count || 0,
+    familyMembers: profilesCount,
     prayersLifted: prayersCountRes.count || 0,
-    mediaItems: (podcastsCountRes.count || 0) + (videosCountRes.count || 0),
+    mediaItems: podcastsCount + videosCount,
   };
 }
 

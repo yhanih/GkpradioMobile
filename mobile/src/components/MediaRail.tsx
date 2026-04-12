@@ -3,6 +3,7 @@ import { View, Text, ScrollView, StyleSheet, Pressable, Dimensions } from 'react
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { OptimisticImage } from './OptimisticImage';
+import { useTheme } from '../contexts/ThemeContext';
 
 interface MediaItem {
     id: string;
@@ -21,11 +22,12 @@ interface MediaRailProps {
 }
 
 export function MediaRail({ title, items, type, onPressItem, onPressViewAll }: MediaRailProps) {
+    const { theme } = useTheme();
 
     return (
         <View style={styles.container}>
             <View style={styles.header}>
-                <Text style={styles.title}>{title}</Text>
+                <Text style={[styles.title, { color: theme.colors.text }]}>{title}</Text>
                 <Pressable
                     onPress={() => {
                         Haptics.selectionAsync();
@@ -34,7 +36,7 @@ export function MediaRail({ title, items, type, onPressItem, onPressViewAll }: M
                     hitSlop={20}
                     style={({ pressed }) => ({ opacity: pressed ? 0.6 : 1, padding: 4 })}
                 >
-                    <Text style={styles.viewAll}>See All</Text>
+                    <Text style={[styles.viewAll, { color: theme.colors.primary }]}>See All</Text>
                 </Pressable>
             </View>
 
@@ -57,7 +59,13 @@ export function MediaRail({ title, items, type, onPressItem, onPressViewAll }: M
                         accessibilityLabel={`${type === 'video' ? 'Watch' : 'Listen to'} ${item.title}`}
                         accessibilityHint={`${type === 'video' ? 'Plays' : 'Plays'} ${item.title}`}
                     >
-                        <View style={[styles.imageContainer, type === 'video' && styles.videoImageContainer]}>
+                        <View
+                            style={[
+                                styles.imageContainer,
+                                type === 'video' && styles.videoImageContainer,
+                                { backgroundColor: theme.colors.borderLight },
+                            ]}
+                        >
                             <OptimisticImage
                                 source={{ uri: item.imageUrl || '' }}
                                 style={styles.image}
@@ -76,11 +84,11 @@ export function MediaRail({ title, items, type, onPressItem, onPressViewAll }: M
                             )}
                         </View>
 
-                        <Text style={styles.cardTitle} numberOfLines={2}>
+                        <Text style={[styles.cardTitle, { color: theme.colors.text }]} numberOfLines={2}>
                             {item.title}
                         </Text>
                         {item.subtitle && (
-                            <Text style={styles.cardSubtitle} numberOfLines={1}>
+                            <Text style={[styles.cardSubtitle, { color: theme.colors.textMuted }]} numberOfLines={1}>
                                 {item.subtitle}
                             </Text>
                         )}
@@ -105,12 +113,10 @@ const styles = StyleSheet.create({
     title: {
         fontSize: 20,
         fontWeight: '700',
-        color: '#09090b',
     },
     viewAll: {
         fontSize: 14,
         fontWeight: '600',
-        color: '#047857',
     },
     scrollContent: {
         paddingHorizontal: 20,
@@ -126,7 +132,6 @@ const styles = StyleSheet.create({
         width: 144,
         height: 144,
         borderRadius: 12,
-        backgroundColor: '#f4f4f5',
         marginBottom: 8,
         overflow: 'hidden',
         position: 'relative',
@@ -168,13 +173,11 @@ const styles = StyleSheet.create({
     cardTitle: {
         fontSize: 14,
         fontWeight: '600',
-        color: '#09090b',
         marginBottom: 2,
         lineHeight: 18,
     },
     cardSubtitle: {
         fontSize: 12,
-        color: '#71717a',
         fontWeight: '500',
     },
 });

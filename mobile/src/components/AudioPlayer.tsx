@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { View, Text, Pressable, StyleSheet, Image, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -6,50 +6,63 @@ import { BlurView } from 'expo-blur';
 import * as Haptics from 'expo-haptics';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAudio } from '../contexts/AudioContext';
+import { RadioExpandedSheet } from './RadioExpandedSheet';
 
 export function AudioPlayer() {
   const insets = useSafeAreaInsets();
   const bottomOffset = Math.max(88, 60 + insets.bottom);
   const { isPlaying, isLoading, nowPlaying, togglePlayback } = useAudio();
   const [isLiked, setIsLiked] = React.useState(false);
+  const [expanded, setExpanded] = useState(false);
 
   const currentSong = nowPlaying?.now_playing?.song;
   const hasAlbumArt = currentSong?.art && currentSong.art !== '';
 
   return (
+    <>
     <View style={[styles.outerContainer, { bottom: bottomOffset }]}>
       <BlurView intensity={80} tint="light" style={styles.container}>
         <View style={styles.content}>
-          <View style={styles.trackInfo}>
-            {hasAlbumArt ? (
-              <Image
-                source={{ uri: currentSong?.art }}
-                style={styles.albumArtImage}
-              />
-            ) : (
-              <View style={styles.albumArtPlaceholder}>
-                <LinearGradient
-                  colors={['#047857', '#059669']}
-                  style={styles.albumArt}
-                >
-                  <Ionicons
-                    name={isPlaying ? 'radio' : 'radio-outline'}
-                    size={20}
-                    color="#fff"
-                  />
-                </LinearGradient>
-              </View>
-            )}
+          <Pressable
+            style={styles.trackInfoPressable}
+            onPress={() => {
+              Haptics.selectionAsync();
+              setExpanded(true);
+            }}
+            accessibilityRole="button"
+            accessibilityLabel="Open now playing and live chat"
+          >
+            <View style={styles.trackInfo}>
+              {hasAlbumArt ? (
+                <Image
+                  source={{ uri: currentSong?.art }}
+                  style={styles.albumArtImage}
+                />
+              ) : (
+                <View style={styles.albumArtPlaceholder}>
+                  <LinearGradient
+                    colors={['#047857', '#059669']}
+                    style={styles.albumArt}
+                  >
+                    <Ionicons
+                      name={isPlaying ? 'radio' : 'radio-outline'}
+                      size={20}
+                      color="#fff"
+                    />
+                  </LinearGradient>
+                </View>
+              )}
 
-            <View style={styles.details}>
-              <Text style={styles.trackTitle} numberOfLines={1}>
-                {currentSong?.title || (isPlaying ? 'Live Radio Stream' : nowPlaying?.station?.name || 'Kingdom Principles Radio')}
-              </Text>
-              <Text style={styles.trackArtist} numberOfLines={1}>
-                {currentSong?.artist || (isPlaying ? 'Broadcasting Live' : 'Tap to listen')}
-              </Text>
+              <View style={styles.details}>
+                <Text style={styles.trackTitle} numberOfLines={1}>
+                  {currentSong?.title || (isPlaying ? 'Live Radio Stream' : nowPlaying?.station?.name || 'Kingdom Principles Radio')}
+                </Text>
+                <Text style={styles.trackArtist} numberOfLines={1}>
+                  {currentSong?.artist || (isPlaying ? 'Broadcasting Live' : 'Tap to listen')}
+                </Text>
+              </View>
             </View>
-          </View>
+          </Pressable>
 
           <View style={styles.controls}>
             <Pressable
@@ -90,6 +103,8 @@ export function AudioPlayer() {
         </View>
       </BlurView>
     </View>
+    <RadioExpandedSheet visible={expanded} onClose={() => setExpanded(false)} />
+    </>
   );
 }
 
@@ -119,6 +134,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 10,
     gap: 12,
+  },
+  trackInfoPressable: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    minHeight: 48,
   },
   trackInfo: {
     flexDirection: 'row',

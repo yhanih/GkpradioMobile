@@ -14,7 +14,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { wpClient, WPTestimony } from '../lib/wordpress';
+import { fetchCommunityPosts } from '../lib/backend';
 import { useAuth } from '../contexts/AuthContext';
 import * as Haptics from 'expo-haptics';
 import { RootStackParamList } from '../types/navigation';
@@ -27,7 +27,7 @@ export function LikedPostsScreen() {
   const navigation = useNavigation<LikedPostsNavProp>();
   const { user } = useAuth();
   const { theme } = useTheme();
-  const [testimonies, setTestimonies] = useState<WPTestimony[]>([]);
+  const [threads, setThreads] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -42,18 +42,9 @@ export function LikedPostsScreen() {
     try {
       setError(null);
       
-      // Since we don't have a targeted "get liked" endpoint yet, 
-      // we filter from recent testimonies as a placeholder
-      const { data, error: fetchError } = await wpClient.getTestimonies(50);
-
-      if (fetchError) throw new Error(fetchError);
-
-      // In a real WP setup with likes, we'd have a specific endpoint.
-      // For now, we'll show testimonies where user_has_liked is true if the API supports it,
-      // or just show recent ones if we can't filter server-side yet.
-      const likedItems = (data || []).filter(item => item.user_has_liked);
-
-      setTestimonies(likedItems);
+      const allThreads = await fetchCommunityPosts('newest', user.id);
+      const likedThreads = (allThreads || []).filter((t: any) => Boolean(t.user_has_liked));
+      setThreads(likedThreads);
     } catch (err: any) {
       console.error('Error fetching liked posts:', err);
       setError('Failed to load liked posts. Please try again.');
@@ -92,17 +83,17 @@ export function LikedPostsScreen() {
     return date.toLocaleDateString();
   };
 
-  const navigateToPost = (testimony: WPTestimony) => {
+  const navigateToPost = (thread: any) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    navigation.navigate('PostDetail', { threadId: testimony.id, testimony });
+    navigation.navigate('PostDetail', { threadId: thread.id, thread });
   };
 
-  const renderTestimony = (testimony: WPTestimony) => {
+  const renderThread = (thread: any) => {
     return (
       <Pressable
-        key={testimony.id}
+        key={thread.id}
         style={[styles.card, { backgroundColor: theme.colors.surface }]}
-        onPress={() => navigateToPost(testimony)}
+        onPress={() => navigateToPost(thread)}
       >
         <View style={styles.cardHeader}>
           <View style={styles.authorInfo}>
@@ -110,17 +101,17 @@ export function LikedPostsScreen() {
               <Ionicons name="person" size={14} color="#71717a" />
             </View>
             <View style={styles.authorMeta}>
-              <Text style={styles.authorName}>Member</Text>
-              <Text style={styles.time}>{formatTimeAgo(testimony.date)}</Text>
+              <Text style={styles.authorName}>{thread.users?.fullname || 'Member'}</Text>
+              <Text style={styles.time}>{formatTimeAgo(thread.createdat)}</Text>
             </View>
           </View>
         </View>
 
         <Text style={[styles.cardTitle, { color: theme.colors.text }]} numberOfLines={2}>
-          {testimony.title.rendered}
+          {thread.title}
         </Text>
         <Text style={[styles.cardDescription, { color: theme.colors.textMuted }]} numberOfLines={3}>
-          {testimony.content.rendered.replace(/<[^>]*>?/gm, '')}
+          {thread.content}
         </Text>
 
         <View style={styles.cardFooter}>
@@ -128,12 +119,12 @@ export function LikedPostsScreen() {
             <View style={styles.statButton}>
               <Ionicons name="heart" size={18} color="#ef4444" />
               <Text style={[styles.statText, styles.statTextActive]}>
-                {testimony.like_count || 0}
+                {thread.like_count || 0}
               </Text>
             </View>
             <View style={styles.statButton}>
               <Ionicons name="chatbubble-outline" size={18} color="#71717a" />
-              <Text style={styles.statText}>{testimony.comment_count || 0}</Text>
+              <Text style={styles.statText}>{thread.comment_count || 0}</Text>
             </View>
           </View>
         </View>
@@ -194,7 +185,7 @@ export function LikedPostsScreen() {
           <ActivityIndicator size="large" color={theme.colors.primary} />
           <Text style={[styles.loadingText, { color: theme.colors.textMuted }]}>Loading...</Text>
         </View>
-      ) : testimonies.length === 0 ? (
+      ) : threads.length === 0 ? (
         <View style={styles.emptyState}>
           <Ionicons name="heart-outline" size={64} color={theme.colors.textMuted} />
           <Text style={[styles.emptyTitle, { color: theme.colors.text }]}>No Liked Posts</Text>
@@ -219,7 +210,7 @@ export function LikedPostsScreen() {
             <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.colors.primary} />
           }
         >
-          {testimonies.map(testimony => renderTestimony(testimony))}
+          {threads.map((thread) => renderThread(thread))}
           <View style={{ height: 100 }} />
         </ScrollView>
       )}

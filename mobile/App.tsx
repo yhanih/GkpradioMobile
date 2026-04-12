@@ -6,6 +6,8 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator, NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
 import Constants from 'expo-constants';
+import * as Notifications from 'expo-notifications';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // Initialize Sentry for crash reporting (only if DSN is configured)
 const sentryDsn = Constants.expoConfig?.extra?.sentryDsn || process.env.EXPO_PUBLIC_SENTRY_DSN;
@@ -49,6 +51,9 @@ import ResetPasswordScreen from './src/screens/auth/ResetPasswordScreen';
 import { OnboardingScreen, checkOnboardingComplete } from './src/screens/OnboardingScreen';
 import * as Linking from 'expo-linking';
 import { RootStackParamList, MainTabParamList } from './src/types/navigation';
+import { supabase } from './src/lib/supabase';
+import './src/lib/notifications';
+import { ensureNotificationChannel, ensureNotificationPermissions } from './src/lib/notifications';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 const Tab = createBottomTabNavigator<MainTabParamList>();
@@ -75,13 +80,24 @@ function MainTabs() {
             } else if (route.name === 'Media') {
               iconName = focused ? 'play-circle' : 'play-circle-outline';
             } else if (route.name === 'Hub') {
-              iconName = focused ? 'apps' : 'apps-outline';
+              iconName = focused ? 'settings' : 'settings-outline';
             }
 
             return <Ionicons name={iconName} size={size} color={color} />;
           },
           tabBarActiveTintColor: theme.colors.primary,
           tabBarInactiveTintColor: theme.colors.textMuted,
+          tabBarShowLabel: true,
+          tabBarLabel:
+            route.name === 'Hub'
+              ? 'Settings'
+              : route.name === 'Community'
+                ? 'Community'
+                : route.name === 'Live'
+                  ? 'Live'
+                  : route.name === 'Media'
+                    ? 'Media'
+                    : 'Home',
           headerShown: false,
           tabBarStyle: {
             height: 88,
@@ -112,6 +128,79 @@ function MainTabs() {
       <AudioPlayer />
     </>
   );
+}
+
+const NOTIFICATION_KEY = '@gkp_notifications_enabled';
+
+function CommunityPostNotifier() {
+  const { user } = useAuth();
+  const [notificationsReady, setNotificationsReady] = useState(false);
+
+  useEffect(() => {
+    let isMounted = true;
+    const setupPermissions = async () => {
+      try {
+        const granted = await ensureNotificationPermissions();
+        if (!granted) {
+          if (isMounted) setNotificationsReady(false);
+          return;
+        }
+        await ensureNotificationChannel();
+        if (isMounted) setNotificationsReady(true);
+      } catch (error) {
+        console.error('Failed to setup notifications:', error);
+      }
+    };
+
+    setupPermissions();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!notificationsReady) return;
+
+    const channel = supabase
+      .channel('community-post-notifications')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'posts' }, async (payload) => {
+        try {
+          const preference = await AsyncStorage.getItem(NOTIFICATION_KEY);
+          const notificationsEnabled = preference !== 'false';
+          if (!notificationsEnabled) return;
+
+          const newPost = payload.new as { title?: string; content?: string; userid?: string };
+          if (user?.id && newPost.userid && String(newPost.userid) === String(user.id)) {
+            return;
+          }
+
+          const title = newPost.title?.trim()
+            ? `New community post: ${newPost.title.trim()}`
+            : 'New community message';
+          const body = newPost.content?.trim()
+            ? newPost.content.trim().slice(0, 140)
+            : 'Someone posted a new message in the community.';
+
+          await Notifications.scheduleNotificationAsync({
+            content: {
+              title,
+              body,
+              sound: true,
+            },
+            trigger: null,
+          });
+        } catch (error) {
+          console.error('Failed to schedule community notification:', error);
+        }
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [notificationsReady, user?.id]);
+
+  return null;
 }
 
 function DeepLinkHandler() {
@@ -221,7 +310,12 @@ function AppContent() {
     return <OnboardingScreen onComplete={() => setShowOnboarding(false)} />;
   }
 
-  return <RootNavigator />;
+  return (
+    <>
+      <CommunityPostNotifier />
+      <RootNavigator />
+    </>
+  );
 }
 
 function AppWithTheme() {

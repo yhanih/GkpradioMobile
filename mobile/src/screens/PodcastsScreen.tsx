@@ -1,12 +1,13 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { View, Text, ScrollView, Image, StyleSheet, Pressable, ActivityIndicator, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { wpClient } from '../lib/wordpress';
-import { useTheme } from '../contexts/ThemeContext';
+import { useTheme, type Theme } from '../contexts/ThemeContext';
 
 export function PodcastsScreen() {
   const { theme } = useTheme();
+  const styles = useMemo(() => createPodcastStyles(theme), [theme]);
   const [podcasts, setPodcasts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -45,12 +46,12 @@ export function PodcastsScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
+    <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.background }]} edges={['top']}>
       <ScrollView
         style={styles.scrollView}
         showsVerticalScrollIndicator={false}
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#047857" />
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.colors.primary} />
         }
       >
         <View style={styles.header}>
@@ -63,20 +64,20 @@ export function PodcastsScreen() {
         <View style={styles.section}>
           {error ? (
             <View style={styles.errorContainer}>
-              <Ionicons name="alert-circle-outline" size={48} color="#ef4444" />
+              <Ionicons name="alert-circle-outline" size={48} color={theme.colors.error} />
               <Text style={styles.errorText}>{error}</Text>
-              <Pressable style={styles.retryButton} onPress={fetchPodcasts}>
+              <Pressable style={[styles.retryButton, { backgroundColor: theme.colors.primary }]} onPress={fetchPodcasts}>
                 <Text style={styles.retryButtonText}>Retry</Text>
               </Pressable>
             </View>
           ) : loading ? (
             <View style={styles.loadingContainer}>
-              <ActivityIndicator size="large" color="#047857" />
+              <ActivityIndicator size="large" color={theme.colors.primary} />
               <Text style={styles.loadingText}>Loading podcasts...</Text>
             </View>
           ) : podcasts.length === 0 ? (
             <View style={styles.emptyState}>
-              <Ionicons name="mic-outline" size={48} color="#d4d4d8" />
+              <Ionicons name="mic-outline" size={48} color={theme.colors.textMuted} />
               <Text style={styles.emptyStateTitle}>No podcasts available</Text>
               <Text style={styles.emptyStateText}>
                 Check back soon for new episodes
@@ -84,7 +85,7 @@ export function PodcastsScreen() {
             </View>
           ) : (
             podcasts.map((podcast) => (
-              <Pressable key={podcast.id} style={[styles.podcastCard, { backgroundColor: theme.colors.surface }]}>
+              <Pressable key={podcast.id} style={[styles.podcastCard, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}>
                 <Image
                   source={{
                     uri: podcast.thumbnail_url || 'https://images.unsplash.com/photo-1516589178581-6cd7833ae3b2?w=400',
@@ -113,7 +114,8 @@ export function PodcastsScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+function createPodcastStyles(theme: Theme) {
+  return StyleSheet.create({
   container: {
     flex: 1,
   },
@@ -128,12 +130,12 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 28,
     fontWeight: 'bold',
-    color: '#09090b',
+    color: theme.colors.text,
     marginBottom: 8,
   },
   subtitle: {
     fontSize: 15,
-    color: '#71717a',
+    color: theme.colors.textMuted,
   },
   section: {
     paddingHorizontal: 20,
@@ -145,7 +147,7 @@ const styles = StyleSheet.create({
   loadingText: {
     marginTop: 16,
     fontSize: 15,
-    color: '#71717a',
+    color: theme.colors.textMuted,
   },
   emptyState: {
     paddingVertical: 60,
@@ -154,24 +156,22 @@ const styles = StyleSheet.create({
   emptyStateTitle: {
     fontSize: 17,
     fontWeight: '600',
-    color: '#09090b',
+    color: theme.colors.text,
     marginTop: 16,
     marginBottom: 8,
   },
   emptyStateText: {
     fontSize: 14,
-    color: '#71717a',
+    color: theme.colors.textMuted,
     textAlign: 'center',
     paddingHorizontal: 40,
   },
   podcastCard: {
     flexDirection: 'row',
-    backgroundColor: '#fff',
     borderRadius: 16,
     marginBottom: 16,
     overflow: 'hidden',
     borderWidth: 1,
-    borderColor: 'rgba(228, 228, 231, 0.5)',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 3 },
     shadowOpacity: 0.06,
@@ -190,17 +190,17 @@ const styles = StyleSheet.create({
   podcastTitle: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#09090b',
+    color: theme.colors.text,
     marginBottom: 4,
   },
   podcastHosts: {
     fontSize: 13,
-    color: '#71717a',
+    color: theme.colors.textMuted,
     marginBottom: 6,
   },
   podcastDescription: {
     fontSize: 13,
-    color: '#71717a',
+    color: theme.colors.textMuted,
     marginBottom: 8,
   },
   podcastMeta: {
@@ -214,7 +214,7 @@ const styles = StyleSheet.create({
   },
   metaText: {
     fontSize: 12,
-    color: '#71717a',
+    color: theme.colors.textMuted,
   },
   errorContainer: {
     paddingVertical: 60,
@@ -222,14 +222,13 @@ const styles = StyleSheet.create({
   },
   errorText: {
     fontSize: 14,
-    color: '#ef4444',
+    color: theme.colors.error,
     marginTop: 16,
     marginBottom: 20,
     textAlign: 'center',
     paddingHorizontal: 40,
   },
   retryButton: {
-    backgroundColor: '#047857',
     paddingHorizontal: 24,
     paddingVertical: 12,
     borderRadius: 8,
@@ -239,4 +238,5 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
   },
-});
+  });
+}

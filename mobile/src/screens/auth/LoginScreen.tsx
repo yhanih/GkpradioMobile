@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   View,
   Text,
@@ -14,22 +14,28 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useAuth } from '../../contexts/AuthContext';
+import { useTheme, type Theme } from '../../contexts/ThemeContext';
 import { RootStackParamList } from '../../types/navigation';
 
 type LoginNavigationProp = NativeStackNavigationProp<RootStackParamList>;
+type LoginRouteProp = RouteProp<RootStackParamList, 'Login'>;
 
 export function LoginScreen() {
   const navigation = useNavigation<LoginNavigationProp>();
+  const route = useRoute<LoginRouteProp>();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const { signIn } = useAuth();
+  const { theme } = useTheme();
+  const styles = useMemo(() => createLoginStyles(theme), [theme]);
 
   const canGoBack = navigation.canGoBack();
+  const shouldRedirectBack = route.params?.redirectBack ?? true;
 
   const handleLogin = async () => {
     if (!email || !password) {
@@ -44,9 +50,11 @@ export function LoginScreen() {
     if (error) {
       Alert.alert('Login Failed', typeof error === 'string' ? error : error.message || 'Please check your credentials.');
     } else {
-      // Login success — pop the modal
-      if (navigation.canGoBack()) {
+      // Login success — return to where the user came from.
+      if (shouldRedirectBack && navigation.canGoBack()) {
         navigation.goBack();
+      } else {
+        navigation.navigate('MainTabs');
       }
     }
   };
@@ -80,10 +88,11 @@ export function LoginScreen() {
             <View style={styles.inputGroup}>
               <Text style={styles.label}>Email</Text>
               <View style={styles.inputWrapper}>
-                <Ionicons name="mail-outline" size={20} color="#71717a" style={styles.inputIcon} />
+                <Ionicons name="mail-outline" size={20} color={theme.colors.textMuted} style={styles.inputIcon} />
                 <TextInput
                   style={styles.input}
                   placeholder="your@email.com"
+                  placeholderTextColor={theme.colors.textMuted}
                   value={email}
                   onChangeText={setEmail}
                   autoCapitalize="none"
@@ -102,10 +111,11 @@ export function LoginScreen() {
                 </Pressable>
               </View>
               <View style={styles.inputWrapper}>
-                <Ionicons name="lock-closed-outline" size={20} color="#71717a" style={styles.inputIcon} />
+                <Ionicons name="lock-closed-outline" size={20} color={theme.colors.textMuted} style={styles.inputIcon} />
                 <TextInput
                   style={[styles.input, { flex: 1 }]}
                   placeholder="Enter your password"
+                  placeholderTextColor={theme.colors.textMuted}
                   value={password}
                   onChangeText={setPassword}
                   secureTextEntry={!showPassword}
@@ -116,7 +126,7 @@ export function LoginScreen() {
                   <Ionicons
                     name={showPassword ? 'eye-outline' : 'eye-off-outline'}
                     size={20}
-                    color="#71717a"
+                    color={theme.colors.textMuted}
                   />
                 </Pressable>
               </View>
@@ -162,10 +172,11 @@ export function LoginScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+function createLoginStyles(theme: Theme) {
+  return StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fff',
+    backgroundColor: theme.colors.background,
   },
   keyboardView: {
     flex: 1,
@@ -216,7 +227,7 @@ const styles = StyleSheet.create({
   },
   formContainer: {
     flex: 1,
-    backgroundColor: '#fff',
+    backgroundColor: theme.colors.surface,
     borderTopLeftRadius: 30,
     borderTopRightRadius: 30,
     marginTop: -30,
@@ -235,20 +246,20 @@ const styles = StyleSheet.create({
   label: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#18181b',
+    color: theme.colors.text,
   },
   forgotPasswordText: {
     fontSize: 13,
     fontWeight: '600',
-    color: '#047857',
+    color: theme.colors.primary,
   },
   inputWrapper: {
     flexDirection: 'row',
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: '#e4e4e7',
+    borderColor: theme.colors.border,
     borderRadius: 12,
-    backgroundColor: '#fafafa',
+    backgroundColor: theme.colors.surfaceSecondary,
     paddingHorizontal: 16,
     height: 56,
   },
@@ -258,7 +269,7 @@ const styles = StyleSheet.create({
   input: {
     flex: 1,
     fontSize: 16,
-    color: '#18181b',
+    color: theme.colors.text,
   },
   eyeIcon: {
     padding: 8,
@@ -267,12 +278,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#047857',
+    backgroundColor: theme.colors.primary,
     borderRadius: 14,
     height: 56,
     marginTop: 12,
     gap: 8,
-    shadowColor: '#047857',
+    shadowColor: theme.colors.primary,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 12,
@@ -294,12 +305,12 @@ const styles = StyleSheet.create({
   dividerLine: {
     flex: 1,
     height: 1,
-    backgroundColor: '#e4e4e7',
+    backgroundColor: theme.colors.border,
   },
   dividerText: {
     paddingHorizontal: 16,
     fontSize: 14,
-    color: '#71717a',
+    color: theme.colors.textMuted,
   },
   signupPrompt: {
     alignItems: 'center',
@@ -307,10 +318,10 @@ const styles = StyleSheet.create({
   },
   signupPromptText: {
     fontSize: 14,
-    color: '#71717a',
+    color: theme.colors.textMuted,
   },
   signupLink: {
-    color: '#047857',
+    color: theme.colors.primary,
     fontWeight: '600',
   },
   browsePrompt: {
@@ -320,7 +331,8 @@ const styles = StyleSheet.create({
   },
   browseText: {
     fontSize: 13,
-    color: '#a1a1aa',
+    color: theme.colors.textMuted,
     textDecorationLine: 'underline',
   },
-});
+  });
+}

@@ -1,12 +1,13 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { View, Text, ScrollView, StyleSheet, Pressable, ActivityIndicator, RefreshControl, Alert, Image, TextInput, Animated, Share, Dimensions, Linking } from 'react-native';
+import { View, Text, ScrollView, StyleSheet, Pressable, ActivityIndicator, RefreshControl, Alert, Image, TextInput, Animated, Share, Dimensions, Modal } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { useNavigation, useFocusEffect } from '@react-navigation/native';
+import { useNavigation, useFocusEffect, useRoute, RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { LinearGradient } from 'expo-linear-gradient';
 import {
   BackendThread,
+  blockCommunityUser,
   deleteCommunityPost,
   fetchCommunityPosts,
   getCommunityStats,
@@ -15,9 +16,10 @@ import {
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { useBookmarks } from '../contexts/BookmarksContext';
-import { useTheme } from '../contexts/ThemeContext';
+import { useTheme, type Theme } from '../contexts/ThemeContext';
 import * as Haptics from 'expo-haptics';
 import { NewPostModal } from '../components/NewPostModal';
+import { ReportContentModal } from '../components/ReportContentModal';
 import {
   COMMUNITY_CATEGORIES,
   PostType,
@@ -27,10 +29,14 @@ import {
   isPrayerCategory,
   Category,
 } from '../constants/categories';
-import { RootStackParamList } from '../types/navigation';
+import { RootStackParamList, MainTabParamList } from '../types/navigation';
 import { useToast } from '../components/Toast';
+import { openPostOverflowMenu } from '../utils/contentOverflowMenu';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
+
+const COMMUNITY_SAFETY_MESSAGE =
+  'Please refrain from making any monetary donations or transactions to other user(s) or member(s) while using this platform. This ministry is dedicated to uplifting, encouraging, and educating.';
 
 type SortOption = 'newest' | 'popular' | 'discussed';
 type ModeType = 'prayers' | 'discussions';
@@ -62,11 +68,14 @@ interface ThreadWithUser {
 }
 
 type CommunityNavProp = NativeStackNavigationProp<RootStackParamList, 'MainTabs'>;
+type CommunityRouteProp = RouteProp<MainTabParamList, 'Community'>;
 
 export function CommunityScreen() {
   const navigation = useNavigation<CommunityNavProp>();
+  const route = useRoute<CommunityRouteProp>();
   const { user } = useAuth();
-  const { theme, isDark } = useTheme();
+  const { theme } = useTheme();
+  const styles = useMemo(() => createCommunityStyles(theme), [theme]);
   const { isBookmarked, toggleBookmark, refreshBookmarks } = useBookmarks();
   const { showToast } = useToast();
   const insets = useSafeAreaInsets();
@@ -81,6 +90,8 @@ export function CommunityScreen() {
   const [error, setError] = useState<string | null>(null);
   const [stats, setStats] = useState({ prayers: 0, testimonies: 0, total: 0 });
   const [showNewPostModal, setShowNewPostModal] = useState(false);
+  const [reportPostId, setReportPostId] = useState<string | null>(null);
+  const [showSafetyModal, setShowSafetyModal] = useState(false);
   const [showSortMenu, setShowSortMenu] = useState(false);
   const [likingThreadId, setLikingThreadId] = useState<string | null>(null);
   const [likeAnimations] = useState<{ [key: string]: Animated.Value }>({});
@@ -115,15 +126,11 @@ export function CommunityScreen() {
 
   useEffect(() => {
     Animated.spring(tabIndicatorAnim, {
-      toValue: activeMode === 'prayers' ? 0 : 1,
+      toValue: activeMode === 'discussions' ? 0 : 1,
       useNativeDriver: true,
       tension: 100,
       friction: 10,
     }).start();
-  }, [activeMode]);
-
-  useEffect(() => {
-    setActiveCategory('all');
   }, [activeMode]);
 
   useEffect(() => {
@@ -211,12 +218,24 @@ export function CommunityScreen() {
       }, 350);
     };
 
-    const channel = supabase
-      .channel('community-feed-realtime')
+    const channel = supabase.channel('community-feed-realtime');
+    channel
       .on('postgres_changes', { event: '*', schema: 'public', table: 'posts' }, queueRealtimeRefresh)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'post_likes' }, queueRealtimeRefresh)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'comments' }, queueRealtimeRefresh)
-      .subscribe();
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'comments' }, queueRealtimeRefresh);
+    if (user?.id) {
+      channel.on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'blocked_users',
+          filter: `blocker_id=eq.${user.id}`,
+        },
+        queueRealtimeRefresh
+      );
+    }
+    channel.subscribe();
 
     return () => {
       if (realtimeDebounceRef.current) {
@@ -224,7 +243,7 @@ export function CommunityScreen() {
       }
       supabase.removeChannel(channel);
     };
-  }, [fetchData, fetchStats]);
+  }, [fetchData, fetchStats, user?.id]);
 
   const animateLike = (threadId: string) => {
     const anim = getLikeAnimation(threadId);
@@ -336,46 +355,46 @@ export function CommunityScreen() {
     }
   };
 
-  const handleReport = async (targetType: 'thread' | 'comment', targetId: string) => {
+  const handleReportPost = (postId: string) => {
     if (!user) {
       showToast('Please sign in to report content', 'info');
       return;
     }
-
-    Alert.alert(
-      'Report Content',
-      'Are you sure you want to report this content for being inappropriate?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Report',
-          style: 'destructive',
-          onPress: () => {
-            Linking.openURL(`mailto:support@gkpradio.com?subject=Report%20Inappropriate%20Content&body=Reporting%20${targetType}%20with%20ID:%20${targetId}`);
-            showToast('Thank you for your report. Our team will review it.', 'success');
-          }
-        }
-      ]
-    );
+    setReportPostId(postId);
   };
 
-  const handleBlock = async (blockedUserId: string) => {
+  const handleBlockUser = (blockedUserId: string) => {
     if (!user) {
-      Alert.alert('Authentication Required', 'Please sign in to block users.');
+      Alert.alert('Authentication Required', 'Please sign in to block users.', [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Sign in', onPress: () => navigation.navigate('Login', { redirectBack: true }) },
+      ]);
+      return;
+    }
+    if (String(user.id) === String(blockedUserId)) {
+      showToast('You cannot block yourself', 'info');
       return;
     }
 
     Alert.alert(
-      'Block User',
-      'If you wish to block a user, please contact our support team.',
+      'Block member',
+      'You will no longer see posts or comments from this member in the community.',
       [
         { text: 'Cancel', style: 'cancel' },
         {
-          text: 'Contact Support',
-          onPress: () => {
-            Linking.openURL(`mailto:support@gkpradio.com?subject=Block%20User%20Request&body=I%20would%20like%20to%20block%20user%20ID:%20${blockedUserId}`);
-          }
-        }
+          text: 'Block',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await blockCommunityUser(user.id, blockedUserId);
+              setThreads((prev) => prev.filter((t) => String(t.userid) !== String(blockedUserId)));
+              showToast('Member blocked', 'success');
+              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+            } catch (e: any) {
+              showToast(e?.message || 'Unable to block member', 'error');
+            }
+          },
+        },
       ]
     );
   };
@@ -452,6 +471,24 @@ export function CommunityScreen() {
     );
   };
 
+  const handleThreadOverflowMenu = (thread: ThreadWithUser) => {
+    if (!user) {
+      showToast('Please sign in', 'info');
+      return;
+    }
+    Haptics.selectionAsync();
+    const isOwn = String(user.id) === String(thread.userid);
+    openPostOverflowMenu(isOwn, (choice) => {
+      if (choice === 'delete') {
+        handleDeletePost(thread.id, thread.userid);
+      } else if (choice === 'report') {
+        handleReportPost(thread.id);
+      } else if (choice === 'block') {
+        handleBlockUser(thread.userid);
+      }
+    });
+  };
+
   const handleFabPress = () => {
     Animated.sequence([
       Animated.timing(fabScale, { toValue: 0.9, duration: 50, useNativeDriver: true }),
@@ -470,6 +507,20 @@ export function CommunityScreen() {
     setSearchQuery('');
     setDebouncedSearchQuery('');
   }, []);
+
+  useEffect(() => {
+    const categoryId = route.params?.categoryId;
+    if (!categoryId) return;
+
+    const requestedMode = route.params?.mode;
+    const derivedMode = requestedMode ?? (isPrayerCategory(categoryId) ? 'prayers' : 'discussions');
+
+    setSortBy('newest');
+    setActiveMode(derivedMode);
+    setActiveCategory(categoryId);
+    setSearchQuery('');
+    setDebouncedSearchQuery('');
+  }, [route.params?.categoryId, route.params?.mode]);
 
   const formatTimeAgo = (dateString: string) => {
     try {
@@ -560,7 +611,7 @@ export function CommunityScreen() {
         <Ionicons
           name={isActive ? category.iconActive : category.icon}
           size={18}
-          color={isActive ? '#fff' : '#71717a'}
+          color={isActive ? '#fff' : theme.colors.textMuted}
         />
         <Text style={[styles.categoryTabText, isActive && styles.categoryTabTextActive]}>
           {category.label}
@@ -635,7 +686,7 @@ export function CommunityScreen() {
               <Image source={{ uri: avatarUrl }} style={styles.avatar} />
             ) : (
               <View style={styles.avatarPlaceholder}>
-                <Ionicons name="person" size={14} color="#71717a" />
+                <Ionicons name="person" size={14} color={theme.colors.textMuted} />
               </View>
             )}
             <View style={styles.authorMeta}>
@@ -649,7 +700,7 @@ export function CommunityScreen() {
             <Ionicons
               name={getCategoryIcon(thread.category)}
               size={12}
-              color="#047857"
+              color={theme.colors.primary}
             />
             <Text style={styles.categoryBadgeText}>{getCategoryLabel(thread.category)}</Text>
           </View>
@@ -682,8 +733,8 @@ export function CommunityScreen() {
                   size={18}
                   color={
                     isPrayerPost
-                      ? (thread.user_has_prayed ? '#047857' : '#71717a')
-                      : (thread.user_has_liked ? "#ef4444" : "#71717a")
+                      ? (thread.user_has_prayed ? theme.colors.primary : theme.colors.textMuted)
+                      : (thread.user_has_liked ? theme.colors.error : theme.colors.textMuted)
                   }
                 />
               </Animated.View>
@@ -699,7 +750,7 @@ export function CommunityScreen() {
               </Text>
             </Pressable>
             <View style={styles.statButton}>
-              <Ionicons name="chatbubble-outline" size={18} color="#71717a" />
+              <Ionicons name="chatbubble-outline" size={18} color={theme.colors.textMuted} />
               <Text style={styles.statText}>
                 {thread.comment_count || 0}
                 {!isPrayerPost ? ' replies' : ''}
@@ -709,7 +760,7 @@ export function CommunityScreen() {
               style={styles.statButton}
               onPress={() => handleSharePost(thread)}
             >
-              <Ionicons name="share-outline" size={18} color="#71717a" />
+              <Ionicons name="share-outline" size={18} color={theme.colors.textMuted} />
             </Pressable>
           </View>
           <View style={styles.cardActions}>
@@ -720,20 +771,19 @@ export function CommunityScreen() {
               <Ionicons
                 name={isBookmarked('thread', thread.id) ? "bookmark" : "bookmark-outline"}
                 size={16}
-                color={isBookmarked('thread', thread.id) ? "#047857" : "#a1a1aa"}
+                color={isBookmarked('thread', thread.id) ? theme.colors.primary : theme.colors.textMuted}
               />
             </Pressable>
-            {user && user.id === thread.userid && (
-              <Pressable onPress={() => handleDeletePost(thread.id, thread.userid)} style={styles.actionButton}>
-                <Ionicons name="trash-outline" size={16} color="#ef4444" />
+            {user ? (
+              <Pressable
+                onPress={() => handleThreadOverflowMenu(thread)}
+                style={styles.actionButton}
+                accessibilityLabel="Post options"
+                hitSlop={8}
+              >
+                <Ionicons name="ellipsis-horizontal" size={20} color={theme.colors.textMuted} />
               </Pressable>
-            )}
-            <Pressable onPress={() => handleReport('thread', thread.id)} style={styles.actionButton}>
-              <Ionicons name="flag-outline" size={16} color="#a1a1aa" />
-            </Pressable>
-            <Pressable onPress={() => handleBlock(thread.userid)} style={styles.actionButton}>
-              <Ionicons name="eye-off-outline" size={16} color="#a1a1aa" />
-            </Pressable>
+            ) : null}
           </View>
         </View>
       </Pressable>
@@ -755,21 +805,50 @@ export function CommunityScreen() {
         style={styles.scrollView}
         showsVerticalScrollIndicator={false}
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#047857" />
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.colors.primary} />
         }
       >
         <View style={styles.header}>
-          <Text style={styles.title}>Community</Text>
+          <View style={styles.headerTopRow}>
+            <Text style={styles.title} accessibilityRole="header">
+              Community
+            </Text>
+            <Pressable
+              onPress={() => {
+                Haptics.selectionAsync();
+                setShowSafetyModal(true);
+              }}
+              style={({ pressed }) => [styles.safetyInfoButton, pressed && styles.safetyInfoButtonPressed]}
+              hitSlop={12}
+              accessibilityRole="button"
+              accessibilityLabel="Community safety guidelines"
+            >
+              <Ionicons name="shield-checkmark-outline" size={26} color={theme.colors.primary} />
+            </Pressable>
+          </View>
           <Text style={styles.subtitle}>
             Share testimonies, lift prayers, and encourage one another
           </Text>
+          <Pressable
+            onPress={() => {
+              Haptics.selectionAsync();
+              setShowSafetyModal(true);
+            }}
+            accessibilityRole="button"
+            accessibilityLabel="Read full community safety guidelines"
+          >
+            <Text style={styles.safetyHint}>
+              No peer-to-peer payments or donations between members.{' '}
+              <Text style={styles.safetyHintLink}>Details</Text>
+            </Text>
+          </Pressable>
         </View>
 
         <View style={styles.searchContainer}>
           <TextInput
             style={styles.searchInput}
             placeholder="Search posts..."
-            placeholderTextColor="#a1a1aa"
+            placeholderTextColor={theme.colors.textMuted}
             value={searchQuery}
             onChangeText={setSearchQuery}
           />
@@ -778,22 +857,22 @@ export function CommunityScreen() {
               onPress={() => setSearchQuery('')}
               style={styles.searchButton}
             >
-              <Ionicons name="close-circle" size={20} color="#71717a" />
+              <Ionicons name="close-circle" size={20} color={theme.colors.textMuted} />
             </Pressable>
           )}
         </View>
 
         <View style={styles.stats}>
           <View style={styles.statBox}>
-            <View style={[styles.statIconContainer, { backgroundColor: 'rgba(5, 150, 105, 0.1)' }]}>
-              <Ionicons name="chatbubbles" size={20} color="#059669" />
+            <View style={[styles.statIconContainer, { backgroundColor: theme.dark ? 'rgba(16, 185, 129, 0.15)' : 'rgba(5, 150, 105, 0.1)' }]}>
+              <Ionicons name="chatbubbles" size={20} color={theme.colors.primary} />
             </View>
             <Text style={styles.statValue}>{stats.prayers}</Text>
             <Text style={styles.statLabel}>Prayers</Text>
           </View>
           <View style={styles.statBox}>
-            <View style={[styles.statIconContainer, { backgroundColor: 'rgba(16, 185, 129, 0.1)' }]}>
-              <Ionicons name="sparkles" size={20} color="#10b981" />
+            <View style={[styles.statIconContainer, { backgroundColor: theme.dark ? 'rgba(16, 185, 129, 0.2)' : 'rgba(16, 185, 129, 0.1)' }]}>
+              <Ionicons name="sparkles" size={20} color={theme.colors.primary} />
             </View>
             <Text style={styles.statValue}>{stats.testimonies}</Text>
             <Text style={styles.statLabel}>Testimonies</Text>
@@ -805,10 +884,10 @@ export function CommunityScreen() {
               setShowNewPostModal(true);
             }}
           >
-            <View style={[styles.statIconContainer, { backgroundColor: 'rgba(4, 120, 87, 0.1)' }]}>
-              <Ionicons name="add-circle" size={24} color="#047857" />
+            <View style={[styles.statIconContainer, { backgroundColor: theme.dark ? 'rgba(16, 185, 129, 0.15)' : 'rgba(4, 120, 87, 0.1)' }]}>
+              <Ionicons name="add-circle" size={24} color={theme.colors.primary} />
             </View>
-            <Text style={[styles.statLabel, { marginTop: 4, fontWeight: '700', color: '#047857' }]}>New Post</Text>
+            <Text style={[styles.statLabel, { marginTop: 4, fontWeight: '700', color: theme.colors.primary }]}>New Post</Text>
           </Pressable>
         </View>
 
@@ -832,31 +911,32 @@ export function CommunityScreen() {
               style={styles.tab}
               onPress={() => {
                 Haptics.selectionAsync();
-                setActiveMode('prayers');
+                setActiveMode('discussions');
+                setActiveCategory('all');
               }}
             >
               <Ionicons
-                name="hand-right"
+                name="chatbubbles"
                 size={18}
-                color={activeMode === 'prayers' ? '#fff' : '#71717a'}
+                color={activeMode === 'discussions' ? '#fff' : theme.colors.textMuted}
               />
               <Text
                 style={[
                   styles.tabText,
-                  { color: activeMode === 'prayers' ? '#fff' : '#71717a' },
+                  { color: activeMode === 'discussions' ? '#fff' : theme.colors.textMuted },
                 ]}
               >
-                Prayers
+                Discussions
               </Text>
               <View style={[
                 styles.tabBadge,
-                { backgroundColor: activeMode === 'prayers' ? 'rgba(255,255,255,0.3)' : '#e4e4e7' }
+                { backgroundColor: activeMode === 'discussions' ? 'rgba(255,255,255,0.3)' : theme.colors.border }
               ]}>
                 <Text style={[
                   styles.tabBadgeText,
-                  { color: activeMode === 'prayers' ? '#fff' : '#71717a' }
+                  { color: activeMode === 'discussions' ? '#fff' : theme.colors.textMuted }
                 ]}>
-                  {stats.prayers}
+                  {stats.total - stats.prayers}
                 </Text>
               </View>
             </Pressable>
@@ -864,31 +944,32 @@ export function CommunityScreen() {
               style={styles.tab}
               onPress={() => {
                 Haptics.selectionAsync();
-                setActiveMode('discussions');
+                setActiveMode('prayers');
+                setActiveCategory('all');
               }}
             >
               <Ionicons
-                name="chatbubbles"
+                name="hand-right"
                 size={18}
-                color={activeMode === 'discussions' ? '#fff' : '#71717a'}
+                color={activeMode === 'prayers' ? '#fff' : theme.colors.textMuted}
               />
               <Text
                 style={[
                   styles.tabText,
-                  { color: activeMode === 'discussions' ? '#fff' : '#71717a' },
+                  { color: activeMode === 'prayers' ? '#fff' : theme.colors.textMuted },
                 ]}
               >
-                Discussions
+                Prayers
               </Text>
               <View style={[
                 styles.tabBadge,
-                { backgroundColor: activeMode === 'discussions' ? 'rgba(255,255,255,0.3)' : '#e4e4e7' }
+                { backgroundColor: activeMode === 'prayers' ? 'rgba(255,255,255,0.3)' : theme.colors.border }
               ]}>
                 <Text style={[
                   styles.tabBadgeText,
-                  { color: activeMode === 'discussions' ? '#fff' : '#71717a' }
+                  { color: activeMode === 'prayers' ? '#fff' : theme.colors.textMuted }
                 ]}>
-                  {stats.total - stats.prayers}
+                  {stats.prayers}
                 </Text>
               </View>
             </Pressable>
@@ -912,9 +993,9 @@ export function CommunityScreen() {
               setShowSortMenu(!showSortMenu);
             }}
           >
-            <Ionicons name="funnel-outline" size={16} color="#71717a" />
+            <Ionicons name="funnel-outline" size={16} color={theme.colors.textMuted} />
             <Text style={styles.sortButtonText}>{getSortLabel()}</Text>
-            <Ionicons name="chevron-down" size={14} color="#71717a" />
+            <Ionicons name="chevron-down" size={14} color={theme.colors.textMuted} />
           </Pressable>
 
           {showSortMenu && (
@@ -937,7 +1018,7 @@ export function CommunityScreen() {
                     <Text style={[styles.sortMenuItemText, sortBy === option && styles.sortMenuItemTextActive]}>
                       {option === 'newest' ? 'Newest' : option === 'popular' ? 'Most Liked' : 'Most Discussed'}
                     </Text>
-                    {sortBy === option && <Ionicons name="checkmark" size={16} color="#047857" />}
+                    {sortBy === option && <Ionicons name="checkmark" size={16} color={theme.colors.primary} />}
                   </Pressable>
                 ))}
               </View>
@@ -948,7 +1029,7 @@ export function CommunityScreen() {
         <View style={styles.content}>
           {error ? (
             <View style={styles.errorContainer}>
-              <Ionicons name="alert-circle-outline" size={48} color="#ef4444" />
+              <Ionicons name="alert-circle-outline" size={48} color={theme.colors.error} />
               <Text style={styles.errorText}>{error}</Text>
               <Pressable style={styles.retryButton} onPress={() => { fetchData(); fetchStats(); }}>
                 <Text style={styles.retryButtonText}>Retry</Text>
@@ -956,7 +1037,7 @@ export function CommunityScreen() {
             </View>
           ) : loading ? (
             <View style={styles.loadingContainer}>
-              <ActivityIndicator size="large" color="#047857" />
+              <ActivityIndicator size="large" color={theme.colors.primary} />
               <Text style={styles.loadingText}>Loading...</Text>
             </View>
           ) : filteredBySearch.length === 0 ? (
@@ -964,7 +1045,7 @@ export function CommunityScreen() {
               <Ionicons
                 name={activeMode === 'prayers' ? 'hand-right-outline' : 'chatbubbles-outline'}
                 size={48}
-                color="#d4d4d8"
+                color={theme.colors.border}
               />
               <Text style={styles.emptyStateTitle}>
                 {activeCategory === 'all' 
@@ -999,7 +1080,7 @@ export function CommunityScreen() {
       <Animated.View style={[styles.fab, { transform: [{ scale: fabScale }] }]}>
         <Pressable onPress={handleFabPress} style={styles.fabButton}>
           <LinearGradient
-            colors={['#047857', '#059669']}
+            colors={[theme.colors.primary, '#059669']}
             style={styles.fabGradient}
           >
             <Ionicons name="add" size={28} color="#fff" />
@@ -1007,9 +1088,51 @@ export function CommunityScreen() {
         </Pressable>
       </Animated.View>
 
+      <Modal
+        visible={showSafetyModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowSafetyModal(false)}
+      >
+        <View style={styles.safetyModalRoot}>
+          <Pressable
+            style={StyleSheet.absoluteFill}
+            onPress={() => setShowSafetyModal(false)}
+            accessibilityLabel="Dismiss"
+          />
+          <View style={styles.safetyModalCard}>
+            <View style={styles.safetyModalHeader}>
+              <View style={styles.safetyModalTitleRow}>
+                <Ionicons name="shield-checkmark" size={22} color={theme.colors.primary} />
+                <Text style={styles.safetyModalTitle}>Community safety</Text>
+              </View>
+              <Pressable
+                onPress={() => setShowSafetyModal(false)}
+                hitSlop={10}
+                accessibilityRole="button"
+                accessibilityLabel="Close"
+              >
+                <Ionicons name="close" size={24} color={theme.colors.textMuted} />
+              </Pressable>
+            </View>
+            <Text style={styles.safetyModalBody}>{COMMUNITY_SAFETY_MESSAGE}</Text>
+            <Pressable
+              style={styles.safetyModalButton}
+              onPress={() => {
+                Haptics.selectionAsync();
+                setShowSafetyModal(false);
+              }}
+            >
+              <Text style={styles.safetyModalButtonText}>Got it</Text>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
+
       <NewPostModal
         visible={showNewPostModal}
         onClose={() => setShowNewPostModal(false)}
+        defaultPostType={activeMode === 'prayers' ? 'prayer' : 'discussion'}
         onOptimisticCreate={(tempPost) => {
           focusFeedOnCreatedCategory(tempPost.category);
           setThreads((prev) => sortByNewest(dedupeThreads([tempPost as ThreadWithUser, ...prev])));
@@ -1026,23 +1149,39 @@ export function CommunityScreen() {
         onCreateFailed={(tempId) => {
           setThreads((prev) => prev.filter((t) => t.id !== tempId));
         }}
-        onSuccess={async (_createdPost: BackendThread) => {
+        onSuccess={async (createdPost: BackendThread) => {
           try {
             await Promise.all([fetchStats(), refreshBookmarks()]);
             showToast('Post shared successfully!', 'success');
+            navigation.navigate('PostDetail', { threadId: createdPost.id, thread: createdPost });
           } catch (error) {
             showToast('Post created but some updates are pending. Pull to refresh.', 'warning');
           }
         }}
       />
+
+      <ReportContentModal
+        visible={Boolean(user && reportPostId)}
+        onClose={() => setReportPostId(null)}
+        reporterId={user?.id ?? ''}
+        targetType="post"
+        targetId={reportPostId ?? ''}
+        onSubmitted={() =>
+          showToast('Thanks — we received your report and will review it.', 'success')
+        }
+      />
     </SafeAreaView>
   );
 }
 
-const styles = StyleSheet.create({
+function createCommunityStyles(theme: Theme) {
+  const pinBg = theme.dark ? 'rgba(251, 191, 36, 0.12)' : '#fffbeb';
+  const pinBorder = theme.dark ? 'rgba(245, 158, 11, 0.45)' : '#fbbf24';
+
+  return StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fff',
+    backgroundColor: theme.colors.background,
   },
   scrollView: {
     flex: 1,
@@ -1052,16 +1191,94 @@ const styles = StyleSheet.create({
     paddingTop: 20,
     paddingBottom: 24,
   },
+  headerTopRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+    marginBottom: 8,
+  },
   title: {
+    flex: 1,
     fontSize: 28,
     fontWeight: 'bold',
-    color: '#09090b',
-    marginBottom: 8,
+    color: theme.colors.text,
+  },
+  safetyInfoButton: {
+    padding: 6,
+    borderRadius: 12,
+    backgroundColor: theme.dark ? 'rgba(16, 185, 129, 0.15)' : 'rgba(4, 120, 87, 0.08)',
+  },
+  safetyInfoButtonPressed: {
+    opacity: 0.75,
   },
   subtitle: {
     fontSize: 15,
-    color: '#71717a',
+    color: theme.colors.textMuted,
     lineHeight: 22,
+  },
+  safetyHint: {
+    marginTop: 10,
+    fontSize: 13,
+    color: theme.colors.textMuted,
+    lineHeight: 18,
+  },
+  safetyHintLink: {
+    color: theme.colors.primary,
+    fontWeight: '600',
+  },
+  safetyModalRoot: {
+    flex: 1,
+    justifyContent: 'center',
+    paddingHorizontal: 24,
+    backgroundColor: 'rgba(0, 0, 0, 0.45)',
+  },
+  safetyModalCard: {
+    backgroundColor: theme.colors.surface,
+    borderRadius: 16,
+    padding: 20,
+    borderWidth: theme.dark ? 1 : 0,
+    borderColor: theme.colors.border,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: theme.dark ? 0.35 : 0.15,
+    shadowRadius: 24,
+    elevation: 8,
+  },
+  safetyModalHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    marginBottom: 14,
+  },
+  safetyModalTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flex: 1,
+    paddingRight: 8,
+  },
+  safetyModalTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: theme.colors.text,
+  },
+  safetyModalBody: {
+    fontSize: 15,
+    color: theme.colors.textSecondary,
+    lineHeight: 22,
+    marginBottom: 20,
+  },
+  safetyModalButton: {
+    backgroundColor: theme.colors.primary,
+    paddingVertical: 14,
+    borderRadius: 12,
+    alignItems: 'center',
+  },
+  safetyModalButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
   },
   stats: {
     flexDirection: 'row',
@@ -1071,17 +1288,17 @@ const styles = StyleSheet.create({
   },
   statBox: {
     flex: 1,
-    backgroundColor: '#fff',
+    backgroundColor: theme.colors.surface,
     padding: 16,
     borderRadius: 20,
     alignItems: 'center',
     justifyContent: 'center',
     minHeight: 100,
     borderWidth: 1,
-    borderColor: 'rgba(228, 228, 231, 0.4)',
+    borderColor: theme.colors.border,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.04,
+    shadowOpacity: theme.dark ? 0.2 : 0.04,
     shadowRadius: 12,
     elevation: 2,
   },
@@ -1096,12 +1313,12 @@ const styles = StyleSheet.create({
   statValue: {
     fontSize: 18,
     fontWeight: '800',
-    color: '#09090b',
+    color: theme.colors.text,
     marginBottom: 2,
   },
   statLabel: {
     fontSize: 11,
-    color: '#71717a',
+    color: theme.colors.textMuted,
     fontWeight: '600',
     textTransform: 'uppercase',
     letterSpacing: 0.5,
@@ -1115,7 +1332,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     borderRadius: 14,
     padding: 4,
-    backgroundColor: '#f4f4f5',
+    backgroundColor: theme.colors.borderLight,
     position: 'relative',
   },
   tabIndicator: {
@@ -1125,7 +1342,7 @@ const styles = StyleSheet.create({
     width: '50%',
     height: '100%',
     borderRadius: 10,
-    backgroundColor: '#047857',
+    backgroundColor: theme.colors.primary,
   },
   tab: {
     flex: 1,
@@ -1165,21 +1382,21 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     paddingHorizontal: 14,
     borderRadius: 20,
-    backgroundColor: '#f4f4f5',
+    backgroundColor: theme.colors.borderLight,
   },
   categoryTabActive: {
-    backgroundColor: '#047857',
+    backgroundColor: theme.colors.primary,
   },
   categoryTabText: {
     fontSize: 13,
     fontWeight: '600',
-    color: '#71717a',
+    color: theme.colors.textMuted,
   },
   categoryTabTextActive: {
     color: '#fff',
   },
   countBadge: {
-    backgroundColor: '#e4e4e7',
+    backgroundColor: theme.colors.border,
     paddingHorizontal: 6,
     paddingVertical: 2,
     borderRadius: 10,
@@ -1192,7 +1409,7 @@ const styles = StyleSheet.create({
   countBadgeText: {
     fontSize: 11,
     fontWeight: '600',
-    color: '#71717a',
+    color: theme.colors.textMuted,
   },
   countBadgeTextActive: {
     color: '#fff',
@@ -1219,18 +1436,18 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     paddingHorizontal: 12,
     borderRadius: 8,
-    backgroundColor: '#f4f4f5',
+    backgroundColor: theme.colors.borderLight,
   },
   sortButtonText: {
     fontSize: 13,
     fontWeight: '500',
-    color: '#71717a',
+    color: theme.colors.textMuted,
   },
   sortMenu: {
     position: 'absolute',
     top: 44,
     left: 20,
-    backgroundColor: '#fff',
+    backgroundColor: theme.colors.surface,
     borderRadius: 12,
     paddingVertical: 4,
     minWidth: 160,
@@ -1240,7 +1457,7 @@ const styles = StyleSheet.create({
     shadowRadius: 16,
     elevation: 8,
     borderWidth: 1,
-    borderColor: '#e4e4e7',
+    borderColor: theme.colors.border,
   },
   sortMenuItem: {
     flexDirection: 'row',
@@ -1250,14 +1467,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
   },
   sortMenuItemActive: {
-    backgroundColor: '#f0fdf4',
+    backgroundColor: theme.colors.primaryLight,
   },
   sortMenuItemText: {
     fontSize: 14,
-    color: '#09090b',
+    color: theme.colors.text,
   },
   sortMenuItemTextActive: {
-    color: '#047857',
+    color: theme.colors.primary,
     fontWeight: '600',
   },
   content: {
@@ -1270,18 +1487,18 @@ const styles = StyleSheet.create({
   loadingText: {
     marginTop: 16,
     fontSize: 15,
-    color: '#71717a',
+    color: theme.colors.textMuted,
   },
   card: {
-    backgroundColor: '#fff',
+    backgroundColor: theme.colors.surface,
     padding: 18,
     borderRadius: 16,
     marginBottom: 14,
     borderWidth: 1,
-    borderColor: 'rgba(228, 228, 231, 0.5)',
+    borderColor: theme.colors.border,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.04,
+    shadowOpacity: theme.dark ? 0.2 : 0.04,
     shadowRadius: 12,
     elevation: 2,
   },
@@ -1301,13 +1518,13 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: '#f4f4f5',
+    backgroundColor: theme.colors.borderLight,
   },
   avatarPlaceholder: {
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: '#f4f4f5',
+    backgroundColor: theme.colors.borderLight,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -1317,18 +1534,18 @@ const styles = StyleSheet.create({
   authorName: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#09090b',
+    color: theme.colors.text,
   },
   time: {
     fontSize: 12,
-    color: '#a1a1aa',
+    color: theme.colors.textMuted,
     marginTop: 2,
   },
   categoryBadge: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    backgroundColor: '#f0fdf4',
+    backgroundColor: theme.colors.primaryLight,
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 6,
@@ -1336,17 +1553,17 @@ const styles = StyleSheet.create({
   categoryBadgeText: {
     fontSize: 11,
     fontWeight: '600',
-    color: '#047857',
+    color: theme.colors.primary,
   },
   cardTitle: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#09090b',
+    color: theme.colors.text,
     marginBottom: 8,
   },
   cardDescription: {
     fontSize: 14,
-    color: '#71717a',
+    color: theme.colors.textMuted,
     lineHeight: 20,
     marginBottom: 12,
   },
@@ -1356,7 +1573,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingTop: 12,
     borderTopWidth: 1,
-    borderTopColor: '#f4f4f5',
+    borderTopColor: theme.colors.borderLight,
   },
   engagementStats: {
     flexDirection: 'row',
@@ -1370,14 +1587,14 @@ const styles = StyleSheet.create({
   },
   statText: {
     fontSize: 13,
-    color: '#71717a',
+    color: theme.colors.textMuted,
     fontWeight: '500',
   },
   statTextActive: {
-    color: '#ef4444',
+    color: theme.colors.error,
   },
   prayStatTextActive: {
-    color: '#047857',
+    color: theme.colors.primary,
   },
   cardActions: {
     flexDirection: 'row',
@@ -1394,19 +1611,19 @@ const styles = StyleSheet.create({
   emptyStateTitle: {
     fontSize: 17,
     fontWeight: '600',
-    color: '#09090b',
+    color: theme.colors.text,
     marginTop: 16,
     marginBottom: 8,
   },
   emptyStateText: {
     fontSize: 14,
-    color: '#71717a',
+    color: theme.colors.textMuted,
     textAlign: 'center',
     paddingHorizontal: 40,
     marginBottom: 20,
   },
   emptyStateButton: {
-    backgroundColor: '#047857',
+    backgroundColor: theme.colors.primary,
     paddingHorizontal: 24,
     paddingVertical: 12,
     borderRadius: 8,
@@ -1422,14 +1639,14 @@ const styles = StyleSheet.create({
   },
   errorText: {
     fontSize: 14,
-    color: '#ef4444',
+    color: theme.colors.error,
     marginTop: 16,
     marginBottom: 20,
     textAlign: 'center',
     paddingHorizontal: 40,
   },
   retryButton: {
-    backgroundColor: '#047857',
+    backgroundColor: theme.colors.primary,
     paddingHorizontal: 24,
     paddingVertical: 12,
     borderRadius: 8,
@@ -1440,9 +1657,9 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   pinnedCard: {
-    borderColor: '#fbbf24',
+    borderColor: pinBorder,
     borderWidth: 1,
-    backgroundColor: '#fffbeb',
+    backgroundColor: pinBg,
   },
   pinnedBadge: {
     flexDirection: 'row',
@@ -1456,7 +1673,7 @@ const styles = StyleSheet.create({
     color: '#f59e0b',
   },
   authorNameClickable: {
-    color: '#047857',
+    color: theme.colors.primary,
   },
   searchContainer: {
     flexDirection: 'row',
@@ -1466,12 +1683,12 @@ const styles = StyleSheet.create({
   },
   searchInput: {
     flex: 1,
-    backgroundColor: '#f4f4f5',
+    backgroundColor: theme.colors.borderLight,
     borderRadius: 12,
     paddingHorizontal: 16,
     paddingVertical: 12,
     fontSize: 15,
-    color: '#09090b',
+    color: theme.colors.text,
   },
   searchButton: {
     padding: 8,
@@ -1486,7 +1703,7 @@ const styles = StyleSheet.create({
   fabButton: {
     borderRadius: 30,
     overflow: 'hidden',
-    shadowColor: '#047857',
+    shadowColor: theme.colors.primary,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 8,
@@ -1499,4 +1716,5 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-});
+  });
+}

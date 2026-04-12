@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import {
   View,
   Text,
@@ -20,6 +20,8 @@ import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import * as Haptics from 'expo-haptics';
 import {
+  blockCommunityUser,
+  type CommunityReportTarget,
   deleteCommunityComment,
   deleteCommunityPost,
   createCommentForPost,
@@ -27,9 +29,12 @@ import {
   getPostById,
   togglePostReaction,
 } from '../lib/backend';
+import { ReportContentModal } from '../components/ReportContentModal';
+import { openCommentOverflowMenu, openPostOverflowMenu } from '../utils/contentOverflowMenu';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { useBookmarks } from '../contexts/BookmarksContext';
+import { useTheme, type Theme } from '../contexts/ThemeContext';
 import { RootStackParamList } from '../types/navigation';
 import { PostType, getCategoryIcon, getCategoryLabel, getPostTypeForCategory } from '../constants/categories';
 
@@ -79,6 +84,8 @@ export function PostDetailScreen() {
   const route = useRoute<PostDetailRouteProp>();
   const { user } = useAuth();
   const { isBookmarked, toggleBookmark } = useBookmarks();
+  const { theme } = useTheme();
+  const styles = useMemo(() => createPostDetailStyles(theme), [theme]);
 
   const [thread, setThread] = useState<ThreadWithUser | null>(null);
   const [comments, setComments] = useState<CommentWithUser[]>([]);
@@ -86,6 +93,10 @@ export function PostDetailScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [newComment, setNewComment] = useState('');
   const [submittingComment, setSubmittingComment] = useState(false);
+  const [reportTarget, setReportTarget] = useState<{
+    targetType: CommunityReportTarget;
+    targetId: string;
+  } | null>(null);
   const submitCommentLockRef = useRef(false);
   const realtimeDebounceRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -103,10 +114,9 @@ export function PostDetailScreen() {
   const fetchThread = useCallback(async () => {
     try {
       const threadId = String(route.params.threadId);
-      
-      // If we have the thread in params, use it for immediate display
-      if (route.params.thread && !thread) {
-        const t = route.params.thread;
+      const optimistic = route.params.thread;
+      if (optimistic && String(optimistic.id) === threadId) {
+        const t = optimistic;
         setThread({
           id: String(t.id),
           title: t.title,
@@ -122,14 +132,16 @@ export function PostDetailScreen() {
           comment_count: t.comment_count,
           user_has_liked: t.user_has_liked,
           user_has_prayed: t.user_has_prayed || false,
-          users: t.users
-        } as any);
+          users: t.users,
+        } as ThreadWithUser);
       }
 
-      // Fetch fresh data from API
-      // Since we don't have getTestimonyById yet, we'll use getTestimonies and filter
       const found = await getPostById(threadId, user?.id);
-      if (found) setThread(found as ThreadWithUser);
+      if (found) {
+        setThread(found as ThreadWithUser);
+      } else {
+        setThread(null);
+      }
     } catch (error) {
       console.error('Error fetching thread:', error);
     }
@@ -137,12 +149,12 @@ export function PostDetailScreen() {
 
   const fetchComments = useCallback(async () => {
     try {
-      const data = await fetchCommentsForPost(String(route.params.threadId));
+      const data = await fetchCommentsForPost(String(route.params.threadId), user?.id);
       setComments(dedupeComments(data as CommentWithUser[]));
     } catch (error) {
       console.error('Error fetching comments:', error);
     }
-  }, [route.params.threadId, dedupeComments]);
+  }, [route.params.threadId, dedupeComments, user?.id]);
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -187,9 +199,16 @@ export function PostDetailScreen() {
     setRefreshing(false);
   };
 
+  const promptSignIn = useCallback((message: string) => {
+    Alert.alert('Sign In Required', message, [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Sign in', onPress: () => navigation.navigate('Login', { redirectBack: true }) },
+    ]);
+  }, [navigation]);
+
   const handleLike = async () => {
     if (!user) {
-      Alert.alert('Sign In Required', 'Please sign in to like posts.');
+      promptSignIn('Please sign in to like posts.');
       return;
     }
     if (!thread) return;
@@ -221,7 +240,7 @@ export function PostDetailScreen() {
 
   const handlePray = async () => {
     if (!user) {
-      Alert.alert('Sign In Required', 'Please sign in to pray with the community.');
+      promptSignIn('Please sign in to pray with the community.');
       return;
     }
     if (!thread) return;
@@ -252,7 +271,7 @@ export function PostDetailScreen() {
 
   const handleBookmark = async () => {
     if (!user) {
-      Alert.alert('Sign In Required', 'Please sign in to save posts.');
+      promptSignIn('Please sign in to save posts.');
       return;
     }
     if (!thread) return;
@@ -285,7 +304,7 @@ export function PostDetailScreen() {
 
   const handleDeletePost = async () => {
     if (!user) {
-      Alert.alert('Sign In Required', 'Please sign in to delete posts.');
+      promptSignIn('Please sign in to delete posts.');
       return;
     }
     if (!thread) return;
@@ -321,7 +340,7 @@ export function PostDetailScreen() {
     if (submittingComment || submitCommentLockRef.current) return;
 
     if (!user) {
-      Alert.alert('Sign In Required', 'Please sign in to comment.');
+      promptSignIn('Please sign in to comment.');
       return;
     }
     if (!thread || !newComment.trim()) return;
@@ -391,9 +410,104 @@ export function PostDetailScreen() {
     navigation.navigate('UserProfile', { userId });
   };
 
+  const handleReportPost = () => {
+    if (!user || !thread) {
+      promptSignIn('Please sign in to report content.');
+      return;
+    }
+    if (user.id === thread.userid) return;
+    setReportTarget({ targetType: 'post', targetId: thread.id });
+  };
+
+  const handleBlockPostAuthor = () => {
+    if (!user || !thread) {
+      promptSignIn('Please sign in to block users.');
+      return;
+    }
+    if (user.id === thread.userid) return;
+    Alert.alert(
+      'Block member',
+      'You will no longer see posts or comments from this member in the community.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Block',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await blockCommunityUser(user.id, thread.userid);
+              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+              navigation.goBack();
+            } catch (e: any) {
+              Alert.alert('Unable to block', e?.message || 'Please try again.');
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const handlePostHeaderOverflow = () => {
+    if (!user || !thread) {
+      promptSignIn('Please sign in to use post options.');
+      return;
+    }
+    Haptics.selectionAsync();
+    const isOwn = user.id === thread.userid;
+    openPostOverflowMenu(isOwn, (choice) => {
+      if (choice === 'delete') {
+        handleDeletePost();
+      } else if (choice === 'report') {
+        handleReportPost();
+      } else if (choice === 'block') {
+        handleBlockPostAuthor();
+      }
+    });
+  };
+
+  const handleReportComment = (commentId: string, authorId: string) => {
+    if (!user) {
+      promptSignIn('Please sign in to report content.');
+      return;
+    }
+    if (user.id === authorId) return;
+    setReportTarget({ targetType: 'comment', targetId: commentId });
+  };
+
+  const handleBlockCommentAuthor = (authorId: string) => {
+    if (!user) {
+      promptSignIn('Please sign in to block users.');
+      return;
+    }
+    if (user.id === authorId) return;
+    Alert.alert(
+      'Block member',
+      'You will no longer see posts or comments from this member in the community.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Block',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await blockCommunityUser(user.id, authorId);
+              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+              setComments((prev) => prev.filter((c) => c.userid !== authorId));
+              if (thread?.userid === authorId) {
+                navigation.goBack();
+              }
+            } catch (e: any) {
+              Alert.alert('Unable to block', e?.message || 'Please try again.');
+            }
+          },
+        },
+      ]
+    );
+  };
+
   const handleDeleteComment = async (commentId: string) => {
     if (!user) {
-      Alert.alert('Sign In Required', 'Please sign in to delete comments.');
+      promptSignIn('Please sign in to delete comments.');
       return;
     }
 
@@ -428,6 +542,24 @@ export function PostDetailScreen() {
     );
   };
 
+  const handleCommentOverflow = (comment: CommentWithUser) => {
+    if (!user) {
+      promptSignIn('Please sign in to use comment options.');
+      return;
+    }
+    Haptics.selectionAsync();
+    const isOwn = user.id === comment.userid;
+    openCommentOverflowMenu(isOwn, (choice) => {
+      if (choice === 'delete') {
+        handleDeleteComment(comment.id);
+      } else if (choice === 'report') {
+        handleReportComment(comment.id, comment.userid);
+      } else if (choice === 'block') {
+        handleBlockCommentAuthor(comment.userid);
+      }
+    });
+  };
+
   const formatTimeAgo = (dateString: string) => {
     const date = new Date(dateString);
     const now = new Date();
@@ -444,13 +576,13 @@ export function PostDetailScreen() {
       <SafeAreaView style={styles.container} edges={['top']}>
         <View style={styles.header}>
           <Pressable onPress={() => navigation.goBack()} style={styles.backButton}>
-            <Ionicons name="arrow-back" size={24} color="#09090b" />
+            <Ionicons name="arrow-back" size={24} color={theme.colors.text} />
           </Pressable>
           <Text style={styles.headerTitle}>Post</Text>
           <View style={{ width: 40 }} />
         </View>
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#047857" />
+          <ActivityIndicator size="large" color={theme.colors.primary} />
         </View>
       </SafeAreaView>
     );
@@ -461,13 +593,13 @@ export function PostDetailScreen() {
       <SafeAreaView style={styles.container} edges={['top']}>
         <View style={styles.header}>
           <Pressable onPress={() => navigation.goBack()} style={styles.backButton}>
-            <Ionicons name="arrow-back" size={24} color="#09090b" />
+            <Ionicons name="arrow-back" size={24} color={theme.colors.text} />
           </Pressable>
           <Text style={styles.headerTitle}>Post</Text>
           <View style={{ width: 40 }} />
         </View>
         <View style={styles.errorContainer}>
-          <Ionicons name="alert-circle-outline" size={48} color="#ef4444" />
+          <Ionicons name="alert-circle-outline" size={48} color={theme.colors.error} />
           <Text style={styles.errorText}>Post not found</Text>
           <Pressable style={styles.retryButton} onPress={() => navigation.goBack()}>
             <Text style={styles.retryButtonText}>Go Back</Text>
@@ -487,17 +619,22 @@ export function PostDetailScreen() {
     <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.header}>
         <Pressable onPress={() => navigation.goBack()} style={styles.backButton}>
-          <Ionicons name="arrow-back" size={24} color="#09090b" />
+          <Ionicons name="arrow-back" size={24} color={theme.colors.text} />
         </Pressable>
         <Text style={styles.headerTitle}>Post</Text>
         <View style={styles.headerActions}>
-          {user?.id === thread.userid && (
-            <Pressable onPress={handleDeletePost} style={styles.deletePostButton}>
-              <Ionicons name="trash-outline" size={22} color="#ef4444" />
+          {user ? (
+            <Pressable
+              onPress={handlePostHeaderOverflow}
+              style={styles.deletePostButton}
+              hitSlop={10}
+              accessibilityLabel="Post options"
+            >
+              <Ionicons name="ellipsis-horizontal" size={24} color={theme.colors.text} />
             </Pressable>
-          )}
+          ) : null}
           <Pressable onPress={handleShare} style={styles.shareButton}>
-            <Ionicons name="share-outline" size={24} color="#09090b" />
+            <Ionicons name="share-outline" size={24} color={theme.colors.text} />
           </Pressable>
         </View>
       </View>
@@ -511,12 +648,12 @@ export function PostDetailScreen() {
           style={styles.scrollView}
           showsVerticalScrollIndicator={false}
           refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#047857" />
+            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.colors.primary} />
           }
         >
           {thread.ispinned && (
             <View style={styles.pinnedBadge}>
-              <Ionicons name="pin" size={14} color="#f59e0b" />
+              <Ionicons name="pin" size={14} color={theme.colors.warning} />
               <Text style={styles.pinnedText}>Pinned</Text>
             </View>
           )}
@@ -531,7 +668,7 @@ export function PostDetailScreen() {
                 <Image source={{ uri: avatarUrl }} style={styles.avatar} />
               ) : (
                 <View style={styles.avatarPlaceholder}>
-                  <Ionicons name="person" size={20} color="#71717a" />
+                  <Ionicons name="person" size={20} color={theme.colors.textMuted} />
                 </View>
               )}
               <View style={styles.authorInfo}>
@@ -546,7 +683,7 @@ export function PostDetailScreen() {
               <Ionicons
                 name={getCategoryIcon(thread.category)}
                 size={14}
-                color="#047857"
+                color={theme.colors.primary}
               />
               <Text style={styles.categoryText}>{getCategoryLabel(thread.category)}</Text>
             </View>
@@ -560,7 +697,7 @@ export function PostDetailScreen() {
                   <Ionicons
                     name={thread.user_has_liked ? 'heart' : 'heart-outline'}
                     size={22}
-                    color={thread.user_has_liked ? '#ef4444' : '#71717a'}
+                    color={thread.user_has_liked ? theme.colors.error : theme.colors.textMuted}
                   />
                   <Text style={[styles.actionText, thread.user_has_liked && styles.actionTextActive]}>
                     {thread.like_count || 0}
@@ -573,7 +710,7 @@ export function PostDetailScreen() {
                   <Ionicons
                     name={thread.user_has_prayed ? 'hand-right' : 'hand-right-outline'}
                     size={22}
-                    color={thread.user_has_prayed ? '#047857' : '#71717a'}
+                    color={thread.user_has_prayed ? theme.colors.primary : theme.colors.textMuted}
                   />
                   <Text style={[styles.actionText, thread.user_has_prayed && styles.prayedText]}>
                     {thread.prayer_count || 0} prayed
@@ -582,7 +719,7 @@ export function PostDetailScreen() {
               )}
 
               <View style={styles.actionButton}>
-                <Ionicons name="chatbubble-outline" size={22} color="#71717a" />
+                <Ionicons name="chatbubble-outline" size={22} color={theme.colors.textMuted} />
                 <Text style={styles.actionText}>{thread.comment_count || 0}</Text>
               </View>
 
@@ -590,7 +727,7 @@ export function PostDetailScreen() {
                 <Ionicons
                   name={isBookmarked('thread', thread.id) ? 'bookmark' : 'bookmark-outline'}
                   size={22}
-                  color={isBookmarked('thread', thread.id) ? '#047857' : '#71717a'}
+                  color={isBookmarked('thread', thread.id) ? theme.colors.primary : theme.colors.textMuted}
                 />
               </Pressable>
             </View>
@@ -603,7 +740,7 @@ export function PostDetailScreen() {
 
             {comments.length === 0 ? (
               <View style={styles.emptyComments}>
-                <Ionicons name="chatbubbles-outline" size={36} color="#d4d4d8" />
+                <Ionicons name="chatbubbles-outline" size={36} color={theme.colors.border} />
                 <Text style={styles.emptyCommentsText}>No comments yet</Text>
                 <Text style={styles.emptyCommentsSubtext}>Be the first to comment</Text>
               </View>
@@ -618,7 +755,7 @@ export function PostDetailScreen() {
                       <Image source={{ uri: comment.users.avatarurl }} style={styles.commentAvatar} />
                     ) : (
                       <View style={styles.commentAvatarPlaceholder}>
-                        <Ionicons name="person" size={14} color="#71717a" />
+                        <Ionicons name="person" size={14} color={theme.colors.textMuted} />
                       </View>
                     )}
                     <View style={styles.commentContent}>
@@ -628,14 +765,16 @@ export function PostDetailScreen() {
                         </Text>
                         <View style={styles.commentActions}>
                           <Text style={styles.commentTime}>{formatTimeAgo(comment.createdat)}</Text>
-                          {user && user.id === comment.userid && (
-                            <Pressable 
-                              onPress={() => handleDeleteComment(comment.id)}
+                          {user ? (
+                            <Pressable
+                              onPress={() => handleCommentOverflow(comment)}
                               style={styles.deleteCommentButton}
+                              hitSlop={8}
+                              accessibilityLabel="Comment options"
                             >
-                              <Ionicons name="trash-outline" size={14} color="#ef4444" />
+                              <Ionicons name="ellipsis-horizontal" size={18} color={theme.colors.textMuted} />
                             </Pressable>
-                          )}
+                          ) : null}
                         </View>
                       </View>
                       <Text style={styles.commentText}>{comment.content}</Text>
@@ -654,7 +793,7 @@ export function PostDetailScreen() {
             <TextInput
               style={styles.commentInput}
               placeholder="Write a comment..."
-              placeholderTextColor="#a1a1aa"
+              placeholderTextColor={theme.colors.textMuted}
               value={newComment}
               onChangeText={setNewComment}
               multiline
@@ -675,14 +814,40 @@ export function PostDetailScreen() {
           </Pressable>
         </View>
       </KeyboardAvoidingView>
+
+      <ReportContentModal
+        visible={Boolean(user && reportTarget)}
+        onClose={() => setReportTarget(null)}
+        reporterId={user?.id ?? ''}
+        targetType={reportTarget?.targetType ?? 'post'}
+        targetId={reportTarget?.targetId ?? ''}
+        onSubmitted={(info) => {
+          if (info.targetType === 'comment') {
+            setComments((prev) => prev.filter((c) => c.id !== info.targetId));
+            setThread((prev) =>
+              prev
+                ? {
+                    ...prev,
+                    comment_count: Math.max((prev.comment_count || 1) - 1, 0),
+                  }
+                : null
+            );
+          }
+          Alert.alert(
+            'Thanks for letting us know',
+            'We received your report. Our team will review it; you will not get a personal reply for each report.'
+          );
+        }}
+      />
     </SafeAreaView>
   );
 }
 
-const styles = StyleSheet.create({
+function createPostDetailStyles(theme: Theme) {
+  return StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fff',
+    backgroundColor: theme.colors.background,
   },
   header: {
     flexDirection: 'row',
@@ -691,7 +856,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: '#e4e4e7',
+    borderBottomColor: theme.colors.border,
   },
   backButton: {
     padding: 8,
@@ -699,7 +864,7 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 17,
     fontWeight: '600',
-    color: '#09090b',
+    color: theme.colors.text,
   },
   shareButton: {
     padding: 8,
@@ -731,13 +896,13 @@ const styles = StyleSheet.create({
   },
   errorText: {
     fontSize: 16,
-    color: '#71717a',
+    color: theme.colors.textMuted,
     marginTop: 12,
     marginBottom: 20,
     textAlign: 'center',
   },
   retryButton: {
-    backgroundColor: '#047857',
+    backgroundColor: theme.colors.primary,
     paddingHorizontal: 24,
     paddingVertical: 12,
     borderRadius: 8,
@@ -757,7 +922,7 @@ const styles = StyleSheet.create({
   pinnedText: {
     fontSize: 13,
     fontWeight: '600',
-    color: '#f59e0b',
+    color: theme.colors.warning,
   },
   postContainer: {
     padding: 20,
@@ -776,7 +941,7 @@ const styles = StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: 22,
-    backgroundColor: '#f4f4f5',
+    backgroundColor: theme.colors.borderLight,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -786,21 +951,21 @@ const styles = StyleSheet.create({
   authorName: {
     fontSize: 15,
     fontWeight: '600',
-    color: '#09090b',
+    color: theme.colors.text,
   },
   authorNameClickable: {
-    color: '#047857',
+    color: theme.colors.primary,
   },
   timestamp: {
     fontSize: 13,
-    color: '#71717a',
+    color: theme.colors.textMuted,
     marginTop: 2,
   },
   categoryBadge: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    backgroundColor: '#f0fdf4',
+    backgroundColor: theme.colors.primaryLight,
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 16,
@@ -810,18 +975,18 @@ const styles = StyleSheet.create({
   categoryText: {
     fontSize: 13,
     fontWeight: '500',
-    color: '#047857',
+    color: theme.colors.primary,
   },
   title: {
     fontSize: 20,
     fontWeight: '700',
-    color: '#09090b',
+    color: theme.colors.text,
     lineHeight: 28,
     marginBottom: 12,
   },
   content: {
     fontSize: 16,
-    color: '#3f3f46',
+    color: theme.colors.textSecondary,
     lineHeight: 24,
     marginBottom: 20,
   },
@@ -831,7 +996,7 @@ const styles = StyleSheet.create({
     gap: 20,
     paddingTop: 16,
     borderTopWidth: 1,
-    borderTopColor: '#e4e4e7',
+    borderTopColor: theme.colors.border,
   },
   actionButton: {
     flexDirection: 'row',
@@ -841,25 +1006,25 @@ const styles = StyleSheet.create({
   },
   actionText: {
     fontSize: 14,
-    color: '#71717a',
+    color: theme.colors.textMuted,
     fontWeight: '500',
   },
   actionTextActive: {
-    color: '#ef4444',
+    color: theme.colors.error,
   },
   prayedText: {
-    color: '#047857',
+    color: theme.colors.primary,
   },
   commentsSection: {
     paddingHorizontal: 20,
     paddingTop: 20,
     borderTopWidth: 8,
-    borderTopColor: '#f4f4f5',
+    borderTopColor: theme.colors.borderLight,
   },
   commentsTitle: {
     fontSize: 17,
     fontWeight: '600',
-    color: '#09090b',
+    color: theme.colors.text,
     marginBottom: 16,
   },
   emptyComments: {
@@ -869,12 +1034,12 @@ const styles = StyleSheet.create({
   emptyCommentsText: {
     fontSize: 15,
     fontWeight: '500',
-    color: '#71717a',
+    color: theme.colors.textMuted,
     marginTop: 12,
   },
   emptyCommentsSubtext: {
     fontSize: 13,
-    color: '#a1a1aa',
+    color: theme.colors.textMuted,
     marginTop: 4,
   },
   commentCard: {
@@ -892,14 +1057,14 @@ const styles = StyleSheet.create({
     width: 32,
     height: 32,
     borderRadius: 16,
-    backgroundColor: '#f4f4f5',
+    backgroundColor: theme.colors.borderLight,
     justifyContent: 'center',
     alignItems: 'center',
   },
   commentContent: {
     flex: 1,
     marginLeft: 12,
-    backgroundColor: '#f4f4f5',
+    backgroundColor: theme.colors.borderLight,
     borderRadius: 12,
     padding: 12,
   },
@@ -912,11 +1077,11 @@ const styles = StyleSheet.create({
   commentAuthor: {
     fontSize: 13,
     fontWeight: '600',
-    color: '#09090b',
+    color: theme.colors.text,
   },
   commentTime: {
     fontSize: 12,
-    color: '#a1a1aa',
+    color: theme.colors.textMuted,
   },
   commentActions: {
     flexDirection: 'row',
@@ -928,7 +1093,7 @@ const styles = StyleSheet.create({
   },
   commentText: {
     fontSize: 14,
-    color: '#3f3f46',
+    color: theme.colors.textSecondary,
     lineHeight: 20,
   },
   commentInputContainer: {
@@ -937,31 +1102,31 @@ const styles = StyleSheet.create({
     gap: 12,
     padding: 16,
     borderTopWidth: 1,
-    borderTopColor: '#e4e4e7',
-    backgroundColor: '#fff',
+    borderTopColor: theme.colors.border,
+    backgroundColor: theme.colors.background,
   },
   commentInputWrapper: {
     flex: 1,
   },
   commentInput: {
-    backgroundColor: '#f4f4f5',
+    backgroundColor: theme.colors.borderLight,
     borderRadius: 20,
     paddingHorizontal: 16,
     paddingVertical: 10,
     paddingTop: 10,
     fontSize: 15,
-    color: '#09090b',
+    color: theme.colors.text,
     maxHeight: 100,
   },
   charCounter: {
     fontSize: 11,
-    color: '#a1a1aa',
+    color: theme.colors.textMuted,
     textAlign: 'right',
     marginTop: 4,
     marginRight: 8,
   },
   sendButton: {
-    backgroundColor: '#047857',
+    backgroundColor: theme.colors.primary,
     width: 40,
     height: 40,
     borderRadius: 20,
@@ -969,6 +1134,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   sendButtonDisabled: {
-    backgroundColor: '#a1a1aa',
+    backgroundColor: theme.colors.textMuted,
   },
-});
+  });
+}

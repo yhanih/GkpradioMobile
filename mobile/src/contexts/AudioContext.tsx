@@ -41,6 +41,7 @@ const AudioContext = createContext<AudioContextType | undefined>(undefined);
 export function AudioProvider({ children }: { children: React.ReactNode }) {
     const soundRef = useRef<Audio.Sound | null>(null);
     const streamUrlRef = useRef<string>('');
+    const activeSourceRef = useRef<'radio' | 'episode' | null>(null);
     const [isPlaying, setIsPlaying] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
     const [nowPlaying, setNowPlaying] = useState<NowPlayingData | null>(null);
@@ -113,10 +114,16 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
             if (soundRef.current) {
                 const status = await soundRef.current.getStatusAsync();
                 if (status.isLoaded) {
-                    await soundRef.current.playAsync();
-                    return;
+                    if (activeSourceRef.current === 'radio') {
+                        await soundRef.current.playAsync();
+                        setCurrentEpisode(null);
+                        return;
+                    }
+
+                    // Switch from episode playback to live radio stream.
+                    await soundRef.current.unloadAsync();
+                    soundRef.current = null;
                 }
-                await soundRef.current.unloadAsync();
             }
 
             const { sound } = await Audio.Sound.createAsync(
@@ -126,6 +133,8 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
             );
 
             soundRef.current = sound;
+            activeSourceRef.current = 'radio';
+            setCurrentEpisode(null);
             setIsPlaying(true);
         } catch (error: any) {
             console.error('Error playing sound:', error);
@@ -192,6 +201,7 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
             );
 
             soundRef.current = sound;
+            activeSourceRef.current = 'episode';
             setIsPlaying(true);
         } catch (error) {
             console.error('Error playing episode:', error);
@@ -204,12 +214,15 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
 
     const clearEpisode = async () => {
         try {
-            if (soundRef.current) {
+            if (soundRef.current && activeSourceRef.current === 'episode') {
                 await soundRef.current.unloadAsync();
                 soundRef.current = null;
+                activeSourceRef.current = null;
             }
             setCurrentEpisode(null);
-            setIsPlaying(false);
+            if (activeSourceRef.current !== 'radio') {
+                setIsPlaying(false);
+            }
         } catch (error) {
             console.error('Error clearing episode:', error);
         }
@@ -281,6 +294,12 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
             pausedForVideoRef.current = false;
             wasPlayingBeforeVideoRef.current = false;
             if (!shouldResume || !soundRef.current) return;
+
+            await Audio.setAudioModeAsync({
+                playsInSilentModeIOS: true,
+                staysActiveInBackground: true,
+                shouldDuckAndroid: true,
+            });
 
             const status = await soundRef.current.getStatusAsync();
             if (status.isLoaded) {

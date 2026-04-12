@@ -1,0 +1,118 @@
+/* eslint-env node */
+/**
+ * Omit expo-dev-client from store-style EAS builds (production + preview) so
+ * Play builds are standard release binaries. Local / development profile keeps dev client.
+ */
+const easProfile = process.env.EAS_BUILD_PROFILE;
+const includeDevClient = !easProfile || easProfile === 'development';
+
+const plugins = [
+  ...(includeDevClient ? ['expo-dev-client'] : []),
+  ['expo-font'],
+  ['expo-video'],
+  [
+    'expo-av',
+    {
+      microphonePermission: 'GKP Radio needs microphone access for audio features.',
+    },
+  ],
+  [
+    'expo-build-properties',
+    {
+      android: {
+        usesCleartextTraffic: true,
+      },
+    },
+  ],
+];
+
+module.exports = {
+  expo: {
+    name: 'GKP Radio',
+    slug: 'gkp-radio',
+    version: '1.0.1',
+    description:
+      'God Kingdom Principles Radio - Broadcasting Truth, Building Community, Transforming Lives',
+    orientation: 'portrait',
+    icon: './assets/icon.png',
+    userInterfaceStyle: 'light',
+    owner: 'scher01',
+    scheme: 'gkpradio',
+    primaryColor: '#047857',
+    splash: {
+      image: './assets/splash-icon.png',
+      resizeMode: 'contain',
+      backgroundColor: '#ffffff',
+    },
+    ios: {
+      supportsTablet: true,
+      bundleIdentifier: 'com.gkpradio.mobile',
+      buildNumber: '2',
+      config: {
+        usesNonExemptEncryption: false,
+      },
+      infoPlist: {
+        NSCameraUsageDescription:
+          'GKP Radio needs access to your camera to share moments from our community.',
+        NSMicrophoneUsageDescription: 'GKP Radio needs access to your microphone for audio features.',
+        NSPhotoLibraryUsageDescription:
+          'GKP Radio needs access to your photo library to share images.',
+        UIBackgroundModes: ['audio'],
+        NSAppTransportSecurity: {
+          NSExceptionDomains: {
+            '74.208.102.89': {
+              NSExceptionAllowsInsecureHTTPLoads: true,
+              NSIncludesSubdomains: false,
+            },
+          },
+        },
+      },
+      associatedDomains: ['applinks:gkpradio.com'],
+    },
+    android: {
+      package: 'com.gkpradio.mobile',
+      versionCode: 3,
+      adaptiveIcon: {
+        foregroundImage: './assets/adaptive-icon.png',
+        backgroundColor: '#047857',
+      },
+      edgeToEdgeEnabled: true,
+      predictiveBackGestureEnabled: false,
+      permissions: [
+        'INTERNET',
+        'ACCESS_NETWORK_STATE',
+        'FOREGROUND_SERVICE',
+        'FOREGROUND_SERVICE_MEDIA_PLAYBACK',
+        'POST_NOTIFICATIONS',
+      ],
+      intentFilters: [
+        {
+          action: 'VIEW',
+          autoVerify: true,
+          data: [
+            {
+              scheme: 'https',
+              host: 'gkpradio.com',
+            },
+          ],
+          category: ['BROWSABLE', 'DEFAULT'],
+        },
+      ],
+    },
+    web: {
+      favicon: './assets/favicon.png',
+    },
+    extra: {
+      supabaseUrl: 'https://hgjwpebygzrnkcaflcqh.supabase.co',
+      supabaseAnonKey:
+        'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhnandwZWJ5Z3pybmtjYWZsY3FoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU3OTIxMzUsImV4cCI6MjA5MTM2ODEzNX0.Hkzd5aR8aktcxAhtb8JK0Xu0H888Ec775jZGpjkI5Ww',
+      azuracastBaseUrl: 'http://74.208.102.89:8080',
+      privacyPolicyUrl: 'https://godkingdomprinciplesradio.com/privacy-policy',
+      expoProjectId: '3cc18e67-a1d7-4f5a-bcc5-48e3dde78f96',
+      eas: {
+        projectId: '794ab331-d1c6-4158-ac8e-14ce9b083568',
+      },
+    },
+    plugins,
+  },
+};

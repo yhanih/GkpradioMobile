@@ -13,20 +13,53 @@ Notifications.setNotificationHandler({
   }),
 });
 
-export async function registerForPushNotifications(): Promise<string | null> {
+const DEFAULT_ANDROID_CHANNEL_ID = 'community-posts';
+
+export async function ensureNotificationChannel() {
+  if (Platform.OS !== 'android') return;
   try {
-    if (Platform.OS === 'web') {
-      return null;
+    await Notifications.setNotificationChannelAsync(DEFAULT_ANDROID_CHANNEL_ID, {
+      name: 'Community Posts',
+      importance: Notifications.AndroidImportance.MAX,
+      vibrationPattern: [0, 250, 250, 250],
+      lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
+      sound: 'default',
+    });
+  } catch (error) {
+    console.error('Error configuring notification channel:', error);
+  }
+}
+
+export async function ensureNotificationPermissions(): Promise<boolean> {
+  if (Platform.OS === 'web') {
+    return false;
+  }
+
+  try {
+    const permissions = await Notifications.getPermissionsAsync();
+    if (permissions.granted) {
+      return true;
     }
 
-    // For development/Expo Go, this won't work - requires development build
-    const permissions = await Notifications.getPermissionsAsync();
-    if (!permissions.granted) {
-      const permission = await Notifications.requestPermissionsAsync();
-      if (!permission.granted) {
-        console.warn('Notification permissions not granted. Push notifications will not work.');
-        return null;
-      }
+    const requested = await Notifications.requestPermissionsAsync();
+    return requested.granted;
+  } catch (error) {
+    console.error('Error requesting notification permissions:', error);
+    return false;
+  }
+}
+
+export async function registerForPushNotifications(): Promise<string | null> {
+  try {
+    const granted = await ensureNotificationPermissions();
+    if (!granted) {
+      console.warn('Notification permissions not granted. Push notifications will not work.');
+      return null;
+    }
+    await ensureNotificationChannel();
+
+    if (Platform.OS === 'web') {
+      return null;
     }
 
     // Get the push token

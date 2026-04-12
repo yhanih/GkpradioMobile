@@ -18,13 +18,14 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import * as StoreReview from 'expo-store-review';
+import Constants from 'expo-constants';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../types/navigation';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
-import { wpClient } from '../lib/wordpress';
+import { supabase } from '../lib/supabase';
 import { registerForPushNotifications } from '../lib/notifications';
 import * as Notifications from 'expo-notifications';
 
@@ -33,6 +34,10 @@ type HubNavigationProp = NativeStackNavigationProp<RootStackParamList>;
 const HEADER_HEIGHT = 180;
 const AUDIO_PLAYER_HEIGHT = 100;
 const NOTIFICATION_KEY = '@gkp_notifications_enabled';
+const APP_VERSION =
+  Constants.expoConfig?.version ||
+  (Constants.manifest as any)?.version ||
+  '1.0.1';
 
 interface SettingItemProps {
   icon: keyof typeof Ionicons.glyphMap;
@@ -170,18 +175,30 @@ export function HubScreen() {
     
     try {
       setLoadingStats(true);
-      
-      // Fetch testimonies for this user
-      const { data, error } = await wpClient.getTestimonies(100, 1, user.id);
-      
-      if (!error && data) {
-        const count = data.length;
-        setUserStats({
-          posts: count,
-          likes: 0, // WP API might not expose total likes given by a user easily
-        });
-        setSavedPostsCount(0); // Placeholder for now
-      }
+
+      const [{ count: postsCount, error: postsError }, likesRes, savedRes] = await Promise.all([
+        supabase.from('posts').select('id', { count: 'exact', head: true }).eq('author_id', user.id),
+        supabase
+          .from('post_reactions')
+          .select('id', { count: 'exact', head: true })
+          .eq('user_id', user.id)
+          .eq('reaction_type', 'like'),
+        supabase
+          .from('bookmarks')
+          .select('id', { count: 'exact', head: true })
+          .eq('user_id', user.id)
+          .eq('content_type', 'thread'),
+      ]);
+
+      if (postsError) throw postsError;
+      if (likesRes.error) throw likesRes.error;
+      if (savedRes.error) throw savedRes.error;
+
+      setUserStats({
+        posts: postsCount || 0,
+        likes: likesRes.count || 0,
+      });
+      setSavedPostsCount(savedRes.count || 0);
     } catch (error) {
       console.error('Error fetching user stats:', error);
     } finally {
@@ -274,7 +291,7 @@ export function HubScreen() {
       } else {
         const storeUrl = Platform.select({
           ios: 'https://apps.apple.com/app/gkp-radio/id123456789',
-          android: 'https://play.google.com/store/apps/details?id=com.gkpradio.app',
+          android: 'https://play.google.com/store/apps/details?id=com.gkpradio.mobile',
           default: 'https://godkingdomprinciplesradio.com/app',
         });
         
@@ -328,7 +345,7 @@ export function HubScreen() {
 
   const getUserInitials = () => {
     if (!user) return 'GK';
-    const name = user.name || user.display_name || user.email;
+    const name = user.fullname || user.email;
     const parts = name.split(/[ @._-]/);
     if (parts.length >= 2) {
       return (parts[0][0] + parts[1][0]).toUpperCase();
@@ -336,7 +353,7 @@ export function HubScreen() {
     return name.slice(0, 2).toUpperCase();
   };
 
-  const avatarUrl = user?.avatar_urls?.['96'];
+  const avatarUrl = user?.avatarurl;
 
   return (
     <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
@@ -377,7 +394,7 @@ export function HubScreen() {
                   <View style={styles.onlineIndicator} />
                 </View>
                 <Text style={styles.welcomeText}>Welcome back!</Text>
-                <Text style={styles.emailText}>{user.name || user.username || user.email}</Text>
+                <Text style={styles.emailText}>{user.fullname || user.email}</Text>
                 
                 {!loadingStats && (
                   <View style={styles.statsRow}>
@@ -397,8 +414,8 @@ export function HubScreen() {
               </Pressable>
             ) : (
               <View style={styles.guestSection}>
-                <View style={styles.hubIconContainer}>
-                  <Ionicons name="radio" size={36} color="#047857" />
+                <View style={[styles.hubIconContainer, { backgroundColor: theme.colors.surface }]}>
+                  <Ionicons name="radio" size={36} color={theme.colors.primary} />
                 </View>
                 <Text style={styles.headerTitle}>GKP Radio</Text>
                 <Text style={styles.headerSubtitle}>Settings & More</Text>
@@ -547,7 +564,7 @@ export function HubScreen() {
                 </View>
               </View>
               <View style={[styles.versionBadge, { backgroundColor: theme.colors.primaryLight }]}>
-                <Text style={[styles.versionText, { color: theme.colors.primary }]}>1.0.0</Text>
+                <Text style={[styles.versionText, { color: theme.colors.primary }]}>{APP_VERSION}</Text>
               </View>
             </View>
           </View>
@@ -695,7 +712,6 @@ const styles = StyleSheet.create({
     width: 72,
     height: 72,
     borderRadius: 36,
-    backgroundColor: '#fff',
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 14,

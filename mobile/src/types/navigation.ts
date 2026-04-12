@@ -28,7 +28,10 @@ export type RootStackParamList = {
 
 export type MainTabParamList = {
   Home: undefined;
-  Community: undefined;
+  Community: {
+    categoryId?: string;
+    mode?: 'prayers' | 'discussions';
+  } | undefined;
   Live: undefined;
   Media: undefined;
   Hub: undefined;

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   View,
   Text,
@@ -20,9 +20,10 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { wpClient } from '../lib/wordpress';
+import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { useBookmarks } from '../contexts/BookmarksContext';
-import { useTheme } from '../contexts/ThemeContext';
+import { useTheme, type Theme } from '../contexts/ThemeContext';
 import { RootStackParamList } from '../types/navigation';
 import * as Haptics from 'expo-haptics';
 
@@ -61,6 +62,11 @@ export function ProfileScreen() {
   const navigation = useNavigation<ProfileNavigationProp>();
   const { user, signOut } = useAuth();
   const { theme, isDark, toggleTheme } = useTheme();
+  const styles = useMemo(() => createProfileStyles(theme, isDark), [theme, isDark]);
+  const profileHeroGradient = useMemo(
+    () => (isDark ? (['#064e3b', '#047857', '#0f766e'] as const) : (['#047857', '#059669', '#0d9488'] as const)),
+    [isDark]
+  );
 
   const handleLeaveProfile = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -151,22 +157,54 @@ export function ProfileScreen() {
   const fetchProfile = async () => {
     try {
       setLoading(true);
-      const { data, error } = await wpClient.getMe();
-      if (error) throw new Error(error);
-
-      if (data) {
-        setProfile({
-          fullname: data.name,
-          bio: data.description,
-          avatarurl: data.avatar_urls?.['96'] || null,
-          created_at: new Date().toISOString(),
-        } as any);
-        setFullName(data.name || '');
-        setBio(data.description || '');
+      if (!user?.id) {
+        setProfile(null);
+        setFullName('');
+        setBio('');
+        return;
       }
+
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('id,full_name,avatar_url,bio,created_at')
+        .eq('id', user.id)
+        .maybeSingle();
+
+      if (error) throw error;
+
+      const resolvedFullName =
+        data?.full_name || user.fullname || user.email?.split('@')[0] || '';
+      const resolvedBio = data?.bio ?? user.bio ?? '';
+      const resolvedAvatarUrl = data?.avatar_url ?? user.avatarurl ?? null;
+      const resolvedCreatedAt = data?.created_at || user.created_at || new Date().toISOString();
+
+      setProfile({
+        fullname: resolvedFullName || null,
+        bio: resolvedBio || null,
+        avatarurl: resolvedAvatarUrl,
+        created_at: resolvedCreatedAt,
+      });
+      setFullName(resolvedFullName);
+      setBio(resolvedBio);
     } catch (error: any) {
       console.error('Error fetching profile:', error);
-      Alert.alert('Error', 'Unable to load profile. Please try again.');
+      const fallbackFullName = user?.fullname || user?.email?.split('@')[0] || '';
+      const fallbackBio = user?.bio ?? '';
+      const fallbackAvatarUrl = user?.avatarurl ?? null;
+      const fallbackCreatedAt = user?.created_at || new Date().toISOString();
+
+      setProfile({
+        fullname: fallbackFullName || null,
+        bio: fallbackBio || null,
+        avatarurl: fallbackAvatarUrl,
+        created_at: fallbackCreatedAt,
+      });
+      setFullName(fallbackFullName);
+      setBio(fallbackBio);
+
+      if (refreshing) {
+        Alert.alert('Error', 'Unable to load profile. Please try again.');
+      }
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -201,12 +239,24 @@ export function ProfileScreen() {
 
     try {
       setSaving(true);
-      const { error } = await wpClient.updateMe({
-        fullname: fullName.trim(),
-        bio: bio.trim()
+      const nextFullName = fullName.trim();
+      const nextBio = bio.trim();
+
+      const { error } = await supabase.from('profiles').upsert({
+        id: user.id,
+        full_name: nextFullName || null,
+        bio: nextBio || null,
       });
 
-      if (error) throw new Error(error);
+      if (error) throw error;
+
+      const { error: updateUserError } = await supabase.auth.updateUser({
+        data: {
+          full_name: nextFullName,
+        },
+      });
+
+      if (updateUserError) throw updateUserError;
 
       Alert.alert('Success', 'Profile updated successfully!');
       setEditing(false);
@@ -272,6 +322,15 @@ export function ProfileScreen() {
     });
   };
 
+  const getInitials = () => {
+    const baseName = fullName?.trim() || user?.email || 'GK';
+    const parts = baseName.split(/[ @._-]+/).filter(Boolean);
+    if (parts.length >= 2) {
+      return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
+    }
+    return baseName.slice(0, 2).toUpperCase();
+  };
+
   const profileNavBar = (
     <View
       style={[
@@ -303,7 +362,7 @@ export function ProfileScreen() {
       <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
         {profileNavBar}
         <LinearGradient
-          colors={['#047857', '#059669', '#0d9488']}
+          colors={profileHeroGradient}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}
           style={styles.authGateHeader}
@@ -327,7 +386,7 @@ export function ProfileScreen() {
             ].map((item) => (
               <View key={item.label} style={styles.authGateFeatureRow}>
                 <View style={styles.authGateFeatureIcon}>
-                  <Ionicons name={item.icon as any} size={20} color="#047857" />
+                  <Ionicons name={item.icon as any} size={20} color={theme.colors.primary} />
                 </View>
                 <Text style={styles.authGateFeatureLabel}>{item.label}</Text>
               </View>
@@ -336,7 +395,7 @@ export function ProfileScreen() {
 
           <Pressable
             style={styles.authGateSignInBtn}
-            onPress={() => navigation.navigate('Login')}
+            onPress={() => navigation.navigate('Login', { redirectBack: true })}
           >
             <Text style={styles.authGateSignInBtnText}>Sign In</Text>
             <Ionicons name="arrow-forward" size={20} color="#fff" />
@@ -347,7 +406,7 @@ export function ProfileScreen() {
             onPress={() => navigation.navigate('Signup')}
           >
             <Text style={styles.authGateSignUpBtnText}>
-              Don't have an account? <Text style={{ color: '#047857', fontWeight: '700' }}>Sign Up</Text>
+              Don't have an account? <Text style={{ color: theme.colors.primary, fontWeight: '700' }}>Sign Up</Text>
             </Text>
           </Pressable>
         </View>
@@ -360,7 +419,7 @@ export function ProfileScreen() {
       <SafeAreaView style={styles.container} edges={['top']}>
         {profileNavBar}
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#047857" />
+          <ActivityIndicator size="large" color={theme.colors.primary} />
           <Text style={styles.loadingText}>Loading profile...</Text>
         </View>
       </SafeAreaView>
@@ -374,12 +433,12 @@ export function ProfileScreen() {
         style={styles.scrollView}
         showsVerticalScrollIndicator={false}
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#047857" />
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.colors.primary} />
         }
       >
         {/* Header */}
         <LinearGradient
-          colors={['#047857', '#059669', '#0d9488']}
+          colors={profileHeroGradient}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}
           style={styles.header}
@@ -387,7 +446,11 @@ export function ProfileScreen() {
           <View style={styles.headerContent}>
             <View style={styles.avatarContainer}>
               <View style={styles.avatar}>
-                <Ionicons name="person" size={48} color="#047857" />
+                {profile?.avatarurl ? (
+                  <Image source={{ uri: profile.avatarurl }} style={styles.avatarImage} />
+                ) : (
+                  <Text style={styles.avatarInitials}>{getInitials()}</Text>
+                )}
               </View>
             </View>
             <Text style={styles.headerName}>
@@ -409,7 +472,7 @@ export function ProfileScreen() {
                 }}
                 style={styles.editButton}
               >
-                <Ionicons name="create-outline" size={20} color="#047857" />
+                <Ionicons name="create-outline" size={20} color={theme.colors.primary} />
                 <Text style={styles.editButtonText}>Edit</Text>
               </Pressable>
             )}
@@ -424,7 +487,7 @@ export function ProfileScreen() {
                 onChangeText={setFullName}
                 placeholder="Enter your full name"
                 editable={editing}
-                placeholderTextColor="#a1a1aa"
+                placeholderTextColor={theme.colors.textMuted}
               />
             </View>
 
@@ -438,7 +501,7 @@ export function ProfileScreen() {
                 multiline
                 numberOfLines={4}
                 editable={editing}
-                placeholderTextColor="#a1a1aa"
+                placeholderTextColor={theme.colors.textMuted}
                 textAlignVertical="top"
               />
             </View>
@@ -480,7 +543,7 @@ export function ProfileScreen() {
           <View style={styles.card}>
             <View style={styles.infoRow}>
               <View style={styles.infoIconContainer}>
-                <Ionicons name="mail-outline" size={20} color="#71717a" />
+                <Ionicons name="mail-outline" size={20} color={theme.colors.textMuted} />
               </View>
               <View style={styles.infoContent}>
                 <Text style={styles.infoLabel}>Email</Text>
@@ -490,12 +553,12 @@ export function ProfileScreen() {
 
             {profile?.created_at && (
               <View style={styles.infoRow}>
-                <View style={[styles.infoIconContainer, { backgroundColor: isDark ? theme.colors.surfaceSecondary : '#f4f4f5' }]}>
+                <View style={styles.infoIconContainer}>
                   <Ionicons name="calendar-outline" size={20} color={theme.colors.textMuted} />
                 </View>
                 <View style={styles.infoContent}>
-                  <Text style={[styles.infoLabel, { color: theme.colors.textMuted }]}>Member Since</Text>
-                  <Text style={[styles.infoValue, { color: theme.colors.text }]}>{formatDate(profile.created_at)}</Text>
+                  <Text style={styles.infoLabel}>Member Since</Text>
+                  <Text style={styles.infoValue}>{formatDate(profile.created_at)}</Text>
                 </View>
               </View>
             )}
@@ -505,7 +568,7 @@ export function ProfileScreen() {
         {/* Saved Section */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
-            <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>Saved</Text>
+            <Text style={styles.sectionTitle}>Saved</Text>
             <View style={styles.savedBadge}>
               <Text style={[styles.savedBadgeText, { color: theme.colors.primary }]}>
                 {savedEpisodes.length + savedVideos.length}
@@ -514,7 +577,7 @@ export function ProfileScreen() {
           </View>
 
           {/* Saved Tabs */}
-          <View style={[styles.savedTabs, { backgroundColor: theme.colors.surface }]}>
+          <View style={styles.savedTabs}>
             <Pressable
               style={[
                 styles.savedTab,
@@ -568,10 +631,10 @@ export function ProfileScreen() {
             </View>
           ) : savedTab === 'episodes' ? (
             savedEpisodes.length === 0 ? (
-              <View style={[styles.savedEmpty, { backgroundColor: theme.colors.surface }]}>
+              <View style={styles.savedEmpty}>
                 <Ionicons name="bookmark-outline" size={40} color={theme.colors.textMuted} />
-                <Text style={[styles.savedEmptyTitle, { color: theme.colors.text }]}>No Saved Episodes</Text>
-                <Text style={[styles.savedEmptyText, { color: theme.colors.textMuted }]}>
+                <Text style={styles.savedEmptyTitle}>No Saved Episodes</Text>
+                <Text style={styles.savedEmptyText}>
                   Tap the bookmark icon on episodes to save them here
                 </Text>
               </View>
@@ -580,7 +643,7 @@ export function ProfileScreen() {
                 {savedEpisodes.map((episode) => (
                   <Pressable 
                     key={episode.id} 
-                    style={[styles.savedCard, { backgroundColor: theme.colors.surface }]}
+                    style={styles.savedCard}
                     onPress={() => {
                       Haptics.selectionAsync();
                       navigation.navigate('EpisodePlayer', { episode });
@@ -591,10 +654,10 @@ export function ProfileScreen() {
                       style={styles.savedCardImage}
                     />
                     <View style={styles.savedCardInfo}>
-                      <Text style={[styles.savedCardTitle, { color: theme.colors.text }]} numberOfLines={2}>
+                      <Text style={styles.savedCardTitle} numberOfLines={2}>
                         {episode.title}
                       </Text>
-                      <Text style={[styles.savedCardMeta, { color: theme.colors.textMuted }]}>
+                      <Text style={styles.savedCardMeta}>
                         {episode.category || 'Podcast'}
                       </Text>
                     </View>
@@ -614,10 +677,10 @@ export function ProfileScreen() {
             )
           ) : (
             savedVideos.length === 0 ? (
-              <View style={[styles.savedEmpty, { backgroundColor: theme.colors.surface }]}>
+              <View style={styles.savedEmpty}>
                 <Ionicons name="bookmark-outline" size={40} color={theme.colors.textMuted} />
-                <Text style={[styles.savedEmptyTitle, { color: theme.colors.text }]}>No Saved Videos</Text>
-                <Text style={[styles.savedEmptyText, { color: theme.colors.textMuted }]}>
+                <Text style={styles.savedEmptyTitle}>No Saved Videos</Text>
+                <Text style={styles.savedEmptyText}>
                   Tap the bookmark icon on videos to save them here
                 </Text>
               </View>
@@ -626,7 +689,7 @@ export function ProfileScreen() {
                 {savedVideos.map((video) => (
                   <Pressable 
                     key={video.id} 
-                    style={[styles.savedCard, { backgroundColor: theme.colors.surface }]}
+                    style={styles.savedCard}
                     onPress={() => {
                       Haptics.selectionAsync();
                       navigation.navigate('VideoPlayer', { video });
@@ -637,10 +700,10 @@ export function ProfileScreen() {
                       style={styles.savedCardImage}
                     />
                     <View style={styles.savedCardInfo}>
-                      <Text style={[styles.savedCardTitle, { color: theme.colors.text }]} numberOfLines={2}>
+                      <Text style={styles.savedCardTitle} numberOfLines={2}>
                         {video.title}
                       </Text>
-                      <Text style={[styles.savedCardMeta, { color: theme.colors.textMuted }]}>
+                      <Text style={styles.savedCardMeta}>
                         {video.category || 'Video'}
                       </Text>
                     </View>
@@ -663,8 +726,8 @@ export function ProfileScreen() {
 
         {/* Settings Section */}
         <View style={styles.section}>
-          <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>Settings</Text>
-          <View style={[styles.card, { backgroundColor: theme.colors.surface }]}>
+          <Text style={styles.sectionTitle}>Settings</Text>
+          <View style={styles.card}>
             <Pressable 
               style={styles.settingItem}
               onPress={() => {
@@ -699,7 +762,7 @@ export function ProfileScreen() {
                   Haptics.selectionAsync();
                   toggleTheme();
                 }}
-                trackColor={{ false: '#e4e4e7', true: '#047857' }}
+                trackColor={{ false: theme.colors.border, true: theme.colors.primary }}
                 thumbColor="#fff"
               />
             </View>
@@ -747,7 +810,7 @@ export function ProfileScreen() {
                 <Ionicons name="trash-outline" size={24} color="#ef4444" />
                 <Text style={[styles.settingText, { color: '#ef4444' }]}>Delete Account</Text>
               </View>
-              <Ionicons name="chevron-forward" size={20} color="#fee2e2" />
+              <Ionicons name="chevron-forward" size={20} color={theme.colors.textMuted} />
             </Pressable>
           </View>
         </View>
@@ -766,10 +829,20 @@ export function ProfileScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+function createProfileStyles(theme: Theme, isDark: boolean) {
+  const { colors } = theme;
+  const cardElevation = {
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: isDark ? 0.35 : 0.06,
+    shadowRadius: 10,
+    elevation: isDark ? 6 : 2,
+  };
+
+  return StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f9fafb',
+    backgroundColor: colors.background,
   },
   profileNavBar: {
     flexDirection: 'row',
@@ -841,7 +914,7 @@ const styles = StyleSheet.create({
   },
   authGateBody: {
     flex: 1,
-    backgroundColor: '#fff',
+    backgroundColor: colors.surface,
     borderTopLeftRadius: 28,
     borderTopRightRadius: 28,
     marginTop: -24,
@@ -861,26 +934,26 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: '#f0fdf4',
+    backgroundColor: colors.primaryLight,
     justifyContent: 'center',
     alignItems: 'center',
   },
   authGateFeatureLabel: {
     fontSize: 15,
     fontWeight: '500',
-    color: '#18181b',
+    color: colors.text,
   },
   authGateSignInBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#047857',
+    backgroundColor: colors.primary,
     borderRadius: 14,
     height: 56,
     gap: 8,
-    shadowColor: '#047857',
+    shadowColor: colors.primary,
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
+    shadowOpacity: isDark ? 0.45 : 0.3,
     shadowRadius: 12,
     elevation: 6,
     marginBottom: 16,
@@ -896,7 +969,7 @@ const styles = StyleSheet.create({
   },
   authGateSignUpBtnText: {
     fontSize: 14,
-    color: '#71717a',
+    color: colors.textMuted,
   },
   // Core layout
   scrollView: {
@@ -910,7 +983,7 @@ const styles = StyleSheet.create({
   loadingText: {
     marginTop: 12,
     fontSize: 14,
-    color: '#71717a',
+    color: colors.textMuted,
   },
   header: {
     paddingTop: 24,
@@ -927,14 +1000,24 @@ const styles = StyleSheet.create({
     width: 96,
     height: 96,
     borderRadius: 48,
-    backgroundColor: '#fff',
+    backgroundColor: isDark ? colors.surfaceSecondary : '#ffffff',
     justifyContent: 'center',
     alignItems: 'center',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
+    shadowOpacity: isDark ? 0.35 : 0.1,
     shadowRadius: 8,
     elevation: 4,
+  },
+  avatarImage: {
+    width: 96,
+    height: 96,
+    borderRadius: 48,
+  },
+  avatarInitials: {
+    fontSize: 34,
+    fontWeight: '700',
+    color: colors.primary,
   },
   headerName: {
     fontSize: 24,
@@ -959,7 +1042,7 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 18,
     fontWeight: '700',
-    color: '#18181b',
+    color: colors.text,
   },
   editButton: {
     flexDirection: 'row',
@@ -969,17 +1052,15 @@ const styles = StyleSheet.create({
   editButtonText: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#047857',
+    color: colors.primary,
   },
   card: {
-    backgroundColor: '#fff',
+    backgroundColor: colors.surface,
     borderRadius: 16,
     padding: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    elevation: 2,
+    borderWidth: isDark ? 1 : 0,
+    borderColor: colors.border,
+    ...cardElevation,
   },
   inputGroup: {
     marginBottom: 20,
@@ -987,33 +1068,33 @@ const styles = StyleSheet.create({
   label: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#3f3f46',
+    color: colors.textSecondary,
     marginBottom: 8,
   },
   input: {
-    backgroundColor: '#f4f4f5',
+    backgroundColor: colors.surfaceSecondary,
     borderRadius: 12,
     paddingHorizontal: 16,
     paddingVertical: 14,
     fontSize: 16,
-    color: '#18181b',
+    color: colors.text,
     borderWidth: 1,
-    borderColor: '#e4e4e7',
+    borderColor: colors.border,
   },
   textArea: {
-    backgroundColor: '#f4f4f5',
+    backgroundColor: colors.surfaceSecondary,
     borderRadius: 12,
     paddingHorizontal: 16,
     paddingVertical: 14,
     fontSize: 16,
-    color: '#18181b',
+    color: colors.text,
     borderWidth: 1,
-    borderColor: '#e4e4e7',
+    borderColor: colors.border,
     minHeight: 100,
   },
   inputDisabled: {
-    backgroundColor: '#fafafa',
-    color: '#71717a',
+    backgroundColor: colors.surface,
+    color: colors.textMuted,
   },
   buttonRow: {
     flexDirection: 'row',
@@ -1028,17 +1109,17 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   cancelButton: {
-    backgroundColor: '#f4f4f5',
+    backgroundColor: colors.surfaceSecondary,
     borderWidth: 1,
-    borderColor: '#e4e4e7',
+    borderColor: colors.border,
   },
   cancelButtonText: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#71717a',
+    color: colors.textMuted,
   },
   saveButton: {
-    backgroundColor: '#047857',
+    backgroundColor: colors.primary,
   },
   saveButtonText: {
     fontSize: 16,
@@ -1054,7 +1135,7 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: '#f4f4f5',
+    backgroundColor: colors.surfaceSecondary,
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 12,
@@ -1064,13 +1145,13 @@ const styles = StyleSheet.create({
   },
   infoLabel: {
     fontSize: 13,
-    color: '#71717a',
+    color: colors.textMuted,
     marginBottom: 2,
   },
   infoValue: {
     fontSize: 15,
     fontWeight: '500',
-    color: '#18181b',
+    color: colors.text,
   },
   settingItem: {
     flexDirection: 'row',
@@ -1085,35 +1166,31 @@ const styles = StyleSheet.create({
   },
   settingText: {
     fontSize: 16,
-    color: '#18181b',
+    color: colors.text,
   },
   divider: {
     height: 1,
-    backgroundColor: '#f4f4f5',
+    backgroundColor: colors.borderLight,
   },
   logoutButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#fff',
+    backgroundColor: colors.surface,
     paddingVertical: 16,
     borderRadius: 16,
     gap: 8,
     borderWidth: 1,
-    borderColor: '#fee2e2',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    elevation: 2,
+    borderColor: isDark ? 'rgba(248, 113, 113, 0.45)' : '#fecaca',
+    ...cardElevation,
   },
   logoutButtonText: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#ef4444',
+    color: colors.error,
   },
   savedBadge: {
-    backgroundColor: 'rgba(4, 120, 87, 0.1)',
+    backgroundColor: isDark ? 'rgba(16, 185, 129, 0.22)' : 'rgba(4, 120, 87, 0.1)',
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 12,
@@ -1127,6 +1204,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 4,
     marginBottom: 16,
+    backgroundColor: colors.surfaceSecondary,
   },
   savedTab: {
     flex: 1,
@@ -1149,16 +1227,21 @@ const styles = StyleSheet.create({
     padding: 32,
     borderRadius: 16,
     alignItems: 'center',
+    backgroundColor: colors.surface,
+    borderWidth: isDark ? 1 : 0,
+    borderColor: colors.border,
   },
   savedEmptyTitle: {
     fontSize: 16,
     fontWeight: '700',
     marginTop: 12,
     marginBottom: 4,
+    color: colors.text,
   },
   savedEmptyText: {
     fontSize: 14,
     textAlign: 'center',
+    color: colors.textMuted,
   },
   savedList: {
     gap: 12,
@@ -1168,17 +1251,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 12,
     borderRadius: 14,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    elevation: 2,
+    backgroundColor: colors.surface,
+    borderWidth: isDark ? 1 : 0,
+    borderColor: colors.border,
+    ...cardElevation,
   },
   savedCardImage: {
     width: 56,
     height: 56,
     borderRadius: 10,
-    backgroundColor: '#e4e4e7',
+    backgroundColor: colors.border,
   },
   savedCardInfo: {
     flex: 1,
@@ -1188,9 +1270,11 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '600',
     marginBottom: 4,
+    color: colors.text,
   },
   savedCardMeta: {
     fontSize: 13,
+    color: colors.textMuted,
   },
   savedCardRemove: {
     padding: 8,
@@ -1199,3 +1283,4 @@ const styles = StyleSheet.create({
     height: 100,
   },
 });
+}
