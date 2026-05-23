@@ -1,4 +1,4 @@
-import React, { useState, useRef, useMemo } from 'react';
+import React, { useState, useRef, useMemo, useEffect } from 'react';
 import {
   View,
   Text,
@@ -13,6 +13,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
+import { Asset } from 'expo-asset';
 import * as Haptics from 'expo-haptics';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTheme, type Theme } from '../contexts/ThemeContext';
@@ -20,6 +21,13 @@ import { useTheme, type Theme } from '../contexts/ThemeContext';
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 const ONBOARDING_KEY = '@gkp_onboarding_complete';
+
+const ONBOARDING_IMAGES = [
+  require('../../assets/onboarding/onboarding-radio.png'),
+  require('../../assets/onboarding/onboarding-community.png'),
+  require('../../assets/onboarding/onboarding-media.png'),
+  require('../../assets/onboarding/onboarding-events.png'),
+] as const;
 
 interface OnboardingSlide {
   id: string;
@@ -69,6 +77,10 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
   const scrollX = useRef(new Animated.Value(0)).current;
   const { theme } = useTheme();
   const styles = useMemo(() => createOnboardingStyles(theme), [theme]);
+
+  useEffect(() => {
+    void Asset.loadAsync([...ONBOARDING_IMAGES, require('../../assets/icon.png')]);
+  }, []);
 
   const handleNext = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -121,6 +133,7 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
             source={item.image}
             style={styles.illustration}
             resizeMode="contain"
+            fadeDuration={0}
             accessibilityIgnoresInvertColors
           />
         </Animated.View>
@@ -198,6 +211,10 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
         keyExtractor={(item) => item.id}
         horizontal
         pagingEnabled
+        initialNumToRender={1}
+        maxToRenderPerBatch={2}
+        windowSize={3}
+        removeClippedSubviews
         showsHorizontalScrollIndicator={false}
         onScroll={Animated.event(
           [{ nativeEvent: { contentOffset: { x: scrollX } } }],
