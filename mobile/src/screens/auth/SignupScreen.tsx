@@ -20,6 +20,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useTheme, type Theme } from '../../contexts/ThemeContext';
 import { RootStackParamList } from '../../types/navigation';
 
+
 type SignupNavigationProp = NativeStackNavigationProp<RootStackParamList>;
 
 export function SignupScreen() {
@@ -30,6 +31,7 @@ export function SignupScreen() {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [agreedToTerms, setAgreedToTerms] = useState(false);
   const { signUp } = useAuth();
   const { theme } = useTheme();
   const styles = useMemo(() => createSignupStyles(theme), [theme]);
@@ -50,12 +52,28 @@ export function SignupScreen() {
       return;
     }
 
+    if (!agreedToTerms) {
+      Alert.alert('Terms Required', 'Please read and agree to the Terms of Service and Community Guidelines before creating your account.');
+      return;
+    }
+
     setLoading(true);
-    const { error } = await signUp(email, password, fullName);
+    const { error, needsEmailVerification, signupEmailNotProvisioned } = await signUp(
+      email,
+      password,
+      fullName
+    );
     setLoading(false);
 
     if (error) {
       Alert.alert('Signup Failed', typeof error === 'string' ? error : error.message || 'Signup failed.');
+    } else if (signupEmailNotProvisioned) {
+      Alert.alert(
+        'This email may already be in use',
+        'No new signup email was sent for this address. Try signing in, or use Forgot password if you already registered. If you are sure you are new here, try a different email or contact support.'
+      );
+    } else if (needsEmailVerification) {
+      navigation.navigate('ConfirmEmail', { email: email.trim().toLowerCase() });
     } else {
       // On success, sign in auto-runs inside signUp; pop back to wherever the user came from
       if (navigation.canGoBack()) {
@@ -165,10 +183,35 @@ export function SignupScreen() {
               </View>
             </View>
 
+            {/* EULA / Terms Agreement */}
+            <View style={styles.termsRow} accessibilityRole="none">
+              <Pressable
+                onPress={() => setAgreedToTerms((prev) => !prev)}
+                accessibilityRole="checkbox"
+                accessibilityState={{ checked: agreedToTerms }}
+                accessibilityLabel="Agree to Terms of Service and Community Guidelines"
+                hitSlop={6}
+              >
+                <View style={[styles.checkbox, agreedToTerms && styles.checkboxChecked]}>
+                  {agreedToTerms && <Ionicons name="checkmark" size={14} color="#fff" />}
+                </View>
+              </Pressable>
+              <Text style={styles.termsText}>
+                I agree to the{' '}
+                <Text
+                  style={styles.termsLink}
+                  onPress={() => navigation.navigate('TermsOfService')}
+                  accessibilityRole="link"
+                >
+                  Terms of Service & Community Guidelines
+                </Text>
+              </Text>
+            </View>
+
             <Pressable
-              style={[styles.signupButton, loading && styles.signupButtonDisabled]}
+              style={[styles.signupButton, (!agreedToTerms || loading) && styles.signupButtonDisabled]}
               onPress={handleSignup}
-              disabled={loading}
+              disabled={!agreedToTerms || loading}
             >
               {loading ? (
                 <ActivityIndicator color="#fff" />
@@ -178,6 +221,20 @@ export function SignupScreen() {
                   <Ionicons name="arrow-forward" size={20} color="#fff" />
                 </>
               )}
+            </Pressable>
+
+            <Pressable
+              style={styles.verifyCodePrompt}
+              onPress={() =>
+                navigation.navigate('ConfirmEmail', {
+                  email: email.trim().toLowerCase() || undefined,
+                })
+              }
+              disabled={loading}
+              accessibilityRole="button"
+              accessibilityLabel="Enter email verification code from signup email"
+            >
+              <Text style={styles.verifyCodePromptText}>Have a verification code?</Text>
             </Pressable>
 
             <View style={styles.divider}>
@@ -291,6 +348,41 @@ function createSignupStyles(theme: Theme) {
   eyeIcon: {
     padding: 8,
   },
+  termsRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 12,
+    marginTop: 16,
+    marginBottom: 4,
+    paddingHorizontal: 2,
+  },
+  checkbox: {
+    width: 22,
+    height: 22,
+    borderRadius: 6,
+    borderWidth: 2,
+    borderColor: theme.colors.border,
+    backgroundColor: theme.colors.surfaceSecondary,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: 1,
+    flexShrink: 0,
+  },
+  checkboxChecked: {
+    backgroundColor: theme.colors.primary,
+    borderColor: theme.colors.primary,
+  },
+  termsText: {
+    flex: 1,
+    fontSize: 13,
+    color: theme.colors.textSecondary,
+    lineHeight: 20,
+  },
+  termsLink: {
+    color: theme.colors.primary,
+    fontWeight: '600',
+    textDecorationLine: 'underline',
+  },
   signupButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -307,12 +399,24 @@ function createSignupStyles(theme: Theme) {
     elevation: 6,
   },
   signupButtonDisabled: {
-    opacity: 0.6,
+    opacity: 0.4,
   },
   signupButtonText: {
     fontSize: 16,
     fontWeight: '600',
     color: '#fff',
+  },
+  verifyCodePrompt: {
+    alignSelf: 'center',
+    marginTop: 14,
+    paddingVertical: 6,
+    paddingHorizontal: 8,
+  },
+  verifyCodePromptText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: theme.colors.primary,
+    textDecorationLine: 'underline',
   },
   divider: {
     flexDirection: 'row',

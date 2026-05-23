@@ -24,15 +24,17 @@ import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../types/navigation';
 import { useAuth } from '../contexts/AuthContext';
+import { useOnboardingGate } from '../contexts/OnboardingGateContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { supabase } from '../lib/supabase';
 import { registerForPushNotifications } from '../lib/notifications';
 import * as Notifications from 'expo-notifications';
+import { FEEDBACK_EMAIL, HELP_DESK_EMAIL } from '../constants/contact';
+import { ThemeToggleButton } from '../components/ThemeToggleButton';
 
 type HubNavigationProp = NativeStackNavigationProp<RootStackParamList>;
 
-const HEADER_HEIGHT = 180;
-const AUDIO_PLAYER_HEIGHT = 100;
+const HUB_SCROLL_BOTTOM_INSET = 260;
 const NOTIFICATION_KEY = '@gkp_notifications_enabled';
 const APP_VERSION =
   Constants.expoConfig?.version ||
@@ -67,8 +69,9 @@ function SettingItem({
         { backgroundColor: pressed ? theme.colors.surfaceSecondary : 'transparent' }
       ]}
       onPress={() => {
-        Haptics.selectionAsync();
+        // Run action first; haptics must not block handlers (e.g. Linking.openURL).
         onPress?.();
+        void Haptics.selectionAsync().catch(() => {});
       }}
     >
       <View style={styles.settingLeft}>
@@ -113,14 +116,15 @@ export function HubScreen() {
   const navigation = useNavigation<HubNavigationProp>();
   const insets = useSafeAreaInsets();
   const { user, signOut } = useAuth();
-  const { theme, isDark, toggleTheme } = useTheme();
+  const { replayOnboarding } = useOnboardingGate();
+  const { theme, isDark } = useTheme();
   
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
   const [savedPostsCount, setSavedPostsCount] = useState(0);
   const [userStats, setUserStats] = useState({ posts: 0, likes: 0 });
   const [loadingStats, setLoadingStats] = useState(true);
 
-  const contentBottomPadding = AUDIO_PLAYER_HEIGHT + insets.bottom + 32;
+  const contentBottomPadding = HUB_SCROLL_BOTTOM_INSET + Math.max(insets.bottom, 12);
 
   useEffect(() => {
     loadNotificationPreference();
@@ -156,14 +160,19 @@ export function HubScreen() {
       setNotificationsEnabled(value);
       Haptics.selectionAsync();
 
-      // Register/deregister push notifications
       if (value) {
-        // Register for push notifications
         const token = await registerForPushNotifications();
         if (token && user) {
-          // Push token storage in WP meta can be implemented later if endpoint exists
-          console.log('Push token:', token);
+          await supabase
+            .from('profiles')
+            .update({ push_token: token })
+            .eq('id', user.id);
         }
+      } else if (user) {
+        await supabase
+          .from('profiles')
+          .update({ push_token: null })
+          .eq('id', user.id);
       }
     } catch (error) {
       console.error('Error saving notification preference:', error);
@@ -229,32 +238,31 @@ export function HubScreen() {
     );
   };
 
-  const openExternalLink = async (url: string, errorMessage: string) => {
-    try {
-      const canOpen = await Linking.canOpenURL(url);
-      if (canOpen) {
+  const openExternalLink = (url: string, errorMessage: string) => {
+    // Defer past the current touch/gesture; opening from a Pressable handler can otherwise
+    // no-op on some iOS / RN combinations (especially with overlays like the mini player).
+    setTimeout(async () => {
+      try {
         await Linking.openURL(url);
-        Haptics.selectionAsync();
-      } else {
-        Alert.alert('Unable to Open', errorMessage);
+        void Haptics.selectionAsync().catch(() => {});
+      } catch (error) {
+        console.error('Error opening URL:', error);
+        Alert.alert('Error', errorMessage);
       }
-    } catch (error) {
-      console.error('Error opening URL:', error);
-      Alert.alert('Error', errorMessage);
-    }
+    }, 0);
   };
 
   const handleContactSupport = () => {
     openExternalLink(
-      'mailto:support@gkpradio.com?subject=GKP%20Radio%20App%20Support',
-      'Could not open email app. Please email support@gkpradio.com directly.'
+      `mailto:${HELP_DESK_EMAIL}?subject=${encodeURIComponent('GKP Radio App Support')}`,
+      `Could not open email app. Please email ${HELP_DESK_EMAIL} directly.`
     );
   };
 
   const handleSendFeedback = () => {
     openExternalLink(
-      'mailto:feedback@gkpradio.com?subject=GKP%20Radio%20App%20Feedback',
-      'Could not open email app. Please email feedback@gkpradio.com directly.'
+      `mailto:${FEEDBACK_EMAIL}?subject=${encodeURIComponent('GKP Radio App Feedback')}`,
+      `Could not open email app. Please email ${FEEDBACK_EMAIL} directly.`
     );
   };
 
@@ -265,17 +273,41 @@ export function HubScreen() {
     );
   };
 
+  const handleHelpCenter = () => {
+    openExternalLink(
+      'https://godkingdomprinciplesradio.com/connect',
+      'Could not open browser. Please visit godkingdomprinciplesradio.com/connect manually.'
+    );
+  };
+
   const handlePrivacyPolicy = () => {
     openExternalLink(
-      'https://godkingdomprinciplesradio.com/privacy-policy/',
+      'https://godkingdomprinciplesradio.com/privacy',
       'Could not open browser. Please visit our website manually.'
     );
   };
 
   const handleTermsOfService = () => {
     openExternalLink(
-      'https://godkingdomprinciplesradio.com/terms-and-conditions/',
+      'https://godkingdomprinciplesradio.com/terms',
       'Could not open browser. Please visit our website manually.'
+    );
+  };
+
+  const handleReplayOnboarding = () => {
+    Haptics.selectionAsync();
+    Alert.alert(
+      'Welcome tour',
+      'See the introduction slides again? You can skip or finish as usual.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Show tour',
+          onPress: () => {
+            void replayOnboarding();
+          },
+        },
+      ]
     );
   };
 
@@ -464,17 +496,36 @@ export function HubScreen() {
               subtitle={isDark ? 'On' : 'Off'}
               showChevron={false}
               theme={theme}
-              rightElement={
-                <Switch
-                  value={isDark}
-                  onValueChange={() => {
-                    Haptics.selectionAsync();
-                    toggleTheme();
-                  }}
-                  trackColor={{ false: theme.colors.border, true: '#86efac' }}
-                  thumbColor={isDark ? theme.colors.primary : '#fafafa'}
-                />
-              }
+              rightElement={<ThemeToggleButton size={26} />}
+            />
+            <View style={[styles.divider, { backgroundColor: theme.colors.border }]} />
+            <SettingItem
+              icon="sparkles-outline"
+              label="Welcome Tour"
+              subtitle="Replay the app introduction slides"
+              onPress={handleReplayOnboarding}
+              theme={theme}
+            />
+          </View>
+        </View>
+
+        <View style={styles.section}>
+          <SectionHeader title="Support the Ministry" theme={theme} />
+          <View style={[styles.card, { backgroundColor: theme.colors.surface }]}>
+            <SettingItem
+              icon="heart-outline"
+              label="Give to GKP Radio"
+              subtitle="Support our mission — opens secure browser"
+              onPress={() => navigation.navigate('Donate')}
+              theme={theme}
+            />
+            <View style={[styles.divider, { backgroundColor: theme.colors.border }]} />
+            <SettingItem
+              icon="cart-outline"
+              label="Ministry Store"
+              subtitle="Browse apparel, journals, and accessories"
+              onPress={() => navigation.navigate('MerchStore')}
+              theme={theme}
             />
           </View>
         </View>
@@ -507,14 +558,14 @@ export function HubScreen() {
               icon="help-circle-outline"
               label="Help Center"
               subtitle="FAQs and troubleshooting"
-              onPress={handleVisitWebsite}
+              onPress={handleHelpCenter}
               theme={theme}
             />
             <View style={[styles.divider, { backgroundColor: theme.colors.border }]} />
             <SettingItem
               icon="mail-outline"
               label="Contact Support"
-              subtitle="support@gkpradio.com"
+              subtitle={HELP_DESK_EMAIL}
               onPress={handleContactSupport}
               theme={theme}
             />

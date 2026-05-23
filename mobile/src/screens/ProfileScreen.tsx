@@ -11,7 +11,6 @@ import {
   RefreshControl,
   Image,
   Animated,
-  Switch,
   Linking,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -26,6 +25,8 @@ import { useBookmarks } from '../contexts/BookmarksContext';
 import { useTheme, type Theme } from '../contexts/ThemeContext';
 import { RootStackParamList } from '../types/navigation';
 import * as Haptics from 'expo-haptics';
+import { HELP_DESK_EMAIL } from '../constants/contact';
+import { ThemeToggleButton } from '../components/ThemeToggleButton';
 
 interface Episode {
   id: string;
@@ -61,7 +62,7 @@ type ProfileNavigationProp = NativeStackNavigationProp<RootStackParamList>;
 export function ProfileScreen() {
   const navigation = useNavigation<ProfileNavigationProp>();
   const { user, signOut } = useAuth();
-  const { theme, isDark, toggleTheme } = useTheme();
+  const { theme, isDark } = useTheme();
   const styles = useMemo(() => createProfileStyles(theme, isDark), [theme, isDark]);
   const profileHeroGradient = useMemo(
     () => (isDark ? (['#064e3b', '#047857', '#0f766e'] as const) : (['#047857', '#059669', '#0d9488'] as const)),
@@ -302,13 +303,16 @@ export function ProfileScreen() {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
     Alert.alert(
       'Delete Account',
-      'If you wish to delete your account, please contact our support team at support@gkpradio.com.',
+      `If you wish to delete your account, please contact our support team at ${HELP_DESK_EMAIL}.`,
       [
         { text: 'Cancel', style: 'cancel' },
-        { 
-          text: 'Contact Support', 
-          onPress: () => Linking.openURL('mailto:support@gkpradio.com?subject=Account%20Deletion%20Request') 
-        }
+        {
+          text: 'Contact Support',
+          onPress: () =>
+            Linking.openURL(
+              `mailto:${HELP_DESK_EMAIL}?subject=${encodeURIComponent('Account Deletion Request')}`
+            ),
+        },
       ]
     );
   };
@@ -753,18 +757,14 @@ export function ProfileScreen() {
 
             <View style={styles.settingItem}>
               <View style={styles.settingLeft}>
-                <Ionicons name="moon-outline" size={24} color={theme.colors.textMuted} />
+                <Ionicons
+                  name={isDark ? 'moon' : 'moon-outline'}
+                  size={24}
+                  color={theme.colors.textMuted}
+                />
                 <Text style={[styles.settingText, { color: theme.colors.text }]}>Dark Mode</Text>
               </View>
-              <Switch
-                value={isDark}
-                onValueChange={() => {
-                  Haptics.selectionAsync();
-                  toggleTheme();
-                }}
-                trackColor={{ false: theme.colors.border, true: theme.colors.primary }}
-                thumbColor="#fff"
-              />
+              <ThemeToggleButton size={26} />
             </View>
 
             <View style={[styles.divider, { backgroundColor: theme.colors.border }]} />
@@ -773,7 +773,9 @@ export function ProfileScreen() {
               style={styles.settingItem}
               onPress={() => {
                 Haptics.selectionAsync();
-                Linking.openURL('mailto:support@gkpradio.com?subject=Help%20Request');
+                Linking.openURL(
+                  `mailto:${HELP_DESK_EMAIL}?subject=${encodeURIComponent('Help Request')}`
+                );
               }}
             >
               <View style={styles.settingLeft}>

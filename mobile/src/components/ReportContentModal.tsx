@@ -70,7 +70,14 @@ export function ReportContentModal({
     }
   }, [visible, reset]);
 
-  const title = targetType === 'post' ? 'Report post' : 'Report comment';
+  const title =
+    targetType === 'post'
+      ? 'Report post'
+      : targetType === 'comment'
+        ? 'Report comment'
+        : targetType === 'user'
+          ? 'Report user'
+          : 'Report chat message';
 
   const handleSubmit = async () => {
     if (!reporterId?.trim() || !targetId?.trim()) {

@@ -391,7 +391,7 @@
           "plannedSteps": ["1. Open mailto link with pre-filled subject"],
           "actualImplementation": {
             "hasOnPress": true,
-            "handlerActions": ["Opens mailto:support@gkpradio.com"],
+            "handlerActions": ["Opens mailto:helpdesk@gkpradio.com"],
             "deviations": []
           },
           "status": "WORKING",

@@ -8,6 +8,7 @@ import {
   ActivityIndicator,
   RefreshControl,
   Image,
+  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -15,11 +16,13 @@ import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import * as Haptics from 'expo-haptics';
 import { supabase } from '../lib/supabase';
-import { fetchBlockedUserIds, unblockCommunityUser } from '../lib/backend';
+import { blockCommunityUser, fetchBlockedUserIds, unblockCommunityUser } from '../lib/backend';
 import { RootStackParamList } from '../types/navigation';
-import { getCategoryIcon, getCategoryLabel } from '../constants/categories';
 import { useTheme } from '../contexts/ThemeContext';
 import { useAuth } from '../contexts/AuthContext';
+import { ReportContentModal } from '../components/ReportContentModal';
+import { openUserProfileOverflowMenu } from '../utils/contentOverflowMenu';
+import { REPORT_SUBMITTED_ALERT } from '../constants/reportReasons';
 
 type UserProfileRouteProp = RouteProp<RootStackParamList, 'UserProfile'>;
 type UserProfileNavProp = NativeStackNavigationProp<RootStackParamList, 'UserProfile'>;
@@ -36,7 +39,10 @@ export function UserProfileScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [stats, setStats] = useState({ posts: 0, testimonies: 0 });
   const [youHaveBlocked, setYouHaveBlocked] = useState(false);
+  const [reportProfileOpen, setReportProfileOpen] = useState(false);
 
+  const viewedUserId = String(route.params.userId);
+  const showProfileModerationMenu = Boolean(authUser?.id && viewedUserId !== String(authUser.id));
   const fetchUserProfile = useCallback(async () => {
     try {
       const { data, error } = await supabase
@@ -186,6 +192,45 @@ export function UserProfileScreen() {
     }
   };
 
+  const handleProfileOverflow = () => {
+    if (!authUser?.id) return;
+    openUserProfileOverflowMenu(
+      (choice) => {
+        if (choice === 'report') setReportProfileOpen(true);
+        else handleBlockProfileMember();
+      },
+      { hideBlock: youHaveBlocked }
+    );
+  };
+
+  const handleBlockProfileMember = () => {
+    if (!authUser?.id) return;
+    const blockedId = viewedUserId;
+    if (String(authUser.id) === blockedId) return;
+    Alert.alert(
+      'Block member',
+      'You will no longer see posts or comments from this member in the community.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Block',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await blockCommunityUser(authUser.id, blockedId);
+              setYouHaveBlocked(true);
+              setPosts([]);
+              setStats({ posts: 0, testimonies: 0 });
+              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+            } catch (e: any) {
+              Alert.alert('Unable to block', e?.message || 'Please try again.');
+            }
+          },
+        },
+      ]
+    );
+  };
+
   const formatTimeAgo = (dateString: string) => {
     const date = new Date(dateString);
     const now = new Date();
@@ -250,7 +295,18 @@ export function UserProfileScreen() {
           <Ionicons name="arrow-back" size={24} color={theme.colors.text} />
         </Pressable>
         <Text style={[styles.headerTitle, { color: theme.colors.text }]}>Profile</Text>
-        <View style={{ width: 40 }} />
+        {showProfileModerationMenu ? (
+          <Pressable
+            onPress={handleProfileOverflow}
+            style={styles.headerMoreButton}
+            accessibilityLabel="Profile options"
+            hitSlop={10}
+          >
+            <Ionicons name="ellipsis-horizontal" size={22} color={theme.colors.text} />
+          </Pressable>
+        ) : (
+          <View style={{ width: 40 }} />
+        )}
       </View>
 
       <ScrollView
@@ -272,9 +328,7 @@ export function UserProfileScreen() {
           <Text style={[styles.fullName, { color: theme.colors.text }]}>
             {displayName}
           </Text>
-          
-          <Text style={[styles.username, { color: theme.colors.textMuted }]}>@{String(userProfile.id).slice(0, 8)}</Text>
-          
+
           {userProfile.bio && (
             <Text style={[styles.bio, { color: theme.colors.textMuted }]}>{userProfile.bio}</Text>
           )}
@@ -353,6 +407,17 @@ export function UserProfileScreen() {
 
         <View style={{ height: 100 }} />
       </ScrollView>
+
+      <ReportContentModal
+        visible={Boolean(authUser && reportProfileOpen)}
+        onClose={() => setReportProfileOpen(false)}
+        reporterId={authUser?.id ?? ''}
+        targetType="user"
+        targetId={viewedUserId}
+        onSubmitted={() => {
+          Alert.alert(REPORT_SUBMITTED_ALERT.title, REPORT_SUBMITTED_ALERT.message);
+        }}
+      />
     </SafeAreaView>
   );
 }
@@ -375,6 +440,13 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 17,
     fontWeight: '600',
+  },
+  headerMoreButton: {
+    width: 40,
+    alignItems: 'flex-end',
+    justifyContent: 'center',
+    paddingVertical: 8,
+    paddingHorizontal: 4,
   },
   scrollView: {
     flex: 1,
@@ -428,10 +500,6 @@ const styles = StyleSheet.create({
   fullName: {
     fontSize: 22,
     fontWeight: '700',
-    marginBottom: 4,
-  },
-  username: {
-    fontSize: 15,
     marginBottom: 4,
   },
   bio: {

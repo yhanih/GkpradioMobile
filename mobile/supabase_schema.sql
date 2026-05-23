@@ -57,7 +57,7 @@ CREATE POLICY "Prayer requests are viewable by everyone"
 
 CREATE POLICY "Authenticated users can insert prayer requests"
     ON public.prayer_requests FOR INSERT
-    WITH CHECK (auth.uid() IS NOT NULL);
+    WITH CHECK (auth.uid() = user_id);
 
 CREATE POLICY "Users can update their own prayer requests"
     ON public.prayer_requests FOR UPDATE
@@ -96,7 +96,7 @@ CREATE POLICY "Testimonies are viewable by everyone"
 
 CREATE POLICY "Authenticated users can insert testimonies"
     ON public.testimonies FOR INSERT
-    WITH CHECK (auth.uid() IS NOT NULL);
+    WITH CHECK (auth.uid() = user_id);
 
 CREATE POLICY "Users can update their own testimonies"
     ON public.testimonies FOR UPDATE
@@ -298,7 +298,7 @@ BEGIN
     );
     RETURN NEW;
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_catalog;
 
 -- Trigger to create profile on signup
 DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;

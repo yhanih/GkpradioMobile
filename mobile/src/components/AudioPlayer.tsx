@@ -7,10 +7,12 @@ import * as Haptics from 'expo-haptics';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAudio } from '../contexts/AudioContext';
 import { RadioExpandedSheet } from './RadioExpandedSheet';
+import { useResponsive } from '../utils/responsive';
 
 export function AudioPlayer() {
   const insets = useSafeAreaInsets();
   const bottomOffset = Math.max(88, 60 + insets.bottom);
+  const { floatingMaxWidth } = useResponsive();
   const { isPlaying, isLoading, nowPlaying, togglePlayback } = useAudio();
   const [isLiked, setIsLiked] = React.useState(false);
   const [expanded, setExpanded] = useState(false);
@@ -20,7 +22,8 @@ export function AudioPlayer() {
 
   return (
     <>
-    <View style={[styles.outerContainer, { bottom: bottomOffset }]}>
+    <View style={[styles.outerShell, { bottom: bottomOffset }]}>
+      <View style={[styles.outerInner, { maxWidth: floatingMaxWidth }]}>
       <BlurView intensity={80} tint="light" style={styles.container}>
         <View style={styles.content}>
           <Pressable
@@ -102,6 +105,7 @@ export function AudioPlayer() {
           </View>
         </View>
       </BlurView>
+      </View>
     </View>
     <RadioExpandedSheet visible={expanded} onClose={() => setExpanded(false)} />
     </>
@@ -109,11 +113,16 @@ export function AudioPlayer() {
 }
 
 const styles = StyleSheet.create({
-  outerContainer: {
+  outerShell: {
     position: 'absolute',
-    left: 12,
-    right: 12,
+    left: 0,
+    right: 0,
     zIndex: 100,
+    alignItems: 'center',
+    paddingHorizontal: 12,
+  },
+  outerInner: {
+    width: '100%',
   },
   container: {
     borderRadius: 24,

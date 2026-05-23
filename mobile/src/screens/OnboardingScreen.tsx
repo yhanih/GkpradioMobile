@@ -7,6 +7,8 @@ import {
   FlatList,
   Pressable,
   Animated,
+  Image,
+  ImageSourcePropType,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -15,46 +17,45 @@ import * as Haptics from 'expo-haptics';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTheme, type Theme } from '../contexts/ThemeContext';
 
-const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 const ONBOARDING_KEY = '@gkp_onboarding_complete';
 
 interface OnboardingSlide {
   id: string;
-  icon: keyof typeof Ionicons.glyphMap;
+  image: ImageSourcePropType;
   title: string;
   description: string;
-  gradient: readonly [string, string];
 }
 
 const slides: OnboardingSlide[] = [
   {
     id: '1',
-    icon: 'radio',
+    image: require('../../assets/onboarding/onboarding-radio.png'),
     title: 'Live Radio',
-    description: 'Listen to inspiring sermons, worship music, and uplifting content 24/7. Your spiritual companion wherever you go.',
-    gradient: ['#047857', '#059669'],
+    description:
+      'Listen to inspiring sermons, worship music, and uplifting content 24/7. Your spiritual companion wherever you go.',
   },
   {
     id: '2',
-    icon: 'people',
+    image: require('../../assets/onboarding/onboarding-community.png'),
     title: 'Community',
-    description: 'Connect with believers worldwide. Share prayer requests, testimonies, and grow together in faith.',
-    gradient: ['#0284c7', '#0ea5e9'],
+    description:
+      'Connect with believers worldwide. Share prayer requests, testimonies, and grow together in faith.',
   },
   {
     id: '3',
-    icon: 'play-circle',
+    image: require('../../assets/onboarding/onboarding-media.png'),
     title: 'On-Demand Content',
-    description: 'Access our library of podcasts and videos anytime. Learn at your own pace with quality Christian content.',
-    gradient: ['#7c3aed', '#a855f7'],
+    description:
+      'Access our library of podcasts and videos anytime. Learn at your own pace with quality Christian content.',
   },
   {
     id: '4',
-    icon: 'calendar',
+    image: require('../../assets/onboarding/onboarding-events.png'),
     title: 'Live Events',
-    description: 'Never miss a special broadcast. Get notified about upcoming live events and join the experience.',
-    gradient: ['#ea580c', '#f97316'],
+    description:
+      'Never miss a special broadcast. Get notified about upcoming live events and join the experience.',
   },
 ];
 
@@ -103,7 +104,7 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
 
     const scale = scrollX.interpolate({
       inputRange,
-      outputRange: [0.8, 1, 0.8],
+      outputRange: [0.88, 1, 0.88],
       extrapolate: 'clamp',
     });
 
@@ -115,13 +116,13 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
 
     return (
       <View style={styles.slide}>
-        <Animated.View style={[styles.iconContainer, { transform: [{ scale }], opacity }]}>
-          <LinearGradient
-            colors={item.gradient}
-            style={styles.iconGradient}
-          >
-            <Ionicons name={item.icon} size={80} color="#fff" />
-          </LinearGradient>
+        <Animated.View style={[styles.illustrationContainer, { transform: [{ scale }], opacity }]}>
+          <Image
+            source={item.image}
+            style={styles.illustration}
+            resizeMode="contain"
+            accessibilityIgnoresInvertColors
+          />
         </Animated.View>
 
         <Animated.View style={{ opacity }}>
@@ -176,9 +177,13 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <View style={styles.logoContainer}>
-          <Text style={styles.logoText}>GKP</Text>
-        </View>
+        <Image
+          source={require('../../assets/icon.png')}
+          style={styles.logoImage}
+          resizeMode="contain"
+          accessibilityLabel="GKP Radio"
+          accessibilityRole="image"
+        />
         {!isLastSlide && (
           <Pressable onPress={handleSkip} style={styles.skipButton}>
             <Text style={styles.skipText}>Skip</Text>
@@ -243,110 +248,106 @@ export async function checkOnboardingComplete(): Promise<boolean> {
   }
 }
 
+/** Clears the flag so onboarding can show again (e.g. Settings → Welcome tour). */
+export async function resetOnboardingComplete(): Promise<void> {
+  await AsyncStorage.removeItem(ONBOARDING_KEY);
+}
+
 function createOnboardingStyles(theme: Theme) {
+  const illustrationSize = Math.min(SCREEN_WIDTH - 48, 320);
+
   return StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: theme.colors.background,
-  },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 24,
-    paddingTop: 16,
-  },
-  logoContainer: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: theme.colors.primary,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  logoText: {
-    fontSize: 16,
-    fontWeight: '800',
-    color: '#fff',
-  },
-  skipButton: {
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-  },
-  skipText: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: theme.colors.textMuted,
-  },
-  slide: {
-    width: SCREEN_WIDTH,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 40,
-  },
-  iconContainer: {
-    marginBottom: 48,
-  },
-  iconGradient: {
-    width: 160,
-    height: 160,
-    borderRadius: 80,
-    justifyContent: 'center',
-    alignItems: 'center',
-    shadowColor: theme.colors.primary,
-    shadowOffset: { width: 0, height: 12 },
-    shadowOpacity: 0.3,
-    shadowRadius: 24,
-    elevation: 12,
-  },
-  title: {
-    fontSize: 32,
-    fontWeight: '800',
-    color: theme.colors.text,
-    textAlign: 'center',
-    marginBottom: 16,
-  },
-  description: {
-    fontSize: 17,
-    color: theme.colors.textSecondary,
-    textAlign: 'center',
-    lineHeight: 26,
-  },
-  dotsContainer: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 32,
-  },
-  dot: {
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: theme.colors.primary,
-    marginHorizontal: 4,
-  },
-  footer: {
-    paddingHorizontal: 24,
-    paddingBottom: 24,
-  },
-  nextButton: {
-    borderRadius: 16,
-    overflow: 'hidden',
-  },
-  nextButtonPressed: {
-    opacity: 0.9,
-    transform: [{ scale: 0.98 }],
-  },
-  nextButtonGradient: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 18,
-    gap: 8,
-  },
-  nextButtonText: {
-    fontSize: 17,
-    fontWeight: '700',
-    color: '#fff',
-  },
+    container: {
+      flex: 1,
+      backgroundColor: theme.colors.background,
+    },
+    header: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      paddingHorizontal: 24,
+      paddingTop: 16,
+    },
+    logoImage: {
+      width: 48,
+      height: 48,
+      borderRadius: 12,
+    },
+    skipButton: {
+      paddingVertical: 8,
+      paddingHorizontal: 16,
+    },
+    skipText: {
+      fontSize: 15,
+      fontWeight: '600',
+      color: theme.colors.textMuted,
+    },
+    slide: {
+      width: SCREEN_WIDTH,
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingHorizontal: 24,
+    },
+    illustrationContainer: {
+      width: illustrationSize,
+      height: illustrationSize,
+      marginBottom: 40,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: 'transparent',
+    },
+    illustration: {
+      width: '100%',
+      height: '100%',
+    },
+    title: {
+      fontSize: 32,
+      fontWeight: '800',
+      color: theme.colors.text,
+      textAlign: 'center',
+      marginBottom: 16,
+    },
+    description: {
+      fontSize: 17,
+      color: theme.colors.textSecondary,
+      textAlign: 'center',
+      lineHeight: 26,
+    },
+    dotsContainer: {
+      flexDirection: 'row',
+      justifyContent: 'center',
+      alignItems: 'center',
+      marginBottom: 32,
+    },
+    dot: {
+      height: 8,
+      borderRadius: 4,
+      backgroundColor: theme.colors.primary,
+      marginHorizontal: 4,
+    },
+    footer: {
+      paddingHorizontal: 24,
+      paddingBottom: 24,
+    },
+    nextButton: {
+      borderRadius: 16,
+      overflow: 'hidden',
+    },
+    nextButtonPressed: {
+      opacity: 0.9,
+      transform: [{ scale: 0.98 }],
+    },
+    nextButtonGradient: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingVertical: 18,
+      gap: 8,
+    },
+    nextButtonText: {
+      fontSize: 17,
+      fontWeight: '700',
+      color: '#fff',
+    },
   });
 }

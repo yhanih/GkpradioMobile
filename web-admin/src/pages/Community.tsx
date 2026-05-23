@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
-import { MessageSquare, AlertTriangle, CheckCircle, Trash2, User } from 'lucide-react';
+import { AlertTriangle, CheckCircle, Trash2 } from 'lucide-react';
 
 const Community = () => {
     const [reports, setReports] = useState<any[]>([]);
@@ -14,14 +14,24 @@ const Community = () => {
         setLoading(true);
         const { data, error } = await supabase
             .from('reports')
-            .select(`
+            .select(
+                `
                 *,
-                reporter:users!reports_reporter_id_fkey(username, email)
-            `)
+                reporter:profiles!reports_reporter_id_fkey(id, full_name)
+            `
+            )
             .order('created_at', { ascending: false });
 
-        if (error) console.error('Error fetching reports:', error);
-        else setReports(data || []);
+        if (error) {
+            console.error('Error fetching reports:', error);
+            const fallback = await supabase
+                .from('reports')
+                .select('*')
+                .order('created_at', { ascending: false });
+            if (!fallback.error) setReports(fallback.data || []);
+        } else {
+            setReports(data || []);
+        }
         setLoading(false);
     };
 
@@ -33,6 +43,32 @@ const Community = () => {
 
         if (error) alert('Error resolving report');
         else fetchReports();
+    };
+
+    const handleRemoveReportedContent = async (report: any) => {
+        if (!window.confirm('Remove this reported content from the app?')) return;
+        try {
+            if (report.target_type === 'live_chat_message') {
+                const { error } = await supabase
+                    .from('live_radio_messages')
+                    .delete()
+                    .eq('id', report.target_id);
+                if (error) throw error;
+            } else {
+                alert(
+                    'For post, comment, or user reports, remove content or suspend the account in Supabase or your admin workflow. Live chat messages can be deleted with this button.'
+                );
+                return;
+            }
+            await fetchReports();
+        } catch (e: any) {
+            alert(e?.message || 'Failed to remove content');
+        }
+    };
+
+    const targetPreview = (id: string) => {
+        const s = String(id || '');
+        return s.length > 12 ? `${s.slice(0, 8)}…` : s;
     };
 
     return (
@@ -48,14 +84,14 @@ const Community = () => {
                         <h3 style={{ fontSize: '1rem', color: 'var(--text-muted)' }}>Pending Reports</h3>
                         <AlertTriangle size={20} color="var(--error)" />
                     </div>
-                    <p style={{ fontSize: '2rem', fontWeight: 700 }}>{reports.filter(r => r.status === 'pending').length}</p>
+                    <p style={{ fontSize: '2rem', fontWeight: 700 }}>{reports.filter((r) => r.status === 'pending').length}</p>
                 </div>
                 <div className="glass" style={{ padding: '1.5rem', borderRadius: 'var(--radius)', border: '1px solid var(--border)' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
                         <h3 style={{ fontSize: '1rem', color: 'var(--text-muted)' }}>Total Resolved</h3>
                         <CheckCircle size={20} color="var(--success)" />
                     </div>
-                    <p style={{ fontSize: '2rem', fontWeight: 700 }}>{reports.filter(r => r.status === 'resolved').length}</p>
+                    <p style={{ fontSize: '2rem', fontWeight: 700 }}>{reports.filter((r) => r.status === 'resolved').length}</p>
                 </div>
             </div>
 
@@ -72,45 +108,84 @@ const Community = () => {
                     </thead>
                     <tbody>
                         {loading ? (
-                            <tr><td colSpan={5} style={{ padding: '3rem', textAlign: 'center', color: 'var(--text-muted)' }}>Loading reports...</td></tr>
+                            <tr>
+                                <td colSpan={5} style={{ padding: '3rem', textAlign: 'center', color: 'var(--text-muted)' }}>
+                                    Loading reports...
+                                </td>
+                            </tr>
                         ) : reports.length === 0 ? (
-                            <tr><td colSpan={5} style={{ padding: '3rem', textAlign: 'center', color: 'var(--text-muted)' }}>No reports in the queue.</td></tr>
+                            <tr>
+                                <td colSpan={5} style={{ padding: '3rem', textAlign: 'center', color: 'var(--text-muted)' }}>
+                                    No reports in the queue.
+                                </td>
+                            </tr>
                         ) : (
                             reports.map((report) => (
                                 <tr key={report.id} style={{ borderBottom: '1px solid var(--border)', transition: 'background 0.2s' }}>
                                     <td style={{ padding: '1.25rem 1.5rem' }}>
                                         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                                            <span style={{ fontSize: '0.75rem', fontWeight: 700, padding: '0.2rem 0.5rem', borderRadius: '4px', backgroundColor: 'var(--primary-light)', color: 'var(--primary)' }}>
-                                                {report.target_type.toUpperCase()}
+                                            <span
+                                                style={{
+                                                    fontSize: '0.75rem',
+                                                    fontWeight: 700,
+                                                    padding: '0.2rem 0.5rem',
+                                                    borderRadius: '4px',
+                                                    backgroundColor: 'var(--primary-light)',
+                                                    color: 'var(--primary)',
+                                                }}
+                                            >
+                                                {String(report.target_type || '').toUpperCase()}
                                             </span>
-                                            <span style={{ fontSize: '0.875rem', color: 'var(--text-muted)' }}>{report.target_id.split('-')[0]}...</span>
+                                            <span style={{ fontSize: '0.875rem', color: 'var(--text-muted)' }}>{targetPreview(report.target_id)}</span>
                                         </div>
                                     </td>
                                     <td style={{ padding: '1.25rem 1.5rem', fontSize: '0.875rem' }}>{report.reason}</td>
                                     <td style={{ padding: '1.25rem 1.5rem' }}>
-                                        <p style={{ fontWeight: 600, fontSize: '0.875rem' }}>@{report.reporter?.username || 'user'}</p>
-                                        <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{report.reporter?.email}</p>
+                                        <p style={{ fontWeight: 600, fontSize: '0.875rem' }}>
+                                            {report.reporter?.full_name || 'Reporter'}
+                                        </p>
+                                        <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                                            {report.reporter?.id ? `id ${targetPreview(report.reporter.id)}` : ''}
+                                        </p>
                                     </td>
                                     <td style={{ padding: '1.25rem 1.5rem' }}>
-                                        <span style={{
-                                            padding: '0.25rem 0.75rem',
-                                            borderRadius: '999px',
-                                            fontSize: '0.75rem',
-                                            fontWeight: 600,
-                                            backgroundColor: report.status === 'pending' ? '#ef444420' : '#10b98120',
-                                            color: report.status === 'pending' ? '#ef4444' : '#10b981'
-                                        }}>
-                                            {report.status.toUpperCase()}
+                                        <span
+                                            style={{
+                                                padding: '0.25rem 0.75rem',
+                                                borderRadius: '999px',
+                                                fontSize: '0.75rem',
+                                                fontWeight: 600,
+                                                backgroundColor: report.status === 'pending' ? '#ef444420' : '#10b98120',
+                                                color: report.status === 'pending' ? '#ef4444' : '#10b981',
+                                            }}
+                                        >
+                                            {String(report.status || '').toUpperCase()}
                                         </span>
                                     </td>
                                     <td style={{ padding: '1.25rem 1.5rem' }}>
                                         <div style={{ display: 'flex', gap: '0.75rem' }}>
                                             {report.status === 'pending' && (
-                                                <button onClick={() => handleResolveReport(report.id)} style={{ color: 'var(--success)' }}>
+                                                <button
+                                                    type="button"
+                                                    title="Mark reviewed"
+                                                    onClick={() => handleResolveReport(report.id)}
+                                                    style={{ color: 'var(--success)' }}
+                                                >
                                                     <CheckCircle size={18} />
                                                 </button>
                                             )}
-                                            <button style={{ color: 'var(--error)' }}><Trash2 size={18} /></button>
+                                            <button
+                                                type="button"
+                                                title={
+                                                    report.target_type === 'live_chat_message'
+                                                        ? 'Delete chat message'
+                                                        : 'Remove reported content (live chat only from here)'
+                                                }
+                                                onClick={() => void handleRemoveReportedContent(report)}
+                                                style={{ color: 'var(--error)' }}
+                                            >
+                                                <Trash2 size={18} />
+                                            </button>
                                         </div>
                                     </td>
                                 </tr>

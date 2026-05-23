@@ -347,7 +347,8 @@ export function NewPostModal({
                                     <View>
                                         <Text style={styles.anonymousLabel}>Post Anonymously</Text>
                                         <Text style={styles.anonymousDescription}>
-                                            Your name will be hidden from other users
+                                            Your display name is hidden from other members; your account stays linked for
+                                            moderation and safety.
                                         </Text>
                                     </View>
                                 </View>
@@ -368,7 +369,7 @@ export function NewPostModal({
                             <Ionicons name="information-circle" size={20} color={theme.colors.primary} />
                             <Text style={styles.guidanceText}>
                                 {isAnonymous 
-                                    ? 'Your post will be shared anonymously. Your identity will remain private.'
+                                    ? 'Other members will not see your name on this post. GKP Radio may still identify your account for moderation and enforcement.'
                                     : postType === 'prayer'
                                         ? 'Prayer posts invite the community to stand with you through prayer.'
                                         : 'Discussion posts invite public conversation and replies from the community.'

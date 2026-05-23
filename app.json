@@ -2,7 +2,7 @@
   "expo": {
     "name": "GKP Radio",
     "slug": "gkp-radio",
-    "version": "1.0.0",
+    "version": "1.0.3",
     "description": "God Kingdom Principles Radio - Broadcasting Truth, Building Community, Transforming Lives",
     "orientation": "portrait",
     "icon": "./mobile/assets/icon.png",
@@ -11,14 +11,14 @@
     "scheme": "gkpradio",
     "primaryColor": "#047857",
     "splash": {
-      "image": "./mobile/assets/splash-icon.png",
+      "image": "./mobile/assets/icon.png",
       "resizeMode": "contain",
       "backgroundColor": "#ffffff"
     },
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.gkpradio.mobile",
-      "buildNumber": "1.0.1",
+      "buildNumber": "4",
       "config": {
         "usesNonExemptEncryption": false
       },
@@ -26,9 +26,7 @@
         "NSCameraUsageDescription": "GKP Radio needs access to your camera to share moments from our community.",
         "NSMicrophoneUsageDescription": "GKP Radio needs access to your microphone for audio features.",
         "NSPhotoLibraryUsageDescription": "GKP Radio needs access to your photo library to share images.",
-        "UIBackgroundModes": [
-          "audio"
-        ],
+        "UIBackgroundModes": ["audio", "remote-notification"],
         "NSAppTransportSecurity": {
           "NSExceptionDomains": {
             "74.208.102.89": {
@@ -81,9 +79,12 @@
       "favicon": "./mobile/assets/favicon.png"
     },
     "extra": {
-      "supabaseUrl": "https://fychjnaxljwmgoptjsxn.supabase.co",
-      "supabaseAnonKey": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZ5Y2hqbmF4bGp3bWdvcHRqc3huIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTg2ODA5ODQsImV4cCI6MjA3NDI1Njk4NH0.PU002pqmbeCo_plcjaCP678Xo5dischMR3a_OTOqp_E",
-      "azuracastBaseUrl": "http://74.208.102.89:8080"
+      "supabaseUrl": "https://hgjwpebygzrnkcaflcqh.supabase.co",
+      "supabaseAnonKey": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhnandwZWJ5Z3pybmtjYWZsY3FoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU3OTIxMzUsImV4cCI6MjA5MTM2ODEzNX0.Hkzd5aR8aktcxAhtb8JK0Xu0H888Ec775jZGpjkI5Ww",
+      "azuracastBaseUrl": "http://74.208.102.89:8080",
+      "eas": {
+        "projectId": "3cc18e67-a1d7-4f5a-bcc5-48e3dde78f96"
+      }
     },
     "plugins": [
       "@sentry/react-native",

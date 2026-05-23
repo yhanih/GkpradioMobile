@@ -11,9 +11,9 @@ import {
   KeyboardAvoidingView,
   Platform,
   ActivityIndicator,
-  Dimensions,
   Share,
   Alert,
+  useWindowDimensions,
   type NativeSyntheticEvent,
   type NativeScrollEvent,
 } from 'react-native';
@@ -25,11 +25,12 @@ import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
 import { useAudio } from '../contexts/AudioContext';
 import { useAuth } from '../contexts/AuthContext';
-import { fetchRadioQueueInfo } from '../lib/backend';
+import { fetchRadioQueueInfo, blockCommunityUser, fetchBlockedUserIds, sanitizeText } from '../lib/backend';
 import { supabase } from '../lib/supabase';
-
-const { width: SCREEN_W } = Dimensions.get('window');
-const ART_SIZE = Math.min(Math.round(SCREEN_W * 0.72), 320);
+import { ReportContentModal } from './ReportContentModal';
+import { openLiveChatMessageMenu } from '../utils/contentOverflowMenu';
+import { REPORT_SUBMITTED_ALERT } from '../constants/reportReasons';
+import { isCommunityTextBlocked, UGC_FILTER_USER_MESSAGE } from '../utils/contentUgcFilter';
 
 const LIVE_CHAT_ROOM_ID = (() => {
   const raw = process.env.EXPO_PUBLIC_LIVE_CHAT_ROOM_ID as string | undefined;
@@ -62,6 +63,7 @@ type ChatMessage = {
   body: string;
   createdAt: string;
   isMine: boolean;
+  authorId: string | null;
 };
 
 function mapRow(row: LiveRadioMessageRow, currentUserId?: string): ChatMessage {
@@ -71,6 +73,7 @@ function mapRow(row: LiveRadioMessageRow, currentUserId?: string): ChatMessage {
     body: row.body,
     createdAt: row.created_at,
     isMine: Boolean(currentUserId && row.author_id === currentUserId),
+    authorId: row.author_id,
   };
 }
 
@@ -94,12 +97,19 @@ export interface RadioExpandedSheetProps {
 }
 
 export function RadioExpandedSheet({ visible, onClose }: RadioExpandedSheetProps) {
-  const styles = useMemo(() => createStyles(), []);
+  const { width: windowWidth } = useWindowDimensions();
+  const artSize = useMemo(
+    () => Math.min(Math.round(windowWidth * 0.72), 320),
+    [windowWidth]
+  );
+  const styles = useMemo(() => createStyles(artSize), [artSize]);
   const insets = useSafeAreaInsets();
   const scrollRef = useRef<ScrollView>(null);
   const pullDismissArmedRef = useRef(false);
   const { isPlaying, isLoading, nowPlaying, togglePlayback } = useAudio();
   const { user } = useAuth();
+  const blockedIdsRef = useRef<Set<string>>(new Set());
+  const [reportChatMessageId, setReportChatMessageId] = useState<string | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [chatLoading, setChatLoading] = useState(false);
   const [chatError, setChatError] = useState<string | null>(null);
@@ -110,12 +120,14 @@ export function RadioExpandedSheet({ visible, onClose }: RadioExpandedSheetProps
   useEffect(() => {
     if (!visible) {
       setMessages([]);
+      setReportChatMessageId(null);
       setDraft('');
       setChatError(null);
       setChatLoading(false);
       setSending(false);
       setQueueLoading(false);
       pullDismissArmedRef.current = false;
+      blockedIdsRef.current = new Set();
     }
   }, [visible]);
 
@@ -151,30 +163,35 @@ export function RadioExpandedSheet({ visible, onClose }: RadioExpandedSheetProps
     [closeSheet]
   );
 
-  useEffect(() => {
+  const loadChatMessages = useCallback(async () => {
     if (!visible) return;
-
-    let cancelled = false;
-
-    (async () => {
-      setChatLoading(true);
-      setChatError(null);
+    setChatLoading(true);
+    setChatError(null);
+    try {
+      const blocked = user?.id ? new Set(await fetchBlockedUserIds(user.id)) : new Set<string>();
+      blockedIdsRef.current = blocked;
       const { data, error } = await supabase
         .from('live_radio_messages')
         .select('id, room_id, author_id, display_name, body, created_at')
         .eq('room_id', LIVE_CHAT_ROOM_ID)
         .order('created_at', { ascending: true })
         .limit(120);
-
-      if (cancelled) return;
-      if (error) {
-        setChatError(error.message);
-        setMessages([]);
-      } else {
-        setMessages((data ?? []).map((row) => mapRow(row as LiveRadioMessageRow, user?.id)));
-      }
+      if (error) throw error;
+      const rows = (data ?? []) as LiveRadioMessageRow[];
+      const filtered = rows.filter((row) => !row.author_id || !blocked.has(row.author_id));
+      setMessages(filtered.map((row) => mapRow(row, user?.id)));
+    } catch (e: any) {
+      setChatError(e?.message || 'Could not load chat');
+      setMessages([]);
+    } finally {
       setChatLoading(false);
-    })();
+    }
+  }, [visible, user?.id]);
+
+  useEffect(() => {
+    if (!visible) return;
+
+    void loadChatMessages();
 
     const channel = supabase
       .channel(`live_radio:${LIVE_CHAT_ROOM_ID}`)
@@ -188,6 +205,7 @@ export function RadioExpandedSheet({ visible, onClose }: RadioExpandedSheetProps
         },
         (payload) => {
           const row = payload.new as LiveRadioMessageRow;
+          if (row.author_id && blockedIdsRef.current.has(row.author_id)) return;
           setMessages((prev) => {
             if (prev.some((m) => m.id === row.id)) return prev;
             return [...prev, mapRow(row, user?.id)];
@@ -197,10 +215,47 @@ export function RadioExpandedSheet({ visible, onClose }: RadioExpandedSheetProps
       .subscribe();
 
     return () => {
-      cancelled = true;
       supabase.removeChannel(channel);
     };
-  }, [visible, user?.id]);
+  }, [visible, user?.id, loadChatMessages]);
+
+  const openChatMessageActions = useCallback(
+    (m: ChatMessage) => {
+      if (!user) {
+        Alert.alert('Sign in required', 'Please sign in to report or block.');
+        return;
+      }
+      if (m.isMine) return;
+      openLiveChatMessageMenu({ isOwn: false, authorId: m.authorId }, (choice) => {
+        if (choice === 'report') {
+          setReportChatMessageId(m.id);
+        } else if (choice === 'block' && m.authorId) {
+          Alert.alert(
+            'Block member',
+            'You will no longer see their posts, comments, or live chat messages.',
+            [
+              { text: 'Cancel', style: 'cancel' },
+              {
+                text: 'Block',
+                style: 'destructive',
+                onPress: async () => {
+                  try {
+                    await blockCommunityUser(user.id, m.authorId!);
+                    blockedIdsRef.current.add(m.authorId!);
+                    setMessages((prev) => prev.filter((x) => x.authorId !== m.authorId));
+                    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                  } catch (e: any) {
+                    Alert.alert('Unable to block', e?.message || 'Please try again.');
+                  }
+                },
+              },
+            ]
+          );
+        }
+      });
+    },
+    [user]
+  );
 
   useEffect(() => {
     if (!visible || messages.length === 0) return;
@@ -242,15 +297,31 @@ export function RadioExpandedSheet({ visible, onClose }: RadioExpandedSheetProps
       );
       return;
     }
+    const body = sanitizeText(t);
+    if (!body.trim()) {
+      setSending(false);
+      Alert.alert('Message not sent', 'Please enter a message.');
+      return;
+    }
+    if (isCommunityTextBlocked(body)) {
+      setSending(false);
+      Alert.alert('Message not sent', UGC_FILTER_USER_MESSAGE);
+      return;
+    }
     const { error } = await supabase.from('live_radio_messages').insert({
       room_id: LIVE_CHAT_ROOM_ID,
       author_id: uid,
       display_name: user?.fullname || session.user.email?.split('@')[0] || 'You',
-      body: t,
+      body,
     });
     setSending(false);
     if (error) {
-      Alert.alert('Message not sent', error.message);
+      const msg = String(error.message || '').toLowerCase();
+      const friendly =
+        msg.includes('content violates community guidelines') || msg.includes('ugc_content')
+          ? UGC_FILTER_USER_MESSAGE
+          : error.message;
+      Alert.alert('Message not sent', friendly);
       return;
     }
     setDraft('');
@@ -287,25 +358,8 @@ export function RadioExpandedSheet({ visible, onClose }: RadioExpandedSheetProps
   }, []);
 
   const retryLoadChat = useCallback(() => {
-    if (!visible) return;
-    setChatError(null);
-    setChatLoading(true);
-    void (async () => {
-      const { data, error } = await supabase
-        .from('live_radio_messages')
-        .select('id, room_id, author_id, display_name, body, created_at')
-        .eq('room_id', LIVE_CHAT_ROOM_ID)
-        .order('created_at', { ascending: true })
-        .limit(120);
-      if (error) {
-        setChatError(error.message);
-        setMessages([]);
-      } else {
-        setMessages((data ?? []).map((row) => mapRow(row as LiveRadioMessageRow, user?.id)));
-      }
-      setChatLoading(false);
-    })();
-  }, [visible, user?.id]);
+    void loadChatMessages();
+  }, [loadChatMessages]);
 
   return (
     <Modal
@@ -381,7 +435,7 @@ export function RadioExpandedSheet({ visible, onClose }: RadioExpandedSheetProps
                   <Image source={{ uri: song!.art }} style={styles.heroArt} />
                 ) : (
                   <LinearGradient colors={['#047857', '#064e3b']} style={styles.heroArt}>
-                    <Ionicons name="radio" size={Math.round(ART_SIZE * 0.22)} color="#fff" />
+                    <Ionicons name="radio" size={Math.round(artSize * 0.22)} color="#fff" />
                   </LinearGradient>
                 )}
               </View>
@@ -508,18 +562,34 @@ export function RadioExpandedSheet({ visible, onClose }: RadioExpandedSheetProps
                         key={m.id}
                         style={[styles.bubbleRow, m.isMine ? styles.bubbleRowUser : styles.bubbleRowPeer]}
                       >
-                        <Text
-                          style={[
-                            styles.bubbleAuthor,
-                            m.isMine ? styles.bubbleAuthorUser : styles.bubbleAuthorPeer,
-                          ]}
-                        >
-                          {m.isMine ? 'You' : m.author}
-                        </Text>
-                        <View style={[styles.bubble, m.isMine ? styles.bubbleUser : styles.bubblePeer]}>
-                          <Text style={styles.bubbleText}>{m.body}</Text>
-                          <Text style={styles.bubbleTime}>{formatChatTimestamp(m.createdAt)}</Text>
-                        </View>
+                        {!m.isMine ? (
+                          <View style={styles.bubbleRowOuter}>
+                            <View style={styles.bubbleCol}>
+                              <Text style={[styles.bubbleAuthor, styles.bubbleAuthorPeer]}>{m.author}</Text>
+                              <View style={[styles.bubble, styles.bubblePeer]}>
+                                <Text style={styles.bubbleText}>{m.body}</Text>
+                                <Text style={styles.bubbleTime}>{formatChatTimestamp(m.createdAt)}</Text>
+                              </View>
+                            </View>
+                            <Pressable
+                              onPress={() => openChatMessageActions(m)}
+                              style={styles.chatMoreBtn}
+                              hitSlop={10}
+                              accessibilityRole="button"
+                              accessibilityLabel="Message options"
+                            >
+                              <Ionicons name="ellipsis-vertical" size={18} color={C.textMuted} />
+                            </Pressable>
+                          </View>
+                        ) : (
+                          <>
+                            <Text style={[styles.bubbleAuthor, styles.bubbleAuthorUser]}>You</Text>
+                            <View style={[styles.bubble, styles.bubbleUser]}>
+                              <Text style={styles.bubbleText}>{m.body}</Text>
+                              <Text style={styles.bubbleTime}>{formatChatTimestamp(m.createdAt)}</Text>
+                            </View>
+                          </>
+                        )}
                       </View>
                     ))}
                 </View>
@@ -561,12 +631,23 @@ export function RadioExpandedSheet({ visible, onClose }: RadioExpandedSheetProps
           </KeyboardAvoidingView>
         </SafeAreaView>
       </View>
+
+      <ReportContentModal
+        visible={Boolean(user && reportChatMessageId)}
+        onClose={() => setReportChatMessageId(null)}
+        reporterId={user?.id ?? ''}
+        targetType="live_chat_message"
+        targetId={reportChatMessageId ?? ''}
+        onSubmitted={() => {
+          Alert.alert(REPORT_SUBMITTED_ALERT.title, REPORT_SUBMITTED_ALERT.message);
+        }}
+      />
       </GestureHandlerRootView>
     </Modal>
   );
 }
 
-function createStyles() {
+function createStyles(artSize: number) {
   return StyleSheet.create({
     gestureRoot: {
       flex: 1,
@@ -632,8 +713,8 @@ function createStyles() {
       marginTop: 4,
     },
     heroArt: {
-      width: ART_SIZE,
-      height: ART_SIZE,
+      width: artSize,
+      height: artSize,
       borderRadius: 14,
       justifyContent: 'center',
       alignItems: 'center',
@@ -800,6 +881,20 @@ function createStyles() {
     },
     bubbleRowUser: {
       alignItems: 'flex-end',
+    },
+    bubbleRowOuter: {
+      flexDirection: 'row',
+      alignItems: 'flex-start',
+      width: '100%',
+      gap: 2,
+    },
+    bubbleCol: {
+      flex: 1,
+      maxWidth: '88%',
+    },
+    chatMoreBtn: {
+      padding: 8,
+      marginTop: 2,
     },
     bubbleAuthor: {
       fontSize: 11,

@@ -8,6 +8,7 @@ const includeDevClient = !easProfile || easProfile === 'development';
 
 const plugins = [
   ...(includeDevClient ? ['expo-dev-client'] : []),
+  'expo-notifications',
   ['expo-font'],
   ['expo-video'],
   [
@@ -22,6 +23,9 @@ const plugins = [
       android: {
         usesCleartextTraffic: true,
       },
+      ios: {
+        deploymentTarget: '15.1',
+      },
     },
   ],
 ];
@@ -30,34 +34,36 @@ module.exports = {
   expo: {
     name: 'GKP Radio',
     slug: 'gkp-radio',
-    version: '1.0.1',
+    version: '1.0.4',
     description:
       'God Kingdom Principles Radio - Broadcasting Truth, Building Community, Transforming Lives',
     orientation: 'portrait',
     icon: './assets/icon.png',
     userInterfaceStyle: 'light',
-    owner: 'scher01',
+    owner: 'buildright-studio-llc',
     scheme: 'gkpradio',
     primaryColor: '#047857',
     splash: {
-      image: './assets/splash-icon.png',
+      image: './assets/icon.png',
       resizeMode: 'contain',
       backgroundColor: '#ffffff',
     },
     ios: {
       supportsTablet: true,
       bundleIdentifier: 'com.gkpradio.mobile',
-      buildNumber: '2',
       config: {
         usesNonExemptEncryption: false,
       },
       infoPlist: {
+        // Lets `Linking.canOpenURL` / system resolve mail & web URLs reliably when needed.
+        LSApplicationQueriesSchemes: ['mailto', 'http', 'https', 'itms-apps'],
         NSCameraUsageDescription:
           'GKP Radio needs access to your camera to share moments from our community.',
         NSMicrophoneUsageDescription: 'GKP Radio needs access to your microphone for audio features.',
         NSPhotoLibraryUsageDescription:
           'GKP Radio needs access to your photo library to share images.',
-        UIBackgroundModes: ['audio'],
+        // audio: live/background radio; remote-notification: APNs for community push
+        UIBackgroundModes: ['audio', 'remote-notification'],
         NSAppTransportSecurity: {
           NSExceptionDomains: {
             '74.208.102.89': {
@@ -71,7 +77,7 @@ module.exports = {
     },
     android: {
       package: 'com.gkpradio.mobile',
-      versionCode: 3,
+      versionCode: 5,
       adaptiveIcon: {
         foregroundImage: './assets/adaptive-icon.png',
         backgroundColor: '#047857',
@@ -107,8 +113,9 @@ module.exports = {
       supabaseAnonKey:
         'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhnandwZWJ5Z3pybmtjYWZsY3FoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU3OTIxMzUsImV4cCI6MjA5MTM2ODEzNX0.Hkzd5aR8aktcxAhtb8JK0Xu0H888Ec775jZGpjkI5Ww',
       azuracastBaseUrl: 'http://74.208.102.89:8080',
-      privacyPolicyUrl: 'https://godkingdomprinciplesradio.com/privacy-policy',
-      expoProjectId: '3cc18e67-a1d7-4f5a-bcc5-48e3dde78f96',
+      privacyPolicyUrl: 'https://godkingdomprinciplesradio.com/privacy',
+      /** Set via EAS env / .env: EXPO_PUBLIC_SENTRY_DSN (optional; omit or leave empty to disable) */
+      sentryDsn: process.env.EXPO_PUBLIC_SENTRY_DSN || '',
       eas: {
         projectId: '794ab331-d1c6-4158-ac8e-14ce9b083568',
       },

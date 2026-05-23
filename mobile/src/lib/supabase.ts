@@ -1,9 +1,12 @@
-// import 'react-native-url-polyfill/auto';
+import 'react-native-url-polyfill/auto';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Constants from 'expo-constants';
 import { createClient } from '@supabase/supabase-js';
 
-const extra = (Constants.expoConfig?.extra ?? Constants.manifest?.extra ?? {}) as Record<string, unknown>;
+/** Legacy manifest shape (SDK 49+ types omit `extra` on EmbeddedManifest). */
+type LegacyExpoManifest = { extra?: Record<string, unknown> } | null | undefined;
+const legacyExtra = (Constants.manifest as LegacyExpoManifest)?.extra;
+const extra = (Constants.expoConfig?.extra ?? legacyExtra ?? {}) as Record<string, unknown>;
 
 const envSupabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL as string | undefined;
 const extraSupabaseUrl = extra.supabaseUrl as string | undefined;

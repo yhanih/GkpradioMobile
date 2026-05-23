@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
@@ -9,10 +9,10 @@ import {
   ActivityIndicator,
   RefreshControl,
   Animated,
-  Dimensions,
   ImageBackground,
   Alert,
   TextInput,
+  useWindowDimensions,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -53,7 +53,6 @@ import * as Haptics from 'expo-haptics';
 
 type MediaNavProp = NativeStackNavigationProp<RootStackParamList>;
 
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const HERO_HEIGHT = 280;
 
 type TabType = 'podcasts' | 'videos';
@@ -76,6 +75,8 @@ export function MediaScreen() {
   const { user } = useAuth();
   const { isBookmarked, toggleBookmark } = useBookmarks();
   const insets = useSafeAreaInsets();
+  const { width: windowWidth } = useWindowDimensions();
+  const [mediaTabTrackWidth, setMediaTabTrackWidth] = useState(0);
   const [activeTab, setActiveTab] = useState<TabType>('podcasts');
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [podcasts, setPodcasts] = useState<Episode[]>([]);
@@ -90,6 +91,14 @@ export function MediaScreen() {
   const tabIndicatorAnim = useRef(new Animated.Value(0)).current;
   const heroScaleAnim = useRef(new Animated.Value(1)).current;
   const playButtonPulse = useRef(new Animated.Value(1)).current;
+
+  const mediaTabSlidePx = useMemo(
+    () =>
+      mediaTabTrackWidth > 0
+        ? mediaTabTrackWidth / 2
+        : Math.max(80, (windowWidth - 48) / 2),
+    [mediaTabTrackWidth, windowWidth]
+  );
 
   const contentTopPadding = insets.top + HEADER_HEIGHT + 16;
   const contentBottomPadding = AUDIO_PLAYER_HEIGHT + insets.bottom + 32;
@@ -114,7 +123,7 @@ export function MediaScreen() {
       tension: 100,
       friction: 10,
     }).start();
-  }, [activeTab]);
+  }, [activeTab, mediaTabTrackWidth]);
 
   const startPlayButtonPulse = () => {
     Animated.loop(
@@ -287,7 +296,7 @@ export function MediaScreen() {
 
   const tabIndicatorTranslate = tabIndicatorAnim.interpolate({
     inputRange: [0, 1],
-    outputRange: [0, (SCREEN_WIDTH - 48) / 2],
+    outputRange: [0, mediaTabSlidePx],
   });
 
   if (loading) {
@@ -471,7 +480,10 @@ export function MediaScreen() {
 
         {/* Animated Tab Switcher */}
         <View style={styles.tabContainer}>
-          <View style={[styles.tabBackground, { backgroundColor: theme.colors.surface }]}>
+          <View
+            style={[styles.tabBackground, { backgroundColor: theme.colors.surface }]}
+            onLayout={e => setMediaTabTrackWidth(e.nativeEvent.layout.width)}
+          >
             <Animated.View
               style={[
                 styles.tabIndicator,

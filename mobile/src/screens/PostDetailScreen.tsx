@@ -22,6 +22,7 @@ import * as Haptics from 'expo-haptics';
 import {
   blockCommunityUser,
   type CommunityReportTarget,
+  CreatePostError,
   deleteCommunityComment,
   deleteCommunityPost,
   createCommentForPost,
@@ -37,6 +38,7 @@ import { useBookmarks } from '../contexts/BookmarksContext';
 import { useTheme, type Theme } from '../contexts/ThemeContext';
 import { RootStackParamList } from '../types/navigation';
 import { PostType, getCategoryIcon, getCategoryLabel, getPostTypeForCategory } from '../constants/categories';
+import { REPORT_SUBMITTED_ALERT } from '../constants/reportReasons';
 
 type PostDetailRouteProp = RouteProp<RootStackParamList, 'PostDetail'>;
 type PostDetailNavProp = NativeStackNavigationProp<RootStackParamList, 'PostDetail'>;
@@ -397,7 +399,11 @@ export function PostDetailScreen() {
         ...prev,
         comment_count: Math.max((prev.comment_count || 1) - 1, 0)
       } : null);
-      Alert.alert('Error', 'Unable to post comment. Please try again.');
+      const message =
+        error instanceof CreatePostError
+          ? error.message
+          : 'Unable to post comment. Please try again.';
+      Alert.alert('Unable to post', message);
     } finally {
       submitCommentLockRef.current = false;
       setSubmittingComment(false);
@@ -833,10 +839,7 @@ export function PostDetailScreen() {
                 : null
             );
           }
-          Alert.alert(
-            'Thanks for letting us know',
-            'We received your report. Our team will review it; you will not get a personal reply for each report.'
-          );
+          Alert.alert(REPORT_SUBMITTED_ALERT.title, REPORT_SUBMITTED_ALERT.message);
         }}
       />
     </SafeAreaView>

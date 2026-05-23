@@ -13,6 +13,8 @@ export type RootStackParamList = {
   Profile: undefined;
   Login: { redirectBack?: boolean } | undefined;
   Signup: undefined;
+  /** Enter signup email + 6-digit code (optional email pre-filled from Login/Signup). */
+  ConfirmEmail: { email?: string } | undefined;
   ForgotPassword: undefined;
   ResetPassword: undefined;
   VideoPlayer: {
@@ -24,6 +26,10 @@ export type RootStackParamList = {
     allEpisodes?: any[];
   };
   LikedPosts: undefined;
+  TermsOfService: undefined;
+  MerchStore: undefined;
+  ProductDetail: { product: any };
+  Donate: undefined;
 };
 
 export type MainTabParamList = {

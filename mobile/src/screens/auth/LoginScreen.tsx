@@ -30,6 +30,7 @@ export function LoginScreen() {
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [agreedToTerms, setAgreedToTerms] = useState(false);
   const { signIn } = useAuth();
   const { theme } = useTheme();
   const styles = useMemo(() => createLoginStyles(theme), [theme]);
@@ -43,12 +44,43 @@ export function LoginScreen() {
       return;
     }
 
+    if (!agreedToTerms) {
+      Alert.alert(
+        'Terms Required',
+        'Please read and agree to the Terms of Service and Community Guidelines before signing in.'
+      );
+      return;
+    }
+
     setLoading(true);
     const { error } = await signIn(email, password);
     setLoading(false);
 
     if (error) {
-      Alert.alert('Login Failed', typeof error === 'string' ? error : error.message || 'Please check your credentials.');
+      const raw = typeof error === 'string' ? error : error.message || 'Please check your credentials.';
+      const msg = String(raw).toLowerCase();
+      const code = typeof error === 'object' && error && 'code' in error ? String((error as { code?: string }).code || '') : '';
+      const emailNotConfirmed =
+        msg.includes('email not confirmed') ||
+        msg.includes('not confirmed') ||
+        code === 'email_not_confirmed';
+
+      if (emailNotConfirmed) {
+        Alert.alert(
+          'Confirm your email first',
+          'Use the link in your email, or open “Enter code” to type the 6-digit code (if your project sends one). You can resend from that screen.',
+          [
+            { text: 'OK', style: 'cancel' },
+            {
+              text: 'Enter code',
+              onPress: () =>
+                navigation.navigate('ConfirmEmail', { email: email.trim().toLowerCase() }),
+            },
+          ]
+        );
+      } else {
+        Alert.alert('Login Failed', raw);
+      }
     } else {
       // Login success — return to where the user came from.
       if (shouldRedirectBack && navigation.canGoBack()) {
@@ -132,10 +164,34 @@ export function LoginScreen() {
               </View>
             </View>
 
+            <View style={styles.termsRow} accessibilityRole="none">
+              <Pressable
+                onPress={() => setAgreedToTerms((prev) => !prev)}
+                accessibilityRole="checkbox"
+                accessibilityState={{ checked: agreedToTerms }}
+                accessibilityLabel="Agree to Terms of Service and Community Guidelines"
+                hitSlop={6}
+              >
+                <View style={[styles.checkbox, agreedToTerms && styles.checkboxChecked]}>
+                  {agreedToTerms && <Ionicons name="checkmark" size={14} color="#fff" />}
+                </View>
+              </Pressable>
+              <Text style={styles.termsText}>
+                I agree to the{' '}
+                <Text
+                  style={styles.termsLink}
+                  onPress={() => navigation.navigate('TermsOfService')}
+                  accessibilityRole="link"
+                >
+                  Terms of Service & Community Guidelines
+                </Text>
+              </Text>
+            </View>
+
             <Pressable
-              style={[styles.loginButton, loading && styles.loginButtonDisabled]}
+              style={[styles.loginButton, (!agreedToTerms || loading) && styles.loginButtonDisabled]}
               onPress={handleLogin}
-              disabled={loading}
+              disabled={!agreedToTerms || loading}
             >
               {loading ? (
                 <ActivityIndicator color="#fff" />
@@ -145,6 +201,16 @@ export function LoginScreen() {
                   <Ionicons name="arrow-forward" size={20} color="#fff" />
                 </>
               )}
+            </Pressable>
+
+            <Pressable
+              style={styles.verifyCodePrompt}
+              onPress={() => navigation.navigate('ConfirmEmail', { email: email.trim().toLowerCase() || undefined })}
+              disabled={loading}
+              accessibilityRole="button"
+              accessibilityLabel="Enter email verification code"
+            >
+              <Text style={styles.verifyCodePromptText}>Have a verification code?</Text>
             </Pressable>
 
             <View style={styles.divider}>
@@ -274,6 +340,40 @@ function createLoginStyles(theme: Theme) {
   eyeIcon: {
     padding: 8,
   },
+  termsRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 12,
+    marginTop: 8,
+    marginBottom: 4,
+  },
+  checkbox: {
+    width: 22,
+    height: 22,
+    borderRadius: 6,
+    borderWidth: 2,
+    borderColor: theme.colors.border,
+    backgroundColor: theme.colors.surfaceSecondary,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: 1,
+    flexShrink: 0,
+  },
+  checkboxChecked: {
+    backgroundColor: theme.colors.primary,
+    borderColor: theme.colors.primary,
+  },
+  termsText: {
+    flex: 1,
+    fontSize: 13,
+    color: theme.colors.textSecondary,
+    lineHeight: 20,
+  },
+  termsLink: {
+    color: theme.colors.primary,
+    fontWeight: '600',
+    textDecorationLine: 'underline',
+  },
   loginButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -290,12 +390,24 @@ function createLoginStyles(theme: Theme) {
     elevation: 6,
   },
   loginButtonDisabled: {
-    opacity: 0.6,
+    opacity: 0.4,
   },
   loginButtonText: {
     fontSize: 16,
     fontWeight: '600',
     color: '#fff',
+  },
+  verifyCodePrompt: {
+    alignSelf: 'center',
+    marginTop: 14,
+    paddingVertical: 6,
+    paddingHorizontal: 8,
+  },
+  verifyCodePromptText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: theme.colors.primary,
+    textDecorationLine: 'underline',
   },
   divider: {
     flexDirection: 'row',

@@ -7,6 +7,8 @@ import {
   Text,
   Animated,
   Pressable,
+  Image,
+  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, CompositeNavigationProp } from '@react-navigation/native';
@@ -14,6 +16,12 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 import { RootStackParamList, MainTabParamList } from '../types/navigation';
 import { ProfileAvatar } from '../components/ProfileAvatar';
+import { Ionicons } from '@expo/vector-icons';
+import * as Haptics from 'expo-haptics';
+import { useCart } from '../contexts/CartContext';
+import { CartSheet } from '../components/CartSheet';
+import { fetchStoreProducts } from '../lib/merch';
+import type { Product } from '../types/product';
 
 import {
   fetchHomeStats,
@@ -63,6 +71,8 @@ export function HomeScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [userName, setUserName] = useState('Friend');
+  const [cartVisible, setCartVisible] = useState(false);
+  const { cartCount, addToCart } = useCart();
 
   // Data State
   const [featuredEpisodes, setFeaturedEpisodes] = useState<Episode[]>([]);
@@ -72,6 +82,8 @@ export function HomeScreen() {
     prayersLifted: 0,
     mediaItems: 0,
   });
+  const [spotlightProducts, setSpotlightProducts] = useState<Product[]>([]);
+  const [merchLoading, setMerchLoading] = useState(true);
 
   // Animation State
   const fadeAnim = React.useRef(new Animated.Value(0)).current;
@@ -82,6 +94,24 @@ export function HomeScreen() {
       duration: 1000,
       useNativeDriver: true,
     }).start();
+  }, []);
+
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      try {
+        const list = await fetchStoreProducts();
+        if (mounted) setSpotlightProducts(list.slice(0, 3));
+      } catch (error) {
+        console.error('[HomeScreen] Error fetching store products:', error);
+        if (mounted) setSpotlightProducts([]);
+      } finally {
+        if (mounted) setMerchLoading(false);
+      }
+    })();
+    return () => {
+      mounted = false;
+    };
   }, []);
 
   useEffect(() => {
@@ -192,29 +222,52 @@ export function HomeScreen() {
 
         {/* Header with Greeting */}
         <View style={styles.header}>
-          <View>
+          <View style={{ flex: 1, marginRight: 8 }}>
             <Text style={styles.brandingText}>GOD KINGDOM PRINCIPLES RADIO</Text>
-            <Text style={styles.greetingText}>{getGreeting()}, {userName}</Text>
+            <Text style={styles.greetingText} numberOfLines={1}>{getGreeting()}, {userName}</Text>
           </View>
-          {user ? (
-            <ProfileAvatar
-              uri={user.avatarurl || null}
-              size="medium"
-              onPress={() => navigation.navigate('Profile')}
-              showOnlineIndicator
-              accessibilityLabel="Open profile"
-              accessibilityRole="button"
-            />
-          ) : (
+          <View style={styles.headerRightActions}>
             <Pressable
-              style={styles.signInAvatar}
-              onPress={() => navigation.navigate('Login', { redirectBack: true })}
+              style={({ pressed }) => [
+                styles.headerCartButton,
+                { backgroundColor: theme.colors.surface },
+                pressed && styles.headerCartButtonPressed
+              ]}
+              onPress={() => {
+                Haptics.selectionAsync();
+                setCartVisible(true);
+              }}
+              accessibilityLabel="Open shopping cart"
               accessibilityRole="button"
-              accessibilityLabel="Sign in"
             >
-              <Text style={styles.signInAvatarText}>Sign in</Text>
+              <Ionicons name="cart-outline" size={22} color={theme.colors.text} />
+              {cartCount > 0 && (
+                <View style={[styles.cartBadge, { backgroundColor: theme.colors.primary }]}>
+                  <Text style={styles.cartBadgeText}>{cartCount}</Text>
+                </View>
+              )}
             </Pressable>
-          )}
+
+            {user ? (
+              <ProfileAvatar
+                uri={user.avatarurl || null}
+                size="medium"
+                onPress={() => navigation.navigate('Profile')}
+                showOnlineIndicator
+                accessibilityLabel="Open profile"
+                accessibilityRole="button"
+              />
+            ) : (
+              <Pressable
+                style={styles.signInAvatar}
+                onPress={() => navigation.navigate('Login', { redirectBack: true })}
+                accessibilityRole="button"
+                accessibilityLabel="Sign in"
+              >
+                <Text style={styles.signInAvatarText}>Sign in</Text>
+              </Pressable>
+            )}
+          </View>
         </View>
 
         <ScrollView
@@ -257,6 +310,119 @@ export function HomeScreen() {
                 prayersLifted={homeStats.prayersLifted}
                 mediaItems={homeStats.mediaItems}
               />
+
+              {/* Support the Ministry CTA */}
+              <Pressable
+                onPress={() => {
+                  Haptics.selectionAsync();
+                  navigation.navigate('Donate');
+                }}
+                style={({ pressed }) => [
+                  styles.donateCard,
+                  pressed && styles.donateCardPressed,
+                ]}
+                accessibilityRole="button"
+                accessibilityLabel="Support GKP Radio with a donation"
+              >
+                <View style={styles.donateIconContainer}>
+                  <Ionicons name="heart" size={22} color={theme.colors.primary} />
+                </View>
+                <View style={styles.donateTextContainer}>
+                  <Text style={styles.donateTitle}>Support GKP Radio</Text>
+                  <Text style={styles.donateSubtitle}>
+                    Help us keep the gospel on the air
+                  </Text>
+                </View>
+                <Ionicons name="chevron-forward" size={20} color={theme.colors.textMuted} />
+              </Pressable>
+
+              {/* Ministry Merch Spotlight Rail */}
+              <View style={styles.spotlightContainer}>
+                <View style={styles.spotlightHeader}>
+                  <Text style={styles.spotlightTitle}>Ministry Merch</Text>
+                  <Pressable
+                    onPress={() => {
+                      Haptics.selectionAsync();
+                      navigation.navigate('MerchStore');
+                    }}
+                    style={({ pressed }) => [
+                      styles.viewAllButton,
+                      pressed && styles.viewAllButtonPressed,
+                    ]}
+                  >
+                    <Text style={styles.viewAllText}>View Store</Text>
+                    <Ionicons name="chevron-forward" size={14} color={theme.colors.primary} />
+                  </Pressable>
+                </View>
+
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={styles.spotlightScroll}
+                >
+                  {merchLoading ? (
+                    <View style={styles.spotlightLoading}>
+                      <ActivityIndicator size="small" color={theme.colors.primary} />
+                    </View>
+                  ) : null}
+                  {!merchLoading &&
+                    spotlightProducts.map((product) => (
+                    <Pressable
+                      key={product.id}
+                      style={({ pressed }) => [
+                        styles.spotlightCard,
+                        {
+                          backgroundColor: theme.colors.surface,
+                          borderColor: theme.colors.border,
+                        },
+                        pressed && styles.spotlightCardPressed,
+                      ]}
+                      onPress={() => {
+                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                        navigation.navigate('ProductDetail', { product });
+                      }}
+                    >
+                      <Image source={{ uri: product.image }} style={styles.spotlightImage} />
+                      <View style={styles.spotlightInfo}>
+                        <Text style={styles.spotlightProductCategory} numberOfLines={1}>
+                          {product.category.toUpperCase()}
+                        </Text>
+                        <Text style={styles.spotlightProductName} numberOfLines={1}>
+                          {product.name}
+                        </Text>
+                        <View style={styles.spotlightFooter}>
+                          <Text style={styles.spotlightPrice}>${product.price.toFixed(2)}</Text>
+                          <Pressable
+                            style={({ pressed }) => [
+                              styles.spotlightAddButton,
+                              { backgroundColor: theme.colors.primaryLight },
+                              pressed && styles.spotlightAddButtonPressed,
+                            ]}
+                            onPress={(e) => {
+                              e.stopPropagation();
+                              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                              const size = product.sizes ? product.sizes[0] : undefined;
+                              const color = product.colors ? product.colors[0] : undefined;
+                              addToCart({
+                                productId: product.id,
+                                name: product.name,
+                                price: product.price,
+                                image: product.image,
+                                category: product.category,
+                                size,
+                                color,
+                                quantity: 1,
+                              });
+                            }}
+                          >
+                            <Ionicons name="add" size={16} color={theme.colors.primary} />
+                          </Pressable>
+                        </View>
+                      </View>
+                    </Pressable>
+                  ))}
+                </ScrollView>
+              </View>
 
               {/* Ministry Fields (Brand Element from Web) */}
               <MinistryFieldsList onPressItem={handleMinistryCategoryPress} />
@@ -311,6 +477,7 @@ export function HomeScreen() {
 
         </ScrollView>
       </SafeAreaView>
+      <CartSheet visible={cartVisible} onClose={() => setCartVisible(false)} />
     </View>
   );
 }
@@ -332,6 +499,167 @@ function createStyles(theme: Theme) {
       paddingHorizontal: 20,
       paddingTop: 16,
       paddingBottom: 8,
+    },
+    headerRightActions: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 12,
+    },
+    headerCartButton: {
+      width: 40,
+      height: 40,
+      borderRadius: 12,
+      justifyContent: 'center',
+      alignItems: 'center',
+      position: 'relative',
+    },
+    headerCartButtonPressed: {
+      opacity: 0.7,
+    },
+    cartBadge: {
+      position: 'absolute',
+      top: -4,
+      right: -4,
+      minWidth: 18,
+      height: 18,
+      borderRadius: 9,
+      justifyContent: 'center',
+      alignItems: 'center',
+      paddingHorizontal: 4,
+    },
+    cartBadgeText: {
+      color: '#fff',
+      fontSize: 10,
+      fontWeight: '700',
+    },
+    donateCard: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      marginHorizontal: 20,
+      marginTop: 4,
+      marginBottom: 8,
+      paddingVertical: 14,
+      paddingHorizontal: 16,
+      borderRadius: 16,
+      borderWidth: 1,
+      backgroundColor: theme.colors.surface,
+      borderColor: theme.colors.border,
+      gap: 12,
+    },
+    donateCardPressed: {
+      opacity: 0.7,
+    },
+    donateIconContainer: {
+      width: 44,
+      height: 44,
+      borderRadius: 12,
+      backgroundColor: theme.colors.primaryLight,
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    donateTextContainer: {
+      flex: 1,
+    },
+    donateTitle: {
+      fontSize: 15,
+      fontWeight: '700',
+      color: theme.colors.text,
+      marginBottom: 2,
+    },
+    donateSubtitle: {
+      fontSize: 12,
+      color: theme.colors.textMuted,
+    },
+    spotlightContainer: {
+      marginTop: 12,
+      marginBottom: 20,
+    },
+    spotlightHeader: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      paddingHorizontal: 20,
+      marginBottom: 12,
+    },
+    spotlightTitle: {
+      fontSize: 18,
+      fontWeight: '700',
+      color: theme.colors.text,
+    },
+    viewAllButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 2,
+    },
+    viewAllButtonPressed: {
+      opacity: 0.7,
+    },
+    viewAllText: {
+      fontSize: 13,
+      fontWeight: '600',
+      color: theme.colors.primary,
+    },
+    spotlightLoading: {
+      width: 120,
+      height: 160,
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    spotlightScroll: {
+      paddingLeft: 20,
+      paddingRight: 20,
+      gap: 12,
+    },
+    spotlightCard: {
+      width: 160,
+      borderRadius: 16,
+      borderWidth: 1,
+      overflow: 'hidden',
+    },
+    spotlightCardPressed: {
+      opacity: 0.95,
+    },
+    spotlightImage: {
+      width: '100%',
+      height: 120,
+      borderTopLeftRadius: 15,
+      borderTopRightRadius: 15,
+    },
+    spotlightInfo: {
+      padding: 10,
+    },
+    spotlightProductCategory: {
+      fontSize: 8,
+      fontWeight: '700',
+      color: theme.colors.textMuted,
+      letterSpacing: 0.5,
+      marginBottom: 2,
+    },
+    spotlightProductName: {
+      fontSize: 13,
+      fontWeight: '600',
+      color: theme.colors.text,
+      marginBottom: 6,
+    },
+    spotlightFooter: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+    },
+    spotlightPrice: {
+      fontSize: 14,
+      fontWeight: '700',
+      color: theme.colors.text,
+    },
+    spotlightAddButton: {
+      width: 28,
+      height: 28,
+      borderRadius: 9,
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    spotlightAddButtonPressed: {
+      opacity: 0.7,
     },
     signInAvatar: {
       minWidth: 74,

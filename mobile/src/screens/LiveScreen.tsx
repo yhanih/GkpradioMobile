@@ -135,10 +135,10 @@ export function LiveScreen() {
   }
 
   const hasLiveNow = Boolean(liveEvent);
-  const heroTitle = liveEvent?.title || 'No Live Show Right Now';
+  const heroTitle = liveEvent?.title || 'Nothing live on video right now';
   const heroDescription =
     liveEvent?.description ||
-    'The stream is offline right now. Check upcoming events below or configure a fallback live stream URL.';
+    'When a broadcast starts, you can watch it here. Scroll down to see what is coming up, or keep listening from the player at the bottom of the app.';
   const heroImage = liveEvent?.thumbnail_url || FALLBACK_HERO_IMAGE;
 
   return (
@@ -202,7 +202,7 @@ export function LiveScreen() {
                   style={styles.heroButtonGradient}
                 >
                   <Ionicons name="videocam" size={22} color="#fff" />
-                  <Text style={styles.heroButtonText}>{hasLiveNow ? 'Watch Live Show' : 'No Stream Available'}</Text>
+                  <Text style={styles.heroButtonText}>{hasLiveNow ? 'Watch Live Show' : 'Video not available yet'}</Text>
                 </LinearGradient>
               </Pressable>
             </View>
@@ -211,13 +211,14 @@ export function LiveScreen() {
 
         <View style={[styles.contentContainer, { backgroundColor: theme.colors.background }]}>
           <View style={styles.section}>
-            <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>Upcoming Live Shows</Text>
+            <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>Upcoming events</Text>
             {upcomingWithoutCurrent.length === 0 ? (
               <View style={styles.emptyState}>
                 <Ionicons name="calendar-outline" size={42} color={theme.colors.textMuted} />
-                <Text style={[styles.emptyTitle, { color: theme.colors.text }]}>No upcoming shows</Text>
+                <Text style={[styles.emptyTitle, { color: theme.colors.text }]}>Nothing scheduled yet</Text>
                 <Text style={[styles.emptyText, { color: theme.colors.textMuted }]}>
-                  Add events in the `live_events` table, or set `EXPO_PUBLIC_LIVE_VIDEO_URL` for a persistent stream.
+                  When new live or special events are added, they will appear here. Pull down to refresh, or enjoy the
+                  station audio anytime from the bar below.
                 </Text>
               </View>
             ) : (

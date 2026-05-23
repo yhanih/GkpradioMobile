@@ -1,5 +1,6 @@
 import { supabase } from './supabase';
 import { PostType, getPostTypeForCategory, isPrayerCategory } from '../constants/categories';
+import { isCommunityTextBlocked, UGC_FILTER_USER_MESSAGE } from '../utils/contentUgcFilter';
 
 export type SortOption = 'newest' | 'popular' | 'discussed';
 
@@ -149,7 +150,7 @@ const ALLOWED_POST_CATEGORIES = new Set([
   'Bragging on My Child (ren)',
 ]);
 
-function sanitizeText(value: string | null | undefined): string {
+export function sanitizeText(value: string | null | undefined): string {
   return (value || '').replace(/<[^>]*>?/gm, '');
 }
 
@@ -316,7 +317,7 @@ export async function unblockCommunityUser(blockerId: string, blockedId: string)
   if (error) throw new Error(error.message || 'Failed to unblock user');
 }
 
-export type CommunityReportTarget = 'post' | 'comment';
+export type CommunityReportTarget = 'post' | 'comment' | 'user' | 'live_chat_message';
 
 export async function reportCommunityContent(params: {
   reporterId: string;
@@ -329,6 +330,7 @@ export async function reportCommunityContent(params: {
     target_type: params.targetType,
     target_id: params.targetId,
     reason: params.reason?.trim() || null,
+    status: 'pending',
   });
   if (error) throw new Error(error.message || 'Failed to submit report');
 }
@@ -404,9 +406,21 @@ function normalizePostContent(value: string): string {
   return value.trim();
 }
 
+/** PostgREST / Postgres message when ugc_text_is_blocked trigger rejects a row. */
+function mapUgcDbBlockMessage(raw: string | undefined): CreatePostError | null {
+  const m = String(raw || '').toLowerCase();
+  if (!m) return null;
+  if (m.includes('content violates community guidelines') || m.includes('ugc_content')) {
+    return new CreatePostError('validation', UGC_FILTER_USER_MESSAGE);
+  }
+  return null;
+}
+
 function mapCreatePostError(error: unknown): CreatePostError {
   if (error instanceof CreatePostError) return error;
   const message = error instanceof Error ? error.message : 'Failed to create post';
+  const fromDb = mapUgcDbBlockMessage(message);
+  if (fromDb) return fromDb;
   const lower = message.toLowerCase();
   if (lower.includes('timeout')) return new CreatePostError('timeout', 'Request timed out');
   if (
@@ -554,8 +568,8 @@ export async function createCommunityPost(params: {
   postType?: PostType;
   isAnonymous?: boolean;
 }): Promise<BackendThread> {
-  const normalizedTitle = normalizePostTitle(params.title || '');
-  const normalizedContent = normalizePostContent(params.content || '');
+  const normalizedTitle = sanitizeText(normalizePostTitle(params.title || ''));
+  const normalizedContent = sanitizeText(normalizePostContent(params.content || ''));
   const category = (params.category || '').trim();
   const userId = (params.userId || '').trim();
   const postType = params.postType || getPostTypeForCategory(category);
@@ -589,6 +603,9 @@ export async function createCommunityPost(params: {
   }
   if (!ALLOWED_POST_CATEGORIES.has(category)) {
     throw new CreatePostError('validation', 'Please select a valid category.');
+  }
+  if (isCommunityTextBlocked(normalizedTitle) || isCommunityTextBlocked(normalizedContent)) {
+    throw new CreatePostError('validation', UGC_FILTER_USER_MESSAGE);
   }
 
   try {
@@ -915,12 +932,15 @@ export async function createCommentForPost(
   userId: string,
   content: string
 ): Promise<BackendComment> {
-  const normalizedContent = content.trim();
+  const normalizedContent = sanitizeText(content.trim());
   if (!normalizedContent) {
     throw new CreatePostError('validation', 'Comment cannot be empty.');
   }
   if (!userId) {
     throw new CreatePostError('auth', 'You must be signed in to comment.');
+  }
+  if (isCommunityTextBlocked(normalizedContent)) {
+    throw new CreatePostError('validation', UGC_FILTER_USER_MESSAGE);
   }
 
   const createPromise = supabase
@@ -935,7 +955,11 @@ export async function createCommentForPost(
     .then((result) => result);
 
   const { data, error } = await withTimeout(createPromise, CREATE_POST_TIMEOUT_MS);
-  if (error || !data) throw new Error(error?.message || 'Failed to create comment');
+  if (error || !data) {
+    const blocked = mapUgcDbBlockMessage(error?.message);
+    if (blocked) throw blocked;
+    throw new Error(error?.message || 'Failed to create comment');
+  }
 
   const { data: profile } = await supabase
     .from('profiles')

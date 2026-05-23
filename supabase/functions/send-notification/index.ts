@@ -1,30 +1,49 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 
-// This function sends a notification using Expo's Push API
-// It expects a JSON body with { "to": "token", "title": "title", "body": "body", "data": {} }
-
 Deno.serve(async (req: Request) => {
-    try {
-        const { to, title, body, data } = await req.json();
+    if (req.method !== 'POST') {
+        return new Response(JSON.stringify({ error: 'Method not allowed' }), {
+            status: 405,
+            headers: { 'Content-Type': 'application/json' },
+        });
+    }
 
-        if (!to) {
-            return new Response(JSON.stringify({ error: 'Recipient token required' }), {
+    try {
+        const { to, title, body, data, sound, badge } = await req.json();
+
+        if (!to || typeof to !== 'string') {
+            return new Response(JSON.stringify({ error: 'A valid "to" (Expo push token) is required' }), {
                 status: 400,
                 headers: { 'Content-Type': 'application/json' },
             });
         }
 
+        if (!body || typeof body !== 'string') {
+            return new Response(JSON.stringify({ error: 'A "body" string is required' }), {
+                status: 400,
+                headers: { 'Content-Type': 'application/json' },
+            });
+        }
+
+        const payload: Record<string, unknown> = {
+            to,
+            title: title ?? 'GKP Radio',
+            body,
+            sound: sound ?? 'default',
+        };
+
+        if (data && typeof data === 'object') {
+            payload.data = data;
+        }
+
+        if (typeof badge === 'number') {
+            payload.badge = badge;
+        }
+
         const response = await fetch('https://exp.host/--/api/v2/push/send', {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-                to,
-                title,
-                body,
-                data,
-            }),
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
         });
 
         const result = await response.json();
@@ -33,7 +52,7 @@ Deno.serve(async (req: Request) => {
             headers: { 'Content-Type': 'application/json' },
         });
     } catch (error) {
-        return new Response(JSON.stringify({ error: error.message }), {
+        return new Response(JSON.stringify({ error: (error as Error).message }), {
             status: 500,
             headers: { 'Content-Type': 'application/json' },
         });

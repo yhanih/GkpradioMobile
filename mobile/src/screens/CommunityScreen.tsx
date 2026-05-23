@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { View, Text, ScrollView, StyleSheet, Pressable, ActivityIndicator, RefreshControl, Alert, Image, TextInput, Animated, Share, Dimensions, Modal } from 'react-native';
+import { View, Text, ScrollView, StyleSheet, Pressable, ActivityIndicator, RefreshControl, Alert, Image, TextInput, Animated, Share, Modal, useWindowDimensions } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useFocusEffect, useRoute, RouteProp } from '@react-navigation/native';
@@ -32,8 +32,7 @@ import {
 import { RootStackParamList, MainTabParamList } from '../types/navigation';
 import { useToast } from '../components/Toast';
 import { openPostOverflowMenu } from '../utils/contentOverflowMenu';
-
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
+import { REPORT_SUBMITTED_ALERT } from '../constants/reportReasons';
 
 const COMMUNITY_SAFETY_MESSAGE =
   'Please refrain from making any monetary donations or transactions to other user(s) or member(s) while using this platform. This ministry is dedicated to uplifting, encouraging, and educating.';
@@ -79,7 +78,8 @@ export function CommunityScreen() {
   const { isBookmarked, toggleBookmark, refreshBookmarks } = useBookmarks();
   const { showToast } = useToast();
   const insets = useSafeAreaInsets();
-  const [activeMode, setActiveMode] = useState<ModeType>('prayers');
+  const { width: windowWidth } = useWindowDimensions();
+  const [activeMode, setActiveMode] = useState<ModeType>('discussions');
   const [activeCategory, setActiveCategory] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [debouncedSearchQuery, setDebouncedSearchQuery] = useState('');
@@ -95,11 +95,20 @@ export function CommunityScreen() {
   const [showSortMenu, setShowSortMenu] = useState(false);
   const [likingThreadId, setLikingThreadId] = useState<string | null>(null);
   const [likeAnimations] = useState<{ [key: string]: Animated.Value }>({});
+  const [modeTabTrackWidth, setModeTabTrackWidth] = useState(0);
   const fabScale = useRef(new Animated.Value(1)).current;
   const sortByRef = useRef(sortBy);
   const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const tabIndicatorAnim = useRef(new Animated.Value(0)).current;
   const realtimeDebounceRef = useRef<NodeJS.Timeout | null>(null);
+
+  const modeTabSlidePx = useMemo(
+    () =>
+      modeTabTrackWidth > 0
+        ? modeTabTrackWidth / 2
+        : Math.max(80, (windowWidth - 48) / 2),
+    [modeTabTrackWidth, windowWidth]
+  );
 
   const dedupeThreads = useCallback((items: ThreadWithUser[]) => {
     const seen = new Set<string>();
@@ -131,7 +140,7 @@ export function CommunityScreen() {
       tension: 100,
       friction: 10,
     }).start();
-  }, [activeMode]);
+  }, [activeMode, modeTabTrackWidth]);
 
   useEffect(() => {
     if (searchTimeoutRef.current) {
@@ -893,7 +902,10 @@ export function CommunityScreen() {
 
         {/* Mode Tab Switcher */}
         <View style={styles.tabContainer}>
-          <View style={styles.tabBackground}>
+          <View
+            style={styles.tabBackground}
+            onLayout={e => setModeTabTrackWidth(e.nativeEvent.layout.width)}
+          >
             <Animated.View
               style={[
                 styles.tabIndicator,
@@ -901,7 +913,7 @@ export function CommunityScreen() {
                   transform: [{
                     translateX: tabIndicatorAnim.interpolate({
                       inputRange: [0, 1],
-                      outputRange: [0, (SCREEN_WIDTH - 48) / 2],
+                      outputRange: [0, modeTabSlidePx],
                     })
                   }],
                 },
@@ -1167,7 +1179,7 @@ export function CommunityScreen() {
         targetType="post"
         targetId={reportPostId ?? ''}
         onSubmitted={() =>
-          showToast('Thanks — we received your report and will review it.', 'success')
+          Alert.alert(REPORT_SUBMITTED_ALERT.title, REPORT_SUBMITTED_ALERT.message)
         }
       />
     </SafeAreaView>

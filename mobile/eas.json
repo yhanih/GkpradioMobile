@@ -18,6 +18,10 @@
       "autoIncrement": true,
       "android": {
         "buildType": "app-bundle"
+      },
+      "ios": {
+        "resourceClass": "m-medium",
+        "distribution": "store"
       }
     }
   },
@@ -30,6 +34,9 @@
     "production": {
       "android": {
         "track": "production"
+      },
+      "ios": {
+        "language": "en-US"
       }
     }
   }

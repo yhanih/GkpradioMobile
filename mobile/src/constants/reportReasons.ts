@@ -53,6 +53,13 @@ export function getReportReasonMeta(id: string) {
   return REPORT_REASONS.find((r) => r.id === id) ?? REPORT_REASONS[REPORT_REASONS.length - 1];
 }
 
+/** Shown after a report is submitted (aligns with App Store UGC disclosure). */
+export const REPORT_SUBMITTED_ALERT = {
+  title: 'Thank you for your report',
+  message:
+    'Our moderation team will review the reported content or user for possible violations of the GKP Radio Community Standards. Appropriate action may be taken, including content removal or account suspension.',
+} as const;
+
 /** Stored in `reports.reason` for moderator triage (category + optional free text). */
 export function buildReportReason(categoryId: string, details: string): string {
   const meta = getReportReasonMeta(categoryId);
