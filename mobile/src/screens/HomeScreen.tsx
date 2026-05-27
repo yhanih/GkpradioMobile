@@ -381,6 +381,31 @@ export function HomeScreen() {
                 />
               ) : null}
 
+              {/* Bible Games CTA */}
+              <Pressable
+                onPress={() => {
+                  Haptics.selectionAsync();
+                  navigation.navigate('Games');
+                }}
+                style={({ pressed }) => [
+                  styles.donateCard,
+                  pressed && styles.donateCardPressed,
+                ]}
+                accessibilityRole="button"
+                accessibilityLabel="Play GKP Bible Games"
+              >
+                <View style={styles.donateIconContainer}>
+                  <Ionicons name="game-controller" size={22} color={theme.colors.primary} />
+                </View>
+                <View style={styles.donateTextContainer}>
+                  <Text style={styles.donateTitle}>GKP Bible Games</Text>
+                  <Text style={styles.donateSubtitle}>
+                    Play & climb the Kingdom leaderboard
+                  </Text>
+                </View>
+                <Ionicons name="chevron-forward" size={20} color={theme.colors.textMuted} />
+              </Pressable>
+
               {/* Support the Ministry CTA */}
               <Pressable
                 onPress={() => {

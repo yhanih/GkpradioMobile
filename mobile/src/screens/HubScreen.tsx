@@ -472,6 +472,19 @@ export function HubScreen() {
         </View>
 
         <View style={styles.section}>
+          <SectionHeader title="Kingdom Games" theme={theme} />
+          <View style={[styles.card, { backgroundColor: theme.colors.surface }]}>
+            <SettingItem
+              icon="game-controller-outline"
+              label="GKP Bible Games"
+              subtitle="Righteous Quest, Word Search & Crossword — synced leaderboards"
+              onPress={() => navigation.navigate('Games')}
+              theme={theme}
+            />
+          </View>
+        </View>
+
+        <View style={styles.section}>
           <SectionHeader title="Support the Ministry" theme={theme} />
           <View style={[styles.card, { backgroundColor: theme.colors.surface }]}>
             <SettingItem

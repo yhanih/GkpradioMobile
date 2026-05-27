@@ -31,6 +31,7 @@ export type RootStackParamList = {
   MerchStore: undefined;
   ProductDetail: { product: any };
   Donate: { amount?: number } | undefined;
+  Games: undefined;
 };
 
 export type MainTabParamList = {

@@ -36,6 +36,7 @@ import { LoginScreen } from './src/screens/auth/LoginScreen';
 import { MerchStoreScreen } from './src/screens/MerchStoreScreen';
 import { ProductDetailScreen } from './src/screens/ProductDetailScreen';
 import { DonateScreen } from './src/screens/DonateScreen';
+import { GamesScreen } from './src/screens/GamesScreen';
 import { SignupScreen } from './src/screens/auth/SignupScreen';
 import { ConfirmEmailScreen } from './src/screens/auth/ConfirmEmailScreen';
 import { ForgotPasswordScreen } from './src/screens/auth/ForgotPasswordScreen';
@@ -374,6 +375,11 @@ function RootNavigator() {
       <Stack.Screen
         name="Donate"
         component={DonateScreen}
+        options={{ animation: 'slide_from_right' }}
+      />
+      <Stack.Screen
+        name="Games"
+        component={GamesScreen}
         options={{ animation: 'slide_from_right' }}
       />
     </Stack.Navigator>

@@ -140,6 +140,12 @@ module.exports = {
       merchStoreWebUrl:
         process.env.EXPO_PUBLIC_MERCH_STORE_WEB_URL ||
         'https://godkingdomprinciplesradio.com/apis/shop',
+      gamesWebUrl:
+        process.env.EXPO_PUBLIC_GAMES_WEB_URL ||
+        'https://godkingdomprinciplesradio.com/games',
+      gamesApiUrl:
+        process.env.EXPO_PUBLIC_GAMES_API_URL ||
+        'https://godkingdomprinciplesradio.com/api/games',
     },
     plugins,
   },
