@@ -126,8 +126,9 @@ curl -sI 'https://godkingdomprinciplesradio.com/apis/wp-content/uploads/2026/02/
 
 ## References
 
-- Recovery checklist: `mobile/docs/VPS_WORDPRESS_RECOVERY_CHECKLIST.md` (Phase 2b)
+- Recovery checklist: `mobile/docs/VPS_WORDPRESS_RECOVERY_CHECKLIST.md` (Phase 2b) 
 - Mobile endpoint inventory: `mobile/docs/MOBILE_ENDPOINT_INVENTORY.md`
 - Backups from prior recovery: `pre-wp-recovery-20260527-180527-httpdocs`, `vhost_nginx.conf.pre-wp-recovery-*`
 
 ---
+I love when a get 
