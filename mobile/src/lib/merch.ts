@@ -88,6 +88,13 @@ interface PrepareCartApiResponse {
 
 const DEFAULT_RATING = 4.5;
 const DEFAULT_CATEGORY = 'Merch';
+const DEFAULT_PRODUCT_IMAGE =
+  'https://godkingdomprinciplesradio.com/apis/wp-content/uploads/woocommerce-placeholder.webp';
+
+function resolveProductImage(url: string | undefined | null): string {
+  const normalized = normalizeStoreAssetUrl(url);
+  return normalized.trim() || DEFAULT_PRODUCT_IMAGE;
+}
 
 function parseCategoryName(
   categories: WcApiProduct['categories']
@@ -119,7 +126,7 @@ export function mapApiProductToProduct(api: WcApiProduct): Product {
     salePrice: api.sale_price,
     onSale: api.on_sale,
     category: parseCategoryName(api.categories),
-    image: normalizeStoreAssetUrl(api.image),
+    image: resolveProductImage(api.image),
     description: api.description || api.short_description || '',
     sizes: attributeList(api.attributes, 'Size'),
     colors: attributeList(api.attributes, 'Color'),
