@@ -69,7 +69,7 @@ export function MiniPlayer({ onPress }: MiniPlayerProps) {
   };
 
   const trackTitle = nowPlaying?.now_playing?.song?.title || 'GKP Radio';
-  const trackArtist = nowPlaying?.now_playing?.song?.artist || 'Live Stream';
+  const trackArtist = nowPlaying?.now_playing?.song?.artist ?? 'Tap to listen';
 
   return (
     <Animated.View

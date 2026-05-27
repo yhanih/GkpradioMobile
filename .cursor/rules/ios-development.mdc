@@ -1,0 +1,49 @@
+---
+description: GKP Radio iOS run/test workflow — always use the project default commands
+alwaysApply: true
+---
+
+# iOS development workflow (GKP Radio)
+
+## Default: Option C — EAS development build
+
+When running or testing iOS, **always use the EAS development client workflow** unless the user explicitly asks for Simulator, local `expo run:ios`, or Expo Go.
+
+App code is in `mobile/`. Do **not** suggest `cd mobile` when the shell is already in `mobile/`.
+
+### Step 1 — Build dev client (when native code changed or first install)
+
+```bash
+npm run ios:dev
+```
+
+### Step 2 — Install on iPhone
+
+Use the link/QR from [expo.dev](https://expo.dev) when the build finishes (internal distribution).
+
+### Step 3 — Run JS against the dev client
+
+```bash
+npm run start:dev
+```
+
+Open the **GKP Radio** dev app on the phone (not Expo Go). Scan the Metro QR if needed.
+
+## Other options (only when user asks)
+
+| Option | When | Command |
+|--------|------|---------|
+| **C — EAS dev build** (default) | Real device, background audio, no local signing | `npm run ios:dev` then `npm run start:dev` |
+| **A — Simulator** | Local Mac, no signing | `npm run ios:sim` |
+| **B — Physical device** | Local Xcode install | `npm run ios:device` |
+| **Expo Go + tunnel** | Quick UI only (no background audio) | `npm run start:tunnel` |
+
+## Audio / background listening
+
+- **Expo Go**: in-app only; background and lock screen **do not** work.
+- **EAS dev client** (default): full `expo-audio` + lock screen on a **physical iPhone**.
+- Never claim background audio works in Expo Go.
+
+## App Store releases
+
+Production iOS upload: `npm run appstore:ios` then `npm run appstore:ios:submit` (from `mobile/`).

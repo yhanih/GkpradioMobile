@@ -31,7 +31,7 @@ export function LoginScreen() {
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [agreedToTerms, setAgreedToTerms] = useState(false);
-  const { signIn } = useAuth();
+  const { signIn, acceptCommunityTerms } = useAuth();
   const { theme } = useTheme();
   const styles = useMemo(() => createLoginStyles(theme), [theme]);
 
@@ -82,6 +82,10 @@ export function LoginScreen() {
         Alert.alert('Login Failed', raw);
       }
     } else {
+      const { error: termsError } = await acceptCommunityTerms();
+      if (termsError) {
+        console.warn('[Login] terms acceptance:', termsError.message);
+      }
       // Login success — return to where the user came from.
       if (shouldRedirectBack && navigation.canGoBack()) {
         navigation.goBack();
@@ -177,7 +181,7 @@ export function LoginScreen() {
                 </View>
               </Pressable>
               <Text style={styles.termsText}>
-                I agree to the{' '}
+                I confirm I am at least 18 years old and agree to the{' '}
                 <Text
                   style={styles.termsLink}
                   onPress={() => navigation.navigate('TermsOfService')}
@@ -185,6 +189,7 @@ export function LoginScreen() {
                 >
                   Terms of Service & Community Guidelines
                 </Text>
+                , including zero tolerance for objectionable content and abusive users.
               </Text>
             </View>
 

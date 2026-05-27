@@ -18,6 +18,7 @@ import { useTheme } from '../contexts/ThemeContext';
 import { useCart, CartItem } from '../contexts/CartContext';
 import { AnimatedButton } from './AnimatedPressable';
 import { prepareStoreCheckout } from '../lib/merch';
+import * as WebBrowser from 'expo-web-browser';
 
 interface CartSheetProps {
   visible: boolean;
@@ -26,7 +27,7 @@ interface CartSheetProps {
 
 export function CartSheet({ visible, onClose }: CartSheetProps) {
   const { theme } = useTheme();
-  const { cartItems, updateQuantity, removeFromCart, cartTotal, clearCart } = useCart();
+  const { cartItems, isCartReady, updateQuantity, removeFromCart, cartTotal, clearCart } = useCart();
   const [checkoutLoading, setCheckoutLoading] = useState(false);
 
   const shippingCost = cartTotal >= 50 || cartTotal === 0 ? 0 : 5.99;
@@ -48,19 +49,27 @@ export function CartSheet({ visible, onClose }: CartSheetProps) {
   };
 
   const handleSecureCheckout = async () => {
-    if (cartItems.length === 0 || checkoutLoading) return;
+    if (!isCartReady || cartItems.length === 0 || checkoutLoading) return;
 
     Haptics.selectionAsync();
     setCheckoutLoading(true);
 
     try {
       const checkoutUrl = await prepareStoreCheckout(cartItems);
-      const canOpen = await Linking.canOpenURL(checkoutUrl);
-      if (!canOpen) {
-        throw new Error('Could not open secure checkout in your browser');
-      }
 
-      await Linking.openURL(checkoutUrl);
+      try {
+        await WebBrowser.openBrowserAsync(checkoutUrl, {
+          presentationStyle: WebBrowser.WebBrowserPresentationStyle.FULL_SCREEN,
+          dismissButtonStyle: 'done',
+          enableBarCollapsing: true,
+        });
+      } catch {
+        const canOpen = await Linking.canOpenURL(checkoutUrl);
+        if (!canOpen) {
+          throw new Error('Could not open secure checkout in your browser');
+        }
+        await Linking.openURL(checkoutUrl);
+      }
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       onClose();
     } catch (error) {
@@ -165,11 +174,17 @@ export function CartSheet({ visible, onClose }: CartSheetProps) {
             contentContainerStyle={styles.listContent}
             ListEmptyComponent={
               <View style={styles.emptyState}>
-                <Ionicons name="cart-outline" size={64} color={theme.colors.textMuted} />
-                <Text style={[styles.emptyTitle, { color: theme.colors.text }]}>Your cart is empty</Text>
-                <Text style={[styles.emptySub, { color: theme.colors.textMuted }]}>
-                  Explore our premium store collection to support the ministry.
-                </Text>
+                {!isCartReady ? (
+                  <ActivityIndicator size="large" color={theme.colors.primary} />
+                ) : (
+                  <>
+                    <Ionicons name="cart-outline" size={64} color={theme.colors.textMuted} />
+                    <Text style={[styles.emptyTitle, { color: theme.colors.text }]}>Your cart is empty</Text>
+                    <Text style={[styles.emptySub, { color: theme.colors.textMuted }]}>
+                      Explore our premium store collection to support the ministry.
+                    </Text>
+                  </>
+                )}
               </View>
             }
           />
@@ -177,7 +192,7 @@ export function CartSheet({ visible, onClose }: CartSheetProps) {
           {cartItems.length > 0 && (
             <View style={[styles.summaryFooter, { backgroundColor: theme.colors.surface, borderTopColor: theme.colors.border }]}>
               <Text style={[styles.checkoutNote, { color: theme.colors.textMuted }]}>
-                Payment is completed securely on our website (Safari). Your cart stays here if you return before paying. Clear it after your order is complete.
+                You will open our secure checkout in your browser with these items pre-loaded. Your in-app cart stays until you clear it after payment.
               </Text>
               <View style={styles.summaryRow}>
                 <Text style={[styles.summaryLabel, { color: theme.colors.textSecondary }]}>Subtotal</Text>
@@ -199,7 +214,7 @@ export function CartSheet({ visible, onClose }: CartSheetProps) {
                 variant="primary"
                 style={styles.checkoutBtn}
                 onPress={handleSecureCheckout}
-                disabled={checkoutLoading}
+                disabled={checkoutLoading || !isCartReady}
               >
                 {checkoutLoading ? (
                   <ActivityIndicator color="#fff" />

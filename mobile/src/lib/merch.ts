@@ -1,9 +1,57 @@
 import type { CartItem } from '../contexts/CartContext';
 import type { Product } from '../types/product';
+import { storeHttpRequest } from './storeHttp';
+import { normalizeStoreAssetUrl, normalizeStoreCheckoutUrl } from './storeUrls';
 
-const WORDPRESS_API_BASE_URL =
-  process.env.EXPO_PUBLIC_WORDPRESS_API_BASE_URL ||
-  'https://godkingdomprinciplesradio.com/apis/wp-json';
+const DEFAULT_WORDPRESS_API_BASE = 'https://godkingdomprinciplesradio.com/apis/wp-json';
+
+/** Resolved at request time so Metro reload picks up .env changes. */
+function getWordPressApiBaseUrl(): string {
+  const fromEnv = process.env.EXPO_PUBLIC_WORDPRESS_API_BASE_URL?.trim();
+  return fromEnv || DEFAULT_WORDPRESS_API_BASE;
+}
+
+export function getStoreProductsUrl(): string {
+  const override = process.env.EXPO_PUBLIC_STORE_PRODUCTS_URL?.trim();
+  if (override) return override;
+  return `${getWordPressApiBaseUrl()}/custom-api/v1/products`;
+}
+
+function getStorePrepareCartUrl(): string {
+  const override = process.env.EXPO_PUBLIC_STORE_PREPARE_CART_URL?.trim();
+  if (override) return override;
+  return `${getWordPressApiBaseUrl()}/custom-api/v1/prepare-cart`;
+}
+
+function parseStoreJson<T>(body: string, requestUrl: string, finalUrl: string): T {
+  const trimmed = body.trimStart();
+
+  if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
+    try {
+      return JSON.parse(body) as T;
+    } catch {
+      throw new Error('Store API returned invalid JSON.');
+    }
+  }
+
+  if (
+    trimmed.startsWith('<!DOCTYPE') ||
+    trimmed.startsWith('<html')
+  ) {
+    if (__DEV__) {
+      console.warn('[merch] Expected JSON but received HTML.', {
+        requestUrl,
+        finalUrl,
+        preview: trimmed.slice(0, 120),
+      });
+    }
+    throw new Error(
+      'Store catalog API is unavailable (server returned a web page instead of product data). Check DNS/network on this device or open the products URL in Safari.',
+    );
+  }
+
+  throw new Error('Store API returned invalid JSON.');
+}
 
 export interface WcApiProduct {
   id: number;
@@ -71,7 +119,7 @@ export function mapApiProductToProduct(api: WcApiProduct): Product {
     salePrice: api.sale_price,
     onSale: api.on_sale,
     category: parseCategoryName(api.categories),
-    image: api.image,
+    image: normalizeStoreAssetUrl(api.image),
     description: api.description || api.short_description || '',
     sizes: attributeList(api.attributes, 'Size'),
     colors: attributeList(api.attributes, 'Color'),
@@ -83,14 +131,14 @@ export function mapApiProductToProduct(api: WcApiProduct): Product {
 }
 
 export async function fetchStoreProducts(): Promise<Product[]> {
-  const url = `${WORDPRESS_API_BASE_URL}/custom-api/v1/products`;
-  const response = await fetch(url);
+  const url = getStoreProductsUrl();
+  const { body, status, requestUrl, finalUrl } = await storeHttpRequest(url, { method: 'GET' });
 
-  if (!response.ok) {
-    throw new Error(`Store products request failed (${response.status})`);
+  if (status < 200 || status >= 300) {
+    throw new Error(`Store products request failed (${status})`);
   }
 
-  const data = (await response.json()) as ProductsApiResponse;
+  const data = parseStoreJson<ProductsApiResponse>(body, requestUrl, finalUrl);
 
   if (!data.success || !Array.isArray(data.products)) {
     throw new Error(data.message || 'Could not load store products');
@@ -124,24 +172,26 @@ export async function prepareStoreCheckout(cartItems: CartItem[]): Promise<strin
     };
   });
 
-  const url = `${WORDPRESS_API_BASE_URL}/custom-api/v1/prepare-cart`;
-  const response = await fetch(url, {
+  const url = getStorePrepareCartUrl();
+  const { body, status, requestUrl, finalUrl } = await storeHttpRequest(url, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ items }),
   });
 
-  if (!response.ok) {
-    throw new Error(`Checkout request failed (${response.status})`);
+  const data = parseStoreJson<
+    PrepareCartApiResponse & { code?: string }
+  >(body, requestUrl, finalUrl);
+
+  if (status < 200 || status >= 300 || !data.success || !data.checkout_url) {
+    const message =
+      data.message ||
+      (status === 400
+        ? 'One or more items could not be added to checkout. Open the product and try again.'
+        : `Checkout request failed (${status})`);
+    throw new Error(message);
   }
 
-  const data = (await response.json()) as PrepareCartApiResponse;
-
-  if (!data.success || !data.checkout_url) {
-    throw new Error(data.message || 'Could not prepare checkout');
-  }
-
-  return data.checkout_url;
+  return normalizeStoreCheckoutUrl(data.checkout_url);
 }
 
 export function getStoreCategoryFilters(products: Product[]): string[] {

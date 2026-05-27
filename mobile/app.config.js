@@ -8,6 +8,7 @@ const includeDevClient = !easProfile || easProfile === 'development';
 
 const plugins = [
   ...(includeDevClient ? ['expo-dev-client'] : []),
+  'expo-web-browser',
   'expo-notifications',
   ['expo-font'],
   ['expo-video'],
@@ -15,6 +16,14 @@ const plugins = [
     'expo-av',
     {
       microphonePermission: 'GKP Radio needs microphone access for audio features.',
+    },
+  ],
+  [
+    'expo-audio',
+    {
+      microphonePermission: 'GKP Radio needs microphone access for audio features.',
+      enableBackgroundPlayback: true,
+      enableBackgroundRecording: false,
     },
   ],
   [
@@ -90,6 +99,7 @@ module.exports = {
         'FOREGROUND_SERVICE',
         'FOREGROUND_SERVICE_MEDIA_PLAYBACK',
         'POST_NOTIFICATIONS',
+        'WAKE_LOCK',
       ],
       intentFilters: [
         {
@@ -119,6 +129,17 @@ module.exports = {
       eas: {
         projectId: '794ab331-d1c6-4158-ac8e-14ce9b083568',
       },
+      /** Settings → Share App link (override with EXPO_PUBLIC_APP_SHARE_URL) */
+      appShareUrl: process.env.EXPO_PUBLIC_APP_SHARE_URL || 'https://gkpradio.com',
+      /** Full App Store URL or set iosAppStoreId / EXPO_PUBLIC_IOS_APP_STORE_ID */
+      appStoreUrl: process.env.EXPO_PUBLIC_APP_STORE_URL || '',
+      iosAppStoreId: process.env.EXPO_PUBLIC_IOS_APP_STORE_ID || '',
+      playStoreUrl:
+        process.env.EXPO_PUBLIC_PLAY_STORE_URL ||
+        'https://play.google.com/store/apps/details?id=com.gkpradio.mobile',
+      merchStoreWebUrl:
+        process.env.EXPO_PUBLIC_MERCH_STORE_WEB_URL ||
+        'https://godkingdomprinciplesradio.com/apis/shop',
     },
     plugins,
   },

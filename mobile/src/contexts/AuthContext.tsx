@@ -2,6 +2,9 @@ import React, { createContext, useContext, useEffect, useState } from 'react';
 import { Platform } from 'react-native';
 import { supabase } from '../lib/supabase';
 import { registerForPushNotifications } from '../lib/notifications';
+import { normalizeAvatarSeed } from '../components/ui/avatar/avatarVariants';
+import { saveProfileFields, syncAvatarFromAuthMetadata } from '../lib/profileAvatarStyle';
+import { applyPendingTermsAcceptance, recordTermsAcceptance } from '../lib/termsAcceptance';
 
 /** Deep link used in confirmation / magic-link emails (must match Supabase Auth redirect allowlist). */
 const EMAIL_AUTH_REDIRECT = 'gkpradio://auth/callback';
@@ -18,7 +21,8 @@ interface AuthContextType {
   signUp: (
     email: string,
     password: string,
-    fullName?: string
+    fullName?: string,
+    avatarSeed?: string
   ) => Promise<{
     error: any;
     needsEmailVerification?: boolean;
@@ -31,6 +35,10 @@ interface AuthContextType {
   signOut: () => Promise<void>;
   resetPassword: (email: string) => Promise<{ error: any }>;
   updatePassword: (password: string) => Promise<{ error: any }>;
+  /** Reload profile fields (e.g. after editing avatar style on Profile screen). */
+  refreshUser: () => Promise<void>;
+  /** Persist Terms of Service / Community Guidelines acceptance (18+ UGC gate). */
+  acceptCommunityTerms: () => Promise<{ error: Error | null }>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -70,17 +78,27 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (!sessionUser) return null;
     const { data: profile } = await supabase
       .from('profiles')
-      .select('id,full_name,avatar_url,bio,created_at')
+      .select('id,full_name,avatar_url,avatar_seed,bio,created_at,terms_accepted_at')
       .eq('id', sessionUser.id)
       .maybeSingle();
+
+    const avatarseed = normalizeAvatarSeed(
+      profile?.avatar_seed ??
+        (typeof sessionUser.user_metadata?.avatar_seed === 'string'
+          ? sessionUser.user_metadata.avatar_seed
+          : null),
+      sessionUser.id,
+    );
 
     return {
       id: sessionUser.id,
       email: sessionUser.email,
       fullname: profile?.full_name || sessionUser.user_metadata?.full_name || null,
       avatarurl: profile?.avatar_url || null,
+      avatarseed,
       bio: profile?.bio || null,
       created_at: profile?.created_at || sessionUser.created_at || null,
+      terms_accepted_at: profile?.terms_accepted_at ?? null,
     };
   };
 
@@ -125,6 +143,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setUser(await mapUser(data.user));
       if (data.user?.id) {
         savePushToken(data.user.id);
+        await applyPendingTermsAcceptance(data.user.id);
       }
       return { error: null };
     } catch (error) {
@@ -133,13 +152,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  const signUp = async (email: string, password: string, fullName?: string) => {
+  const signUp = async (
+    email: string,
+    password: string,
+    fullName?: string,
+    avatarSeed?: string,
+  ) => {
+    const resolvedAvatarSeed = normalizeAvatarSeed(avatarSeed);
     try {
       const { data, error } = await supabase.auth.signUp({
         email: normalizeEmail(email),
         password,
         options: {
-          data: { full_name: fullName || '' },
+          data: {
+            full_name: fullName || '',
+            avatar_seed: resolvedAvatarSeed,
+          },
           emailRedirectTo: EMAIL_AUTH_REDIRECT,
         },
       });
@@ -162,19 +190,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         !Array.isArray(identities) ||
         identities.some((row: { provider?: string }) => row?.provider === 'email');
 
-      if (data.user?.id && fullName && hasEmailIdentity) {
-        const { error: profileError } = await supabase.from('profiles').upsert({
-          id: data.user.id,
-          full_name: fullName,
+      if (data.user?.id && hasEmailIdentity) {
+        const { error: profileError } = await saveProfileFields(data.user.id, {
+          full_name: fullName?.trim() || null,
+          avatar_seed: resolvedAvatarSeed,
         });
         if (profileError) {
-          console.warn('[Auth] profile upsert after signUp:', profileError.message);
+          console.warn('[Auth] profile save after signUp:', profileError.message);
         }
       }
 
       if (data.session) {
         setSession(data.session);
         setUser(await mapUser(data.session.user));
+        if (data.session.user?.id) {
+          await applyPendingTermsAcceptance(data.session.user.id);
+        }
         return { error: null, needsEmailVerification: false };
       }
 
@@ -231,10 +262,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
       if (data.session) {
         setSession(data.session);
-        setUser(await mapUser(data.session.user));
-        if (data.session.user?.id) {
-          savePushToken(data.session.user.id);
+        const sessionUser = data.session.user;
+        if (sessionUser?.id) {
+          await syncAvatarFromAuthMetadata(
+            sessionUser.id,
+            sessionUser.user_metadata,
+            typeof sessionUser.user_metadata?.full_name === 'string'
+              ? sessionUser.user_metadata.full_name
+              : null,
+          );
+          savePushToken(sessionUser.id);
+          await applyPendingTermsAcceptance(sessionUser.id);
         }
+        setUser(await mapUser(sessionUser));
       }
       return { error: null };
     } catch (error) {
@@ -246,6 +286,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const updatePassword = async (password: string) => {
     const { error } = await supabase.auth.updateUser({ password });
     return { error };
+  };
+
+  const refreshUser = async () => {
+    if (!session?.user) return;
+    setUser(await mapUser(session.user));
+  };
+
+  const acceptCommunityTerms = async () => {
+    if (!session?.user?.id) {
+      return { error: new Error('You must be signed in to accept the terms.') };
+    }
+    try {
+      await recordTermsAcceptance(session.user.id);
+      setUser(await mapUser(session.user));
+      return { error: null };
+    } catch (error) {
+      const err = error instanceof Error ? error : new Error('Could not save terms acceptance.');
+      return { error: err };
+    }
   };
 
   return (
@@ -261,6 +320,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         signOut,
         resetPassword,
         updatePassword,
+        refreshUser,
+        acceptCommunityTerms,
       }}
     >
       {children}

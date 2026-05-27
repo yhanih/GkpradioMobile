@@ -1,4 +1,4 @@
-import React, { useState, useRef, useMemo, useEffect } from 'react';
+import React, { useState, useRef, useMemo } from 'react';
 import {
   View,
   Text,
@@ -7,31 +7,27 @@ import {
   FlatList,
   Pressable,
   Animated,
-  Image,
-  ImageSourcePropType,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
-import { Asset } from 'expo-asset';
+import { Image } from 'expo-image';
 import * as Haptics from 'expo-haptics';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTheme, type Theme } from '../contexts/ThemeContext';
+import {
+  ONBOARDING_LOGO_IMAGE,
+  ONBOARDING_SLIDE_IMAGES,
+  type OnboardingImageSource,
+} from '../lib/onboardingAssets';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 const ONBOARDING_KEY = '@gkp_onboarding_complete';
 
-const ONBOARDING_IMAGES = [
-  require('../../assets/onboarding/onboarding-radio.png'),
-  require('../../assets/onboarding/onboarding-community.png'),
-  require('../../assets/onboarding/onboarding-media.png'),
-  require('../../assets/onboarding/onboarding-events.png'),
-] as const;
-
 interface OnboardingSlide {
   id: string;
-  image: ImageSourcePropType;
+  image: OnboardingImageSource;
   title: string;
   description: string;
 }
@@ -39,28 +35,28 @@ interface OnboardingSlide {
 const slides: OnboardingSlide[] = [
   {
     id: '1',
-    image: require('../../assets/onboarding/onboarding-radio.png'),
+    image: ONBOARDING_SLIDE_IMAGES[0],
     title: 'Live Radio',
     description:
       'Listen to inspiring sermons, worship music, and uplifting content 24/7. Your spiritual companion wherever you go.',
   },
   {
     id: '2',
-    image: require('../../assets/onboarding/onboarding-community.png'),
+    image: ONBOARDING_SLIDE_IMAGES[1],
     title: 'Community',
     description:
       'Connect with believers worldwide. Share prayer requests, testimonies, and grow together in faith.',
   },
   {
     id: '3',
-    image: require('../../assets/onboarding/onboarding-media.png'),
+    image: ONBOARDING_SLIDE_IMAGES[2],
     title: 'On-Demand Content',
     description:
       'Access our library of podcasts and videos anytime. Learn at your own pace with quality Christian content.',
   },
   {
     id: '4',
-    image: require('../../assets/onboarding/onboarding-events.png'),
+    image: ONBOARDING_SLIDE_IMAGES[3],
     title: 'Live Events',
     description:
       'Never miss a special broadcast. Get notified about upcoming live events and join the experience.',
@@ -77,10 +73,6 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
   const scrollX = useRef(new Animated.Value(0)).current;
   const { theme } = useTheme();
   const styles = useMemo(() => createOnboardingStyles(theme), [theme]);
-
-  useEffect(() => {
-    void Asset.loadAsync([...ONBOARDING_IMAGES, require('../../assets/icon.png')]);
-  }, []);
 
   const handleNext = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -132,9 +124,11 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
           <Image
             source={item.image}
             style={styles.illustration}
-            resizeMode="contain"
-            fadeDuration={0}
-            accessibilityIgnoresInvertColors
+            contentFit="contain"
+            transition={0}
+            cachePolicy="memory-disk"
+            recyclingKey={item.id}
+            priority={index === 0 ? 'high' : 'normal'}
           />
         </Animated.View>
 
@@ -191,11 +185,12 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
         <Image
-          source={require('../../assets/icon.png')}
+          source={ONBOARDING_LOGO_IMAGE}
           style={styles.logoImage}
-          resizeMode="contain"
+          contentFit="contain"
+          transition={0}
+          cachePolicy="memory-disk"
           accessibilityLabel="GKP Radio"
-          accessibilityRole="image"
         />
         {!isLastSlide && (
           <Pressable onPress={handleSkip} style={styles.skipButton}>
@@ -212,7 +207,7 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
         horizontal
         pagingEnabled
         initialNumToRender={1}
-        maxToRenderPerBatch={2}
+        maxToRenderPerBatch={1}
         windowSize={3}
         removeClippedSubviews
         showsHorizontalScrollIndicator={false}
@@ -225,6 +220,11 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
           setCurrentIndex(index);
         }}
         scrollEventThrottle={16}
+        getItemLayout={(_, index) => ({
+          length: SCREEN_WIDTH,
+          offset: SCREEN_WIDTH * index,
+          index,
+        })}
       />
 
       {renderDots()}
@@ -271,7 +271,7 @@ export async function resetOnboardingComplete(): Promise<void> {
 }
 
 function createOnboardingStyles(theme: Theme) {
-  const illustrationSize = Math.min(SCREEN_WIDTH - 48, 320);
+  const illustrationSize = Math.min(SCREEN_WIDTH - 48, 300);
 
   return StyleSheet.create({
     container: {

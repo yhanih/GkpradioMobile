@@ -1,6 +1,7 @@
 import { supabase } from './supabase';
 import { PostType, getPostTypeForCategory, isPrayerCategory } from '../constants/categories';
 import { isCommunityTextBlocked, UGC_FILTER_USER_MESSAGE } from '../utils/contentUgcFilter';
+import { resolveRadioTrackArtist } from './radioNowPlaying';
 
 export type SortOption = 'newest' | 'popular' | 'discussed';
 
@@ -23,6 +24,7 @@ export interface BackendThread {
     id: string;
     fullname: string | null;
     avatarurl: string | null;
+    avatarseed: string | null;
   } | null;
 }
 
@@ -36,6 +38,7 @@ export interface BackendComment {
     id: string;
     fullname: string | null;
     avatarurl: string | null;
+    avatarseed: string | null;
   } | null;
 }
 
@@ -289,6 +292,23 @@ export async function fetchBlockedUserIds(blockerId: string): Promise<string[]> 
   return (data || []).map((row: { blocked_id: string }) => row.blocked_id);
 }
 
+async function ensureModerationProfile(userId: string): Promise<void> {
+  const { data, error: readError } = await supabase
+    .from('profiles')
+    .select('id')
+    .eq('id', userId)
+    .maybeSingle();
+  if (readError) {
+    throw new Error(readError.message || 'Could not verify your profile.');
+  }
+  if (data?.id) return;
+
+  const { error: upsertError } = await supabase.from('profiles').upsert({ id: userId });
+  if (upsertError) {
+    throw new Error(upsertError.message || 'Could not prepare your profile for this action.');
+  }
+}
+
 export async function blockCommunityUser(blockerId: string, blockedId: string): Promise<void> {
   if (!blockerId?.trim() || !blockedId?.trim()) {
     throw new CreatePostError('validation', 'Missing user.');
@@ -296,6 +316,9 @@ export async function blockCommunityUser(blockerId: string, blockedId: string): 
   if (blockerId === blockedId) {
     throw new CreatePostError('validation', 'You cannot block yourself.');
   }
+  await ensureModerationProfile(blockerId);
+  await ensureModerationProfile(blockedId);
+
   const { error } = await supabase.from('blocked_users').insert({
     blocker_id: blockerId,
     blocked_id: blockedId,
@@ -325,6 +348,8 @@ export async function reportCommunityContent(params: {
   targetId: string;
   reason?: string | null;
 }): Promise<void> {
+  await ensureModerationProfile(params.reporterId);
+
   const { error } = await supabase.from('reports').insert({
     reporter_id: params.reporterId,
     target_type: params.targetType,
@@ -474,7 +499,7 @@ export async function fetchCommunityPosts(
       ? supabase.from('comments').select('id,post_id').in('post_id', postIds)
       : Promise.resolve({ data: [], error: null } as any),
     authorIds.length
-      ? supabase.from('profiles').select('id,full_name,avatar_url').in('id', authorIds)
+      ? supabase.from('profiles').select('id,full_name,avatar_url,avatar_seed').in('id', authorIds)
       : Promise.resolve({ data: [], error: null } as any),
   ]);
 
@@ -485,15 +510,29 @@ export async function fetchCommunityPosts(
   const profiles = profilesRes.data || [];
 
   const commentsByPost = new Map<string, number>();
-  const profileById = new Map<string, { full_name: string | null; avatar_url: string | null }>();
+  const profileById = new Map<
+    string,
+    { full_name: string | null; avatar_url: string | null; avatar_seed: string | null }
+  >();
 
   comments.forEach((c: { post_id: string }) => {
     commentsByPost.set(c.post_id, (commentsByPost.get(c.post_id) || 0) + 1);
   });
 
-  profiles.forEach((p: { id: string; full_name: string | null; avatar_url: string | null }) => {
-    profileById.set(p.id, { full_name: p.full_name, avatar_url: p.avatar_url });
-  });
+  profiles.forEach(
+    (p: {
+      id: string;
+      full_name: string | null;
+      avatar_url: string | null;
+      avatar_seed: string | null;
+    }) => {
+      profileById.set(p.id, {
+        full_name: p.full_name,
+        avatar_url: p.avatar_url,
+        avatar_seed: p.avatar_seed,
+      });
+    },
+  );
 
   const mapped = visiblePosts.map((p: any) => {
     const profile = profileById.get(p.author_id) || null;
@@ -521,6 +560,7 @@ export async function fetchCommunityPosts(
             id: p.author_id,
             fullname: profile.full_name,
             avatarurl: profile.avatar_url,
+            avatarseed: profile.avatar_seed ?? null,
           }
         : null,
     } as BackendThread;
@@ -675,7 +715,7 @@ export async function createCommunityPost(params: {
 
     const { data: profile } = await supabase
       .from('profiles')
-      .select('id,full_name,avatar_url')
+      .select('id,full_name,avatar_url,avatar_seed')
       .eq('id', data.author_id)
       .maybeSingle();
 
@@ -700,6 +740,7 @@ export async function createCommunityPost(params: {
             id: profile.id,
             fullname: profile.full_name,
             avatarurl: profile.avatar_url,
+            avatarseed: profile.avatar_seed ?? null,
           }
         : null,
     } as BackendThread;
@@ -841,7 +882,7 @@ export async function getPostById(postId: string, currentUserId?: string): Promi
     supabase.from('comments').select('id,post_id').eq('post_id', postId),
     supabase
       .from('profiles')
-      .select('id,full_name,avatar_url')
+      .select('id,full_name,avatar_url,avatar_seed')
       .eq('id', post.author_id)
       .maybeSingle(),
   ]);
@@ -878,6 +919,7 @@ export async function getPostById(postId: string, currentUserId?: string): Promi
           id: post.author_id,
           fullname: profile.full_name,
           avatarurl: profile.avatar_url,
+          avatarseed: profile.avatar_seed ?? null,
         }
       : null,
   } as BackendThread;
@@ -899,17 +941,29 @@ export async function fetchCommentsForPost(
   const visible = comments.filter((c: { author_id: string }) => !blockedIds.has(c.author_id));
 
   const userIds = [...new Set(visible.map((c) => c.author_id))];
-  let profiles: { id: string; full_name: string | null; avatar_url: string | null }[] = [];
+  let profiles: {
+    id: string;
+    full_name: string | null;
+    avatar_url: string | null;
+    avatar_seed: string | null;
+  }[] = [];
   if (userIds.length) {
     const { data, error: profilesError } = await supabase
       .from('profiles')
-      .select('id,full_name,avatar_url')
+      .select('id,full_name,avatar_url,avatar_seed')
       .in('id', userIds);
     if (profilesError) throw new Error(profilesError.message);
     profiles = data || [];
   }
   const profileById = new Map(
-    profiles.map((p: any) => [p.id, { full_name: p.full_name, avatar_url: p.avatar_url }])
+    profiles.map((p) => [
+      p.id,
+      {
+        full_name: p.full_name,
+        avatar_url: p.avatar_url,
+        avatar_seed: p.avatar_seed,
+      },
+    ]),
   );
 
   return visible.map((c: any) => {
@@ -921,7 +975,12 @@ export async function fetchCommentsForPost(
       content: sanitizeText(c.content),
       createdat: c.created_at,
       users: profile
-        ? { id: c.author_id, fullname: profile.full_name, avatarurl: profile.avatar_url }
+        ? {
+            id: c.author_id,
+            fullname: profile.full_name,
+            avatarurl: profile.avatar_url,
+            avatarseed: profile.avatar_seed ?? null,
+          }
         : null,
     } as BackendComment;
   });
@@ -963,7 +1022,7 @@ export async function createCommentForPost(
 
   const { data: profile } = await supabase
     .from('profiles')
-    .select('id,full_name,avatar_url')
+    .select('id,full_name,avatar_url,avatar_seed')
     .eq('id', data.author_id)
     .maybeSingle();
 
@@ -978,6 +1037,7 @@ export async function createCommentForPost(
           id: profile.id,
           fullname: profile.full_name,
           avatarurl: profile.avatar_url,
+          avatarseed: profile.avatar_seed ?? null,
         }
       : null,
   } as BackendComment;
@@ -1172,48 +1232,73 @@ export async function fetchRadioSchedule(): Promise<any | null> {
   return data[0];
 }
 
+/** AzuraCast (and WP radio-status proxy) now-playing payload → app radio status. */
+function mapNowPlayingPayloadToRadioStatus(data: unknown): BackendRadioStatus | null {
+  if (!data || typeof data !== 'object') return null;
+
+  const record = data as Record<string, unknown>;
+  if (typeof record.code === 'string' && record.code.startsWith('rest_')) {
+    return null;
+  }
+
+  const station = record.station as { listen_url?: string } | undefined;
+  const nowPlaying = record.now_playing as
+    | { song?: { title?: string; artist?: string; art?: string } }
+    | undefined;
+  const live = record.live as { is_live?: boolean } | undefined;
+
+  if (!station?.listen_url && !nowPlaying?.song?.title) {
+    return null;
+  }
+
+  return {
+    is_live: Boolean(live?.is_live),
+    current_show: nowPlaying?.song?.title || 'Faith & Worship',
+    stream_url: station?.listen_url || STREAM_URL_FALLBACK,
+    now_playing: nowPlaying?.song
+      ? {
+          title: nowPlaying.song.title || 'Live Stream',
+          artist: resolveRadioTrackArtist(nowPlaying.song.artist),
+          art: nowPlaying.song.art,
+        }
+      : undefined,
+  };
+}
+
+async function fetchAzuraCastRadioStatus(): Promise<BackendRadioStatus> {
+  const response = await fetch(AZURACAST_NOW_PLAYING_URL);
+  if (!response.ok) {
+    throw new Error(`AzuraCast now playing failed (${response.status})`);
+  }
+  const data = await response.json();
+  const mapped = mapNowPlayingPayloadToRadioStatus(data);
+  if (!mapped) {
+    throw new Error('AzuraCast now playing payload invalid');
+  }
+  return mapped;
+}
+
 export async function fetchRadioStatusFromAzuraCast(): Promise<BackendRadioStatus> {
   try {
     const primaryResponse = await fetch(WORDPRESS_RADIO_STATUS_URL);
     const primaryData = await primaryResponse.json();
-
-    return {
-      is_live: Boolean(primaryData?.live?.is_live),
-      current_show: primaryData?.now_playing?.song?.title || 'Faith & Worship',
-      stream_url: primaryData?.station?.listen_url || STREAM_URL_FALLBACK,
-      now_playing: primaryData?.now_playing?.song
-        ? {
-            title: primaryData.now_playing.song.title || 'Live Stream',
-            artist: primaryData.now_playing.song.artist || 'GKP Radio',
-            art: primaryData.now_playing.song.art,
-          }
-        : undefined,
-    };
-  } catch (_error) {
-    try {
-      const response = await fetch(AZURACAST_NOW_PLAYING_URL);
-      const data = await response.json();
-
-      return {
-        is_live: Boolean(data?.live?.is_live),
-        current_show: data?.now_playing?.song?.title || 'Faith & Worship',
-        stream_url: data?.station?.listen_url || STREAM_URL_FALLBACK,
-        now_playing: data?.now_playing?.song
-          ? {
-              title: data.now_playing.song.title || 'Live Stream',
-              artist: data.now_playing.song.artist || 'GKP Radio',
-              art: data.now_playing.song.art,
-            }
-          : undefined,
-      };
-    } catch (_nestedError) {
-      return {
-        is_live: false,
-        current_show: 'Faith & Worship',
-        stream_url: STREAM_URL_FALLBACK,
-        now_playing: undefined,
-      };
+    const fromWordPress = mapNowPlayingPayloadToRadioStatus(primaryData);
+    if (primaryResponse.ok && fromWordPress) {
+      return fromWordPress;
     }
+  } catch {
+    // WordPress unreachable or invalid JSON — use AzuraCast.
+  }
+
+  try {
+    return await fetchAzuraCastRadioStatus();
+  } catch {
+    return {
+      is_live: false,
+      current_show: 'Faith & Worship',
+      stream_url: STREAM_URL_FALLBACK,
+      now_playing: undefined,
+    };
   }
 }
 
@@ -1228,7 +1313,7 @@ export async function fetchRadioQueueInfo(): Promise<RadioQueueInfo | null> {
     const upNext: RadioQueueItem | null = nextSong
       ? {
           title: String(nextSong.title || nextSong.text || 'Unknown').trim() || 'Unknown',
-          artist: String(nextSong.artist || '').trim(),
+          artist: resolveRadioTrackArtist(nextSong.artist),
         }
       : null;
 
@@ -1240,7 +1325,7 @@ export async function fetchRadioQueueInfo(): Promise<RadioQueueInfo | null> {
         if (!s) continue;
         recent.push({
           title: String(s.title || s.text || 'Unknown').trim() || 'Unknown',
-          artist: String(s.artist || '').trim(),
+          artist: resolveRadioTrackArtist(s.artist),
         });
       }
     }
@@ -1319,4 +1404,114 @@ export async function fetchCommunityCategoryCounts(): Promise<Record<string, num
     counts[category] = (counts[category] || 0) + 1;
   }
   return counts;
+}
+
+export interface BackendNotification {
+  id: string;
+  recipient_id: string;
+  actor_id: string;
+  type: 'like' | 'pray' | 'comment';
+  post_id: string;
+  comment_id: string | null;
+  message: string;
+  is_read: boolean;
+  created_at: string;
+  actor: {
+    id: string;
+    fullname: string | null;
+    avatarurl: string | null;
+    avatarseed: string | null;
+  } | null;
+}
+
+export async function fetchUserNotifications(userId: string): Promise<BackendNotification[]> {
+  const baseSelect =
+    'id, recipient_id, actor_id, type, post_id, comment_id, message, is_read, created_at';
+
+  let { data, error } = await supabase
+    .from('notifications')
+    .select(
+      `${baseSelect}, actor:profiles!notifications_actor_id_fkey(id, full_name, avatar_url, avatar_seed)`
+    )
+    .eq('recipient_id', userId)
+    .order('created_at', { ascending: false })
+    .limit(100);
+
+  if (error) {
+    const fallback = await supabase
+      .from('notifications')
+      .select(`${baseSelect}, actor:profiles(id, full_name, avatar_url, avatar_seed)`)
+      .eq('recipient_id', userId)
+      .order('created_at', { ascending: false })
+      .limit(100);
+
+    data = fallback.data;
+    error = fallback.error;
+  }
+
+  if (error) throw new Error(error.message || 'Failed to fetch notifications');
+
+  return (data || []).map((row: any) => {
+    const actorProfile = row.actor as {
+      id: string;
+      full_name: string | null;
+      avatar_url: string | null;
+      avatar_seed: string | null;
+    } | null;
+
+    return {
+      id: row.id,
+      recipient_id: row.recipient_id,
+      actor_id: row.actor_id,
+      type: row.type,
+      post_id: row.post_id,
+      comment_id: row.comment_id,
+      message: row.message,
+      is_read: row.is_read,
+      created_at: row.created_at,
+      actor: actorProfile
+        ? {
+            id: actorProfile.id,
+            fullname: actorProfile.full_name,
+            avatarurl: actorProfile.avatar_url,
+            avatarseed: actorProfile.avatar_seed,
+          }
+        : null,
+    };
+  });
+}
+
+export async function fetchUnreadNotificationCount(userId: string): Promise<number> {
+  const { count, error } = await supabase
+    .from('notifications')
+    .select('id', { count: 'exact', head: true })
+    .eq('recipient_id', userId)
+    .eq('is_read', false);
+
+  if (error) {
+    console.warn('[fetchUnreadNotificationCount]', error.message);
+    return 0;
+  }
+
+  return count ?? 0;
+}
+
+export async function markNotificationRead(notificationId: string, userId: string): Promise<void> {
+  const { error } = await supabase
+    .from('notifications')
+    .update({ is_read: true })
+    .eq('id', notificationId)
+    .eq('recipient_id', userId);
+
+  if (error) throw new Error(error.message || 'Failed to mark notification as read');
+}
+
+export async function markAllNotificationsRead(userId: string): Promise<void> {
+  const { error } = await supabase
+    .from('notifications')
+    .update({ is_read: true })
+    .eq('recipient_id', userId)
+    .eq('is_read', false);
+
+  if (error) throw new Error(error.message || 'Failed to mark notifications as read');
 }

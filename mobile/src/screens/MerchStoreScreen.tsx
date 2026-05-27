@@ -20,8 +20,8 @@ import { useTheme } from '../contexts/ThemeContext';
 import { useCart } from '../contexts/CartContext';
 import { RootStackParamList } from '../types/navigation';
 import { AnimatedPressable } from '../components/AnimatedPressable';
-import { CartSheet } from '../components/CartSheet';
 import { fetchStoreProducts, getStoreCategoryFilters } from '../lib/merch';
+import { openMerchStoreBrowser } from '../lib/openMerchStoreBrowser';
 import type { Product } from '../types/product';
 
 export type { Product };
@@ -31,14 +31,28 @@ type MerchStoreNavProp = NativeStackNavigationProp<RootStackParamList>;
 export function MerchStoreScreen() {
   const navigation = useNavigation<MerchStoreNavProp>();
   const { theme } = useTheme();
-  const { cartCount, addToCart } = useCart();
+  const { cartCount, addToCart, openCart } = useCart();
 
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [searchQuery, setSearchQuery] = useState('');
-  const [cartVisible, setCartVisible] = useState(false);
+  const [openingWebStore, setOpeningWebStore] = useState(false);
+
+  const handleShopOnline = async () => {
+    Haptics.selectionAsync();
+    setOpeningWebStore(true);
+    try {
+      await openMerchStoreBrowser();
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : 'Could not open the ministry store website.';
+      setError(message);
+    } finally {
+      setOpeningWebStore(false);
+    }
+  };
 
   const loadProducts = useCallback(async () => {
     setLoading(true);
@@ -117,7 +131,7 @@ export function MerchStoreScreen() {
           style={({ pressed }) => [styles.headerButton, { backgroundColor: theme.colors.surface }, pressed && styles.headerButtonPressed]}
           onPress={() => {
             Haptics.selectionAsync();
-            setCartVisible(true);
+            openCart();
           }}
           accessibilityLabel="Open shopping cart"
         >
@@ -171,15 +185,31 @@ export function MerchStoreScreen() {
           <View style={styles.centeredState}>
             <Ionicons name="cloud-offline-outline" size={48} color={theme.colors.textMuted} />
             <Text style={[styles.stateTitle, { color: theme.colors.text }]}>Could not load store</Text>
-            <Text style={[styles.stateText, { color: theme.colors.textMuted }]}>{error}</Text>
+            <Text style={[styles.stateText, { color: theme.colors.textMuted }]}>
+              Our in-app catalog is temporarily unavailable. You can still browse and checkout on our website.
+            </Text>
             <Pressable
               style={[styles.retryButton, { backgroundColor: theme.colors.primary }]}
+              onPress={() => {
+                Haptics.selectionAsync();
+                void handleShopOnline();
+              }}
+              disabled={openingWebStore}
+            >
+              {openingWebStore ? (
+                <ActivityIndicator color="#fff" />
+              ) : (
+                <Text style={styles.retryButtonText}>Shop on Website</Text>
+              )}
+            </Pressable>
+            <Pressable
+              style={[styles.secondaryButton, { borderColor: theme.colors.border }]}
               onPress={() => {
                 Haptics.selectionAsync();
                 loadProducts();
               }}
             >
-              <Text style={styles.retryButtonText}>Try Again</Text>
+              <Text style={[styles.secondaryButtonText, { color: theme.colors.text }]}>Try Again</Text>
             </Pressable>
           </View>
         ) : (
@@ -291,7 +321,6 @@ export function MerchStoreScreen() {
         <View style={{ height: 100 }} />
       </ScrollView>
 
-      <CartSheet visible={cartVisible} onClose={() => setCartVisible(false)} />
     </SafeAreaView>
   );
 }
@@ -535,5 +564,16 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 15,
     fontWeight: '700',
+  },
+  secondaryButton: {
+    marginTop: 12,
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+  },
+  secondaryButtonText: {
+    fontSize: 15,
+    fontWeight: '600',
   },
 });

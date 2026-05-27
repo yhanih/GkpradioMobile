@@ -7,7 +7,6 @@ import {
   Pressable,
   ActivityIndicator,
   RefreshControl,
-  Image,
   Animated,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -20,6 +19,7 @@ import * as Haptics from 'expo-haptics';
 import { RootStackParamList } from '../types/navigation';
 import { useTheme } from '../contexts/ThemeContext';
 import { getCategoryIcon, getCategoryLabel } from '../constants/categories';
+import { Avatar } from '../components/ui/avatar';
 
 type LikedPostsNavProp = NativeStackNavigationProp<RootStackParamList>;
 
@@ -97,9 +97,14 @@ export function LikedPostsScreen() {
       >
         <View style={styles.cardHeader}>
           <View style={styles.authorInfo}>
-            <View style={styles.avatarPlaceholder}>
-              <Ionicons name="person" size={14} color="#71717a" />
-            </View>
+            <Avatar
+              src={thread.users?.avatarurl}
+              name={thread.users?.fullname}
+              userId={thread.userid}
+              avatarSeed={thread.users?.avatarseed}
+              size="sm"
+              showRing
+            />
             <View style={styles.authorMeta}>
               <Text style={styles.authorName}>{thread.users?.fullname || 'Member'}</Text>
               <Text style={styles.time}>{formatTimeAgo(thread.createdat)}</Text>

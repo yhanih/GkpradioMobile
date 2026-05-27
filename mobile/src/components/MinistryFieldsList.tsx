@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, Pressable, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, Pressable } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { COMMUNITY_CATEGORIES, Category } from '../constants/categories';
@@ -87,6 +87,14 @@ export function MinistryFieldsList({ onPressItem }: MinistryFieldsListProps) {
     onPressItem(category);
   };
 
+  const getStaggerDelay = (groupIndex: number, itemIndex: number) => {
+    let offset = 0;
+    for (let g = 0; g < groupIndex; g += 1) {
+      offset += groups[g].items.length;
+    }
+    return (offset + itemIndex) * 70;
+  };
+
   const getIconColor = (id: string): string => {
     switch (id) {
       case 'all': return '#007AFF'; // iOS Blue
@@ -122,7 +130,7 @@ export function MinistryFieldsList({ onPressItem }: MinistryFieldsListProps) {
             {group.title.toUpperCase()}
           </Text>
           <View style={[styles.card, { backgroundColor: theme.colors.surface }]}>
-            {group.items.map((item, index) => (
+            {group.items.map((item, itemIndex) => (
               <React.Fragment key={item.id}>
                 <Pressable
                   style={({ pressed }) => [
@@ -145,18 +153,15 @@ export function MinistryFieldsList({ onPressItem }: MinistryFieldsListProps) {
                   </View>
                   
                   <View style={styles.itemRight}>
-                    {loading ? (
-                      <ActivityIndicator size="small" color="#C4C4C6" />
-                    ) : (
-                      <AnimatedCount 
-                        target={counts[item.id] || 0} 
-                        style={styles.countText}
-                      />
-                    )}
+                    <AnimatedCount
+                      target={loading ? 0 : counts[item.id] ?? 0}
+                      delay={loading ? 0 : getStaggerDelay(groupIndex, itemIndex)}
+                      style={[styles.countText, { color: theme.colors.textMuted }]}
+                    />
                     <Ionicons name="chevron-forward" size={18} color="#C4C4C6" style={styles.chevron} />
                   </View>
                 </Pressable>
-                {index < group.items.length - 1 && (
+                {itemIndex < group.items.length - 1 && (
                   <View style={[styles.divider, { backgroundColor: theme.colors.border, marginLeft: 56 }]} />
                 )}
               </React.Fragment>

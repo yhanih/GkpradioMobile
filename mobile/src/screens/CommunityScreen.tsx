@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { View, Text, ScrollView, StyleSheet, Pressable, ActivityIndicator, RefreshControl, Alert, Image, TextInput, Animated, Share, Modal, useWindowDimensions } from 'react-native';
+import { View, Text, ScrollView, StyleSheet, Pressable, ActivityIndicator, RefreshControl, Alert, TextInput, Animated, Share, Modal, useWindowDimensions } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useFocusEffect, useRoute, RouteProp } from '@react-navigation/native';
@@ -10,6 +10,7 @@ import {
   blockCommunityUser,
   deleteCommunityPost,
   fetchCommunityPosts,
+  fetchUnreadNotificationCount,
   getCommunityStats,
   togglePostReaction,
 } from '../lib/backend';
@@ -33,6 +34,9 @@ import { RootStackParamList, MainTabParamList } from '../types/navigation';
 import { useToast } from '../components/Toast';
 import { openPostOverflowMenu } from '../utils/contentOverflowMenu';
 import { REPORT_SUBMITTED_ALERT } from '../constants/reportReasons';
+import { Avatar } from '../components/ui/avatar';
+import { NotificationBadge } from '../components/NotificationBadge';
+import { HELP_DESK_EMAIL } from '../constants/contact';
 
 const COMMUNITY_SAFETY_MESSAGE =
   'Please refrain from making any monetary donations or transactions to other user(s) or member(s) while using this platform. This ministry is dedicated to uplifting, encouraging, and educating.';
@@ -63,6 +67,7 @@ interface ThreadWithUser {
     id: string;
     fullname: string | null;
     avatarurl: string | null;
+    avatarseed?: string | null;
   } | null;
 }
 
@@ -72,7 +77,7 @@ type CommunityRouteProp = RouteProp<MainTabParamList, 'Community'>;
 export function CommunityScreen() {
   const navigation = useNavigation<CommunityNavProp>();
   const route = useRoute<CommunityRouteProp>();
-  const { user } = useAuth();
+  const { user, acceptCommunityTerms } = useAuth();
   const { theme } = useTheme();
   const styles = useMemo(() => createCommunityStyles(theme), [theme]);
   const { isBookmarked, toggleBookmark, refreshBookmarks } = useBookmarks();
@@ -92,8 +97,12 @@ export function CommunityScreen() {
   const [showNewPostModal, setShowNewPostModal] = useState(false);
   const [reportPostId, setReportPostId] = useState<string | null>(null);
   const [showSafetyModal, setShowSafetyModal] = useState(false);
+  const [showTermsGate, setShowTermsGate] = useState(false);
+  const [termsAgreeChecked, setTermsAgreeChecked] = useState(false);
+  const [termsAccepting, setTermsAccepting] = useState(false);
   const [showSortMenu, setShowSortMenu] = useState(false);
   const [likingThreadId, setLikingThreadId] = useState<string | null>(null);
+  const [unreadNotificationCount, setUnreadNotificationCount] = useState(0);
   const [likeAnimations] = useState<{ [key: string]: Animated.Value }>({});
   const [modeTabTrackWidth, setModeTabTrackWidth] = useState(0);
   const fabScale = useRef(new Animated.Value(1)).current;
@@ -156,6 +165,36 @@ export function CommunityScreen() {
     };
   }, [searchQuery]);
 
+  useEffect(() => {
+    if (!user?.id) {
+      setShowTermsGate(false);
+      return;
+    }
+    setShowTermsGate(!user.terms_accepted_at);
+    if (!user.terms_accepted_at) {
+      setTermsAgreeChecked(false);
+    }
+  }, [user?.id, user?.terms_accepted_at]);
+
+  const handleAcceptCommunityTerms = async () => {
+    if (!termsAgreeChecked) {
+      Alert.alert(
+        'Terms required',
+        'Please confirm you are at least 18 and agree to the Terms of Service & Community Guidelines.'
+      );
+      return;
+    }
+    setTermsAccepting(true);
+    const { error } = await acceptCommunityTerms();
+    setTermsAccepting(false);
+    if (error) {
+      Alert.alert('Could not continue', error.message || 'Please try again.');
+      return;
+    }
+    setShowTermsGate(false);
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+  };
+
   const fetchStats = useCallback(async () => {
     try {
       const data = await getCommunityStats();
@@ -197,8 +236,44 @@ export function CommunityScreen() {
     useCallback(() => {
       fetchData(true);
       refreshBookmarks();
-    }, [fetchData, refreshBookmarks])
+      if (user?.id) {
+        fetchUnreadNotificationCount(user.id).then(setUnreadNotificationCount).catch(() => undefined);
+      } else {
+        setUnreadNotificationCount(0);
+      }
+    }, [fetchData, refreshBookmarks, user?.id])
   );
+
+  useEffect(() => {
+    if (!user?.id) {
+      setUnreadNotificationCount(0);
+      return;
+    }
+
+    const refreshUnreadCount = () => {
+      fetchUnreadNotificationCount(user.id).then(setUnreadNotificationCount).catch(() => undefined);
+    };
+
+    refreshUnreadCount();
+
+    const channel = supabase
+      .channel(`community-notifications-${user.id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'notifications',
+          filter: `recipient_id=eq.${user.id}`,
+        },
+        refreshUnreadCount
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [user?.id]);
 
   const getLikeAnimation = (threadId: string) => {
     if (!likeAnimations[threadId]) {
@@ -397,7 +472,8 @@ export function CommunityScreen() {
             try {
               await blockCommunityUser(user.id, blockedUserId);
               setThreads((prev) => prev.filter((t) => String(t.userid) !== String(blockedUserId)));
-              showToast('Member blocked', 'success');
+              await fetchData(true);
+              showToast('Member blocked — their posts are hidden from your feed', 'success');
               Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
             } catch (e: any) {
               showToast(e?.message || 'Unable to block member', 'error');
@@ -470,9 +546,12 @@ export function CommunityScreen() {
               setThreads((prev) => prev.filter((thread) => thread.id !== threadId));
               await fetchStats();
               showToast('Post deleted successfully', 'success');
-            } catch (error) {
+            } catch (error: any) {
               console.error('Error deleting post:', error);
-              showToast('Unable to delete post. Please try again.', 'error');
+              const message =
+                error?.message ||
+                (error instanceof Error ? error.message : 'Unable to delete post. Please try again.');
+              showToast(message, 'error');
             }
           },
         }
@@ -499,6 +578,17 @@ export function CommunityScreen() {
   };
 
   const handleFabPress = () => {
+    if (!user) {
+      Alert.alert('Sign in required', 'Please sign in to create a community post.', [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Sign in', onPress: () => navigation.navigate('Login', { redirectBack: true }) },
+      ]);
+      return;
+    }
+    if (!user.terms_accepted_at) {
+      setShowTermsGate(true);
+      return;
+    }
     Animated.sequence([
       Animated.timing(fabScale, { toValue: 0.9, duration: 50, useNativeDriver: true }),
       Animated.timing(fabScale, { toValue: 1, duration: 50, useNativeDriver: true }),
@@ -667,14 +757,8 @@ export function CommunityScreen() {
     const authorName = thread.is_anonymous
       ? 'Anonymous'
       : thread.users?.fullname || 'Member';
-    const avatarUrl = thread.is_anonymous ? null : thread.users?.avatarurl;
-
     return (
-      <Pressable
-        key={thread.id}
-        style={[styles.card, isPinned && styles.pinnedCard]}
-        onPress={() => navigateToPost(thread)}
-      >
+      <View key={thread.id} style={[styles.card, isPinned && styles.pinnedCard]}>
         {isPinned && (
           <View style={styles.pinnedBadge}>
             <Ionicons name="pin" size={12} color="#f59e0b" />
@@ -684,20 +768,21 @@ export function CommunityScreen() {
         <View style={styles.cardHeader}>
           <Pressable
             style={styles.authorInfo}
-            onPress={(e) => {
-              e.stopPropagation();
+            onPress={() => {
               if (!thread.is_anonymous && thread.users) {
                 navigateToUserProfile(thread.userid, thread.users);
               }
             }}
           >
-            {avatarUrl ? (
-              <Image source={{ uri: avatarUrl }} style={styles.avatar} />
-            ) : (
-              <View style={styles.avatarPlaceholder}>
-                <Ionicons name="person" size={14} color={theme.colors.textMuted} />
-              </View>
-            )}
+            <Avatar
+              src={thread.is_anonymous ? null : thread.users?.avatarurl}
+              name={authorName}
+              userId={thread.is_anonymous ? null : thread.userid}
+              avatarSeed={thread.is_anonymous ? null : thread.users?.avatarseed}
+              size="sm"
+              anonymous={thread.is_anonymous}
+              showRing
+            />
             <View style={styles.authorMeta}>
               <Text style={[styles.authorName, !thread.is_anonymous && styles.authorNameClickable]}>
                 {authorName}
@@ -715,22 +800,31 @@ export function CommunityScreen() {
           </View>
         </View>
 
-        <Text style={styles.cardTitle} numberOfLines={2}>
-          {thread.title}
-        </Text>
-        <Text style={styles.cardDescription} numberOfLines={3}>
-          {thread.content}
-        </Text>
+        <Pressable
+          onPress={() => navigateToPost(thread)}
+          accessibilityRole="button"
+          accessibilityLabel={`Open post: ${thread.title}`}
+        >
+          <Text style={styles.cardTitle} numberOfLines={2}>
+            {thread.title}
+          </Text>
+          <Text style={styles.cardDescription} numberOfLines={3}>
+            {thread.content}
+          </Text>
+        </Pressable>
 
         <View style={styles.cardFooter}>
           <View style={styles.engagementStats}>
             <Pressable
               style={styles.statButton}
-              onPress={() =>
-                isPrayerPost
-                  ? handlePray(thread.id, thread.user_has_prayed || false)
-                  : handleLike(thread.id, thread.user_has_liked || false)
-              }
+              onPress={(e) => {
+                e?.stopPropagation?.();
+                if (isPrayerPost) {
+                  handlePray(thread.id, thread.user_has_prayed || false);
+                } else {
+                  handleLike(thread.id, thread.user_has_liked || false);
+                }
+              }}
             >
               <Animated.View style={{ transform: [{ scale: getLikeAnimation(thread.id) }] }}>
                 <Ionicons
@@ -776,6 +870,8 @@ export function CommunityScreen() {
             <Pressable
               onPress={() => handleBookmarkToggle(thread.id)}
               style={styles.actionButton}
+              accessibilityLabel="Save post"
+              hitSlop={12}
             >
               <Ionicons
                 name={isBookmarked('thread', thread.id) ? "bookmark" : "bookmark-outline"}
@@ -787,15 +883,15 @@ export function CommunityScreen() {
               <Pressable
                 onPress={() => handleThreadOverflowMenu(thread)}
                 style={styles.actionButton}
-                accessibilityLabel="Post options"
-                hitSlop={8}
+                accessibilityLabel="Post options: report, block, or delete"
+                hitSlop={12}
               >
                 <Ionicons name="ellipsis-horizontal" size={20} color={theme.colors.textMuted} />
               </Pressable>
             ) : null}
           </View>
         </View>
-      </Pressable>
+      </View>
     );
   };
 
@@ -822,18 +918,33 @@ export function CommunityScreen() {
             <Text style={styles.title} accessibilityRole="header">
               Community
             </Text>
-            <Pressable
-              onPress={() => {
-                Haptics.selectionAsync();
-                setShowSafetyModal(true);
-              }}
-              style={({ pressed }) => [styles.safetyInfoButton, pressed && styles.safetyInfoButtonPressed]}
-              hitSlop={12}
-              accessibilityRole="button"
-              accessibilityLabel="Community safety guidelines"
-            >
-              <Ionicons name="shield-checkmark-outline" size={26} color={theme.colors.primary} />
-            </Pressable>
+            <View style={styles.headerActions}>
+              <Pressable
+                onPress={() => {
+                  Haptics.selectionAsync();
+                  navigation.navigate('Notifications');
+                }}
+                style={({ pressed }) => [styles.headerIconButton, pressed && styles.headerIconButtonPressed]}
+                hitSlop={12}
+                accessibilityRole="button"
+                accessibilityLabel="View notifications"
+              >
+                <Ionicons name="notifications-outline" size={26} color={theme.colors.primary} />
+                {user ? <NotificationBadge count={unreadNotificationCount} /> : null}
+              </Pressable>
+              <Pressable
+                onPress={() => {
+                  Haptics.selectionAsync();
+                  setShowSafetyModal(true);
+                }}
+                style={({ pressed }) => [styles.headerIconButton, pressed && styles.headerIconButtonPressed]}
+                hitSlop={12}
+                accessibilityRole="button"
+                accessibilityLabel="Community safety guidelines"
+              >
+                <Ionicons name="shield-checkmark-outline" size={26} color={theme.colors.primary} />
+              </Pressable>
+            </View>
           </View>
           <Text style={styles.subtitle}>
             Share testimonies, lift prayers, and encourage one another
@@ -1128,6 +1239,20 @@ export function CommunityScreen() {
               </Pressable>
             </View>
             <Text style={styles.safetyModalBody}>{COMMUNITY_SAFETY_MESSAGE}</Text>
+            <Text style={styles.safetyModalBody}>
+              Report objectionable content with the ⋯ menu on any post. For urgent safety issues,
+              email {HELP_DESK_EMAIL}.
+            </Text>
+            <Pressable
+              style={styles.safetyModalSecondaryButton}
+              onPress={() => {
+                Haptics.selectionAsync();
+                setShowSafetyModal(false);
+                navigation.navigate('TermsOfService');
+              }}
+            >
+              <Text style={styles.safetyModalSecondaryButtonText}>Community Guidelines</Text>
+            </Pressable>
             <Pressable
               style={styles.safetyModalButton}
               onPress={() => {
@@ -1136,6 +1261,62 @@ export function CommunityScreen() {
               }}
             >
               <Text style={styles.safetyModalButtonText}>Got it</Text>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
+        visible={Boolean(user && showTermsGate)}
+        transparent
+        animationType="fade"
+        onRequestClose={() => {}}
+      >
+        <View style={styles.safetyModalRoot}>
+          <View style={styles.safetyModalCard}>
+            <View style={styles.safetyModalHeader}>
+              <View style={styles.safetyModalTitleRow}>
+                <Ionicons name="document-text" size={22} color={theme.colors.primary} />
+                <Text style={styles.safetyModalTitle}>Community access</Text>
+              </View>
+            </View>
+            <Text style={styles.safetyModalBody}>
+              Community features are for adults (18+). You must agree to our Terms of Service &
+              Community Guidelines, including zero tolerance for objectionable content and abusive
+              users, before posting or interacting.
+            </Text>
+            <Pressable
+              style={styles.termsGateRow}
+              onPress={() => setTermsAgreeChecked((prev) => !prev)}
+              accessibilityRole="checkbox"
+              accessibilityState={{ checked: termsAgreeChecked }}
+            >
+              <View style={[styles.termsGateCheckbox, termsAgreeChecked && styles.termsGateCheckboxChecked]}>
+                {termsAgreeChecked && <Ionicons name="checkmark" size={14} color="#fff" />}
+              </View>
+              <Text style={styles.termsGateLabel}>
+                I am 18+ and agree to the{' '}
+                <Text
+                  style={styles.safetyHintLink}
+                  onPress={() => navigation.navigate('TermsOfService')}
+                >
+                  Terms & Community Guidelines
+                </Text>
+              </Text>
+            </Pressable>
+            <Pressable
+              style={[
+                styles.safetyModalButton,
+                (!termsAgreeChecked || termsAccepting) && styles.safetyModalButtonDisabled,
+              ]}
+              onPress={handleAcceptCommunityTerms}
+              disabled={!termsAgreeChecked || termsAccepting}
+            >
+              {termsAccepting ? (
+                <ActivityIndicator color="#fff" />
+              ) : (
+                <Text style={styles.safetyModalButtonText}>Continue to Community</Text>
+              )}
             </Pressable>
           </View>
         </View>
@@ -1216,6 +1397,20 @@ function createCommunityStyles(theme: Theme) {
     fontWeight: 'bold',
     color: theme.colors.text,
   },
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  headerIconButton: {
+    position: 'relative',
+    padding: 6,
+    borderRadius: 12,
+    backgroundColor: theme.dark ? 'rgba(16, 185, 129, 0.15)' : 'rgba(4, 120, 87, 0.08)',
+  },
+  headerIconButtonPressed: {
+    opacity: 0.75,
+  },
   safetyInfoButton: {
     padding: 6,
     borderRadius: 12,
@@ -1286,6 +1481,48 @@ function createCommunityStyles(theme: Theme) {
     paddingVertical: 14,
     borderRadius: 12,
     alignItems: 'center',
+  },
+  safetyModalButtonDisabled: {
+    opacity: 0.55,
+  },
+  safetyModalSecondaryButton: {
+    borderRadius: 12,
+    paddingVertical: 12,
+    alignItems: 'center',
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+  },
+  safetyModalSecondaryButtonText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: theme.colors.primary,
+  },
+  termsGateRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
+    marginBottom: 16,
+  },
+  termsGateCheckbox: {
+    width: 22,
+    height: 22,
+    borderRadius: 6,
+    borderWidth: 2,
+    borderColor: theme.colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 2,
+  },
+  termsGateCheckboxChecked: {
+    backgroundColor: theme.colors.primary,
+    borderColor: theme.colors.primary,
+  },
+  termsGateLabel: {
+    flex: 1,
+    fontSize: 14,
+    color: theme.colors.textSecondary,
+    lineHeight: 20,
   },
   safetyModalButtonText: {
     color: '#fff',

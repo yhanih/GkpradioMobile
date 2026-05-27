@@ -26,10 +26,11 @@ export type RootStackParamList = {
     allEpisodes?: any[];
   };
   LikedPosts: undefined;
+  Notifications: undefined;
   TermsOfService: undefined;
   MerchStore: undefined;
   ProductDetail: { product: any };
-  Donate: undefined;
+  Donate: { amount?: number } | undefined;
 };
 
 export type MainTabParamList = {

@@ -8,17 +8,20 @@ import {
   ActivityIndicator,
   RefreshControl,
   Alert,
-  Image,
   TextInput,
   KeyboardAvoidingView,
   Platform,
   Share,
+  Animated,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { BlurView } from 'expo-blur';
+import { LinearGradient } from 'expo-linear-gradient';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import * as Haptics from 'expo-haptics';
+import { Avatar } from '../components/ui/avatar';
 import {
   blockCommunityUser,
   type CommunityReportTarget,
@@ -64,6 +67,7 @@ interface ThreadWithUser {
     fullname?: string;
     username?: string;
     avatarurl?: string;
+    avatarseed?: string | null;
   } | null;
 }
 
@@ -78,16 +82,27 @@ interface CommentWithUser {
     fullname?: string;
     username?: string;
     avatarurl?: string;
+    avatarseed?: string | null;
   } | null;
+}
+
+function pulseScale(anim: Animated.Value) {
+  Animated.sequence([
+    Animated.spring(anim, { toValue: 1.22, useNativeDriver: true, speed: 28, bounciness: 10 }),
+    Animated.spring(anim, { toValue: 1, useNativeDriver: true, speed: 28, bounciness: 6 }),
+  ]).start();
 }
 
 export function PostDetailScreen() {
   const navigation = useNavigation<PostDetailNavProp>();
   const route = useRoute<PostDetailRouteProp>();
+  const insets = useSafeAreaInsets();
   const { user } = useAuth();
   const { isBookmarked, toggleBookmark } = useBookmarks();
-  const { theme } = useTheme();
+  const { theme, isDark } = useTheme();
   const styles = useMemo(() => createPostDetailStyles(theme), [theme]);
+  const likeScale = useRef(new Animated.Value(1)).current;
+  const bookmarkScale = useRef(new Animated.Value(1)).current;
 
   const [thread, setThread] = useState<ThreadWithUser | null>(null);
   const [comments, setComments] = useState<CommentWithUser[]>([]);
@@ -226,6 +241,7 @@ export function PostDetailScreen() {
     } : null);
 
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    pulseScale(likeScale);
 
     try {
       await togglePostReaction(thread.id, user.id, 'like');
@@ -258,6 +274,7 @@ export function PostDetailScreen() {
     } : null);
 
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    pulseScale(likeScale);
 
     try {
       await togglePostReaction(thread.id, user.id, 'pray');
@@ -279,6 +296,7 @@ export function PostDetailScreen() {
     if (!thread) return;
 
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    pulseScale(bookmarkScale);
 
     try {
       await toggleBookmark('thread', thread.id);
@@ -581,10 +599,10 @@ export function PostDetailScreen() {
     return (
       <SafeAreaView style={styles.container} edges={['top']}>
         <View style={styles.header}>
-          <Pressable onPress={() => navigation.goBack()} style={styles.backButton}>
-            <Ionicons name="arrow-back" size={24} color={theme.colors.text} />
+          <Pressable onPress={() => navigation.goBack()} style={styles.headerIconButton}>
+            <Ionicons name="chevron-back" size={22} color={theme.colors.text} />
           </Pressable>
-          <Text style={styles.headerTitle}>Post</Text>
+          <Text style={styles.headerTitle}>Discussion</Text>
           <View style={{ width: 40 }} />
         </View>
         <View style={styles.loadingContainer}>
@@ -598,10 +616,10 @@ export function PostDetailScreen() {
     return (
       <SafeAreaView style={styles.container} edges={['top']}>
         <View style={styles.header}>
-          <Pressable onPress={() => navigation.goBack()} style={styles.backButton}>
-            <Ionicons name="arrow-back" size={24} color={theme.colors.text} />
+          <Pressable onPress={() => navigation.goBack()} style={styles.headerIconButton}>
+            <Ionicons name="chevron-back" size={22} color={theme.colors.text} />
           </Pressable>
-          <Text style={styles.headerTitle}>Post</Text>
+          <Text style={styles.headerTitle}>Discussion</Text>
           <View style={{ width: 40 }} />
         </View>
         <View style={styles.errorContainer}>
@@ -618,29 +636,61 @@ export function PostDetailScreen() {
   const authorName = thread.is_anonymous
     ? 'Anonymous'
     : thread.users?.fullname || thread.users?.username || 'Member';
-  const avatarUrl = thread.is_anonymous ? null : thread.users?.avatarurl;
   const isPrayerPost = (thread.post_type || getPostTypeForCategory(thread.category)) === 'prayer';
+  const saved = isBookmarked('thread', thread.id);
+  const commentCount = comments.length || thread.comment_count || 0;
+
+  const renderEngagementChip = (
+    key: string,
+    icon: React.ReactNode,
+    label: string,
+    active: boolean,
+    onPress?: () => void,
+    scaleAnim?: Animated.Value,
+  ) => {
+    const chip = (
+      <View style={[styles.engagementChip, active && styles.engagementChipActive]}>
+        {scaleAnim ? <Animated.View style={{ transform: [{ scale: scaleAnim }] }}>{icon}</Animated.View> : icon}
+        <Text style={[styles.engagementChipLabel, active && styles.engagementChipLabelActive]}>{label}</Text>
+      </View>
+    );
+
+    if (!onPress) {
+      return <View key={key}>{chip}</View>;
+    }
+
+    return (
+      <Pressable
+        key={key}
+        onPress={onPress}
+        style={({ pressed }) => [styles.engagementChipPressable, pressed && styles.engagementChipPressed]}
+        accessibilityRole="button"
+      >
+        {chip}
+      </Pressable>
+    );
+  };
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.header}>
-        <Pressable onPress={() => navigation.goBack()} style={styles.backButton}>
-          <Ionicons name="arrow-back" size={24} color={theme.colors.text} />
+        <Pressable onPress={() => navigation.goBack()} style={styles.headerIconButton}>
+          <Ionicons name="chevron-back" size={22} color={theme.colors.text} />
         </Pressable>
-        <Text style={styles.headerTitle}>Post</Text>
+        <Text style={styles.headerTitle}>Discussion</Text>
         <View style={styles.headerActions}>
           {user ? (
             <Pressable
               onPress={handlePostHeaderOverflow}
-              style={styles.deletePostButton}
+              style={styles.headerIconButton}
               hitSlop={10}
               accessibilityLabel="Post options"
             >
-              <Ionicons name="ellipsis-horizontal" size={24} color={theme.colors.text} />
+              <Ionicons name="ellipsis-horizontal" size={22} color={theme.colors.textMuted} />
             </Pressable>
           ) : null}
-          <Pressable onPress={handleShare} style={styles.shareButton}>
-            <Ionicons name="share-outline" size={24} color={theme.colors.text} />
+          <Pressable onPress={handleShare} style={styles.headerIconButton}>
+            <Ionicons name="share-outline" size={22} color={theme.colors.textMuted} />
           </Pressable>
         </View>
       </View>
@@ -648,35 +698,51 @@ export function PostDetailScreen() {
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={styles.keyboardAvoid}
-        keyboardVerticalOffset={0}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 8 : 0}
       >
         <ScrollView
           style={styles.scrollView}
+          contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
           refreshControl={
             <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.colors.primary} />
           }
         >
-          {thread.ispinned && (
-            <View style={styles.pinnedBadge}>
-              <Ionicons name="pin" size={14} color={theme.colors.warning} />
-              <Text style={styles.pinnedText}>Pinned</Text>
+          {thread.ispinned ? (
+            <View style={styles.pinnedRow}>
+              <View style={styles.pinnedBadge}>
+                <Ionicons name="pin" size={12} color={theme.colors.warning} />
+                <Text style={styles.pinnedText}>Pinned</Text>
+              </View>
             </View>
-          )}
+          ) : null}
 
-          <View style={styles.postContainer}>
-            <Pressable 
+          <View style={styles.postCard}>
+            {isDark ? (
+              <LinearGradient
+                colors={['rgba(16, 185, 129, 0.14)', 'rgba(16, 185, 129, 0)']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={styles.postGlow}
+                pointerEvents="none"
+              />
+            ) : null}
+
+            <Pressable
               style={styles.authorRow}
               onPress={() => !thread.is_anonymous && thread.users && navigateToUserProfile(thread.userid)}
               disabled={thread.is_anonymous}
             >
-              {avatarUrl ? (
-                <Image source={{ uri: avatarUrl }} style={styles.avatar} />
-              ) : (
-                <View style={styles.avatarPlaceholder}>
-                  <Ionicons name="person" size={20} color={theme.colors.textMuted} />
-                </View>
-              )}
+              <Avatar
+                src={thread.is_anonymous ? null : thread.users?.avatarurl}
+                name={authorName}
+                userId={thread.is_anonymous ? null : thread.userid}
+                avatarSeed={thread.is_anonymous ? null : thread.users?.avatarseed}
+                size="md"
+                anonymous={thread.is_anonymous}
+                showRing
+              />
               <View style={styles.authorInfo}>
                 <Text style={[styles.authorName, !thread.is_anonymous && styles.authorNameClickable]}>
                   {authorName}
@@ -686,138 +752,169 @@ export function PostDetailScreen() {
             </Pressable>
 
             <View style={styles.categoryBadge}>
-              <Ionicons
-                name={getCategoryIcon(thread.category)}
-                size={14}
-                color={theme.colors.primary}
-              />
+              <Ionicons name={getCategoryIcon(thread.category)} size={13} color={theme.colors.primary} />
               <Text style={styles.categoryText}>{getCategoryLabel(thread.category)}</Text>
             </View>
 
             <Text style={styles.title}>{thread.title}</Text>
             <Text style={styles.content}>{thread.content}</Text>
 
-            <View style={styles.actionsRow}>
-              {!isPrayerPost && (
-                <Pressable style={styles.actionButton} onPress={handleLike}>
-                  <Ionicons
-                    name={thread.user_has_liked ? 'heart' : 'heart-outline'}
-                    size={22}
-                    color={thread.user_has_liked ? theme.colors.error : theme.colors.textMuted}
-                  />
-                  <Text style={[styles.actionText, thread.user_has_liked && styles.actionTextActive]}>
-                    {thread.like_count || 0}
-                  </Text>
-                </Pressable>
+            <View style={styles.engagementBar}>
+              {!isPrayerPost
+                ? renderEngagementChip(
+                    'like',
+                    <Ionicons
+                      name={thread.user_has_liked ? 'heart' : 'heart-outline'}
+                      size={18}
+                      color={thread.user_has_liked ? theme.colors.error : theme.colors.textMuted}
+                    />,
+                    String(thread.like_count || 0),
+                    Boolean(thread.user_has_liked),
+                    handleLike,
+                    likeScale,
+                  )
+                : renderEngagementChip(
+                    'pray',
+                    <Ionicons
+                      name={thread.user_has_prayed ? 'hand-right' : 'hand-right-outline'}
+                      size={18}
+                      color={thread.user_has_prayed ? theme.colors.primary : theme.colors.textMuted}
+                    />,
+                    `${thread.prayer_count || 0} prayed`,
+                    Boolean(thread.user_has_prayed),
+                    handlePray,
+                    likeScale,
+                  )}
+              {renderEngagementChip(
+                'comments',
+                <Ionicons name="chatbubble-outline" size={18} color={theme.colors.textMuted} />,
+                String(commentCount),
+                false,
               )}
-
-              {isPrayerPost && (
-                <Pressable style={styles.actionButton} onPress={handlePray}>
-                  <Ionicons
-                    name={thread.user_has_prayed ? 'hand-right' : 'hand-right-outline'}
-                    size={22}
-                    color={thread.user_has_prayed ? theme.colors.primary : theme.colors.textMuted}
-                  />
-                  <Text style={[styles.actionText, thread.user_has_prayed && styles.prayedText]}>
-                    {thread.prayer_count || 0} prayed
-                  </Text>
-                </Pressable>
-              )}
-
-              <View style={styles.actionButton}>
-                <Ionicons name="chatbubble-outline" size={22} color={theme.colors.textMuted} />
-                <Text style={styles.actionText}>{thread.comment_count || 0}</Text>
-              </View>
-
-              <Pressable style={styles.actionButton} onPress={handleBookmark}>
+              {renderEngagementChip(
+                'bookmark',
                 <Ionicons
-                  name={isBookmarked('thread', thread.id) ? 'bookmark' : 'bookmark-outline'}
-                  size={22}
-                  color={isBookmarked('thread', thread.id) ? theme.colors.primary : theme.colors.textMuted}
-                />
-              </Pressable>
+                  name={saved ? 'bookmark' : 'bookmark-outline'}
+                  size={18}
+                  color={saved ? theme.colors.primary : theme.colors.textMuted}
+                />,
+                saved ? 'Saved' : 'Save',
+                saved,
+                handleBookmark,
+                bookmarkScale,
+              )}
             </View>
           </View>
 
-          <View style={styles.commentsSection}>
-            <Text style={styles.commentsTitle}>
-              Comments ({comments.length})
-            </Text>
+          <View style={styles.commentsWell}>
+            <View style={styles.commentsHeader}>
+              <Text style={styles.commentsTitle}>Conversation</Text>
+              <Text style={styles.commentsCount}>{commentCount}</Text>
+            </View>
 
             {comments.length === 0 ? (
               <View style={styles.emptyComments}>
-                <Ionicons name="chatbubbles-outline" size={36} color={theme.colors.border} />
-                <Text style={styles.emptyCommentsText}>No comments yet</Text>
-                <Text style={styles.emptyCommentsSubtext}>Be the first to comment</Text>
+                <View style={styles.emptyCommentsIconWrap}>
+                  <LinearGradient
+                    colors={
+                      isDark
+                        ? ['rgba(16, 185, 129, 0.2)', 'rgba(16, 185, 129, 0.04)']
+                        : [theme.colors.primaryLight, theme.colors.surfaceSecondary]
+                    }
+                    style={styles.emptyCommentsIconGradient}
+                  >
+                    <Ionicons name="chatbubbles-outline" size={28} color={theme.colors.primary} />
+                  </LinearGradient>
+                </View>
+                <Text style={styles.emptyCommentsText}>No conversations yet</Text>
+                <Text style={styles.emptyCommentsSubtext}>Start the discussion — your voice matters here.</Text>
               </View>
             ) : (
-              comments.map(comment => (
+              comments.map((comment) => (
                 <View key={comment.id} style={styles.commentCard}>
-                  <Pressable 
-                    style={styles.commentRow}
-                    onPress={() => comment.users && navigateToUserProfile(comment.userid)}
-                  >
-                    {comment.users?.avatarurl ? (
-                      <Image source={{ uri: comment.users.avatarurl }} style={styles.commentAvatar} />
-                    ) : (
-                      <View style={styles.commentAvatarPlaceholder}>
-                        <Ionicons name="person" size={14} color={theme.colors.textMuted} />
-                      </View>
-                    )}
-                    <View style={styles.commentContent}>
+                  <View style={styles.commentRow}>
+                    <Pressable
+                      onPress={() => comment.users && navigateToUserProfile(comment.userid)}
+                      accessibilityRole="button"
+                      accessibilityLabel="View member profile"
+                    >
+                      <Avatar
+                        src={comment.users?.avatarurl}
+                        name={comment.users?.fullname || comment.users?.username}
+                        userId={comment.userid}
+                        avatarSeed={comment.users?.avatarseed}
+                        size="xs"
+                        showRing
+                      />
+                    </Pressable>
+                    <View style={styles.commentBubble}>
                       <View style={styles.commentHeader}>
-                        <Text style={styles.commentAuthor}>
-                          {comment.users?.fullname || comment.users?.username || 'Member'}
-                        </Text>
+                        <Pressable
+                          onPress={() => comment.users && navigateToUserProfile(comment.userid)}
+                          style={styles.commentAuthorPressable}
+                        >
+                          <Text style={styles.commentAuthor}>
+                            {comment.users?.fullname || comment.users?.username || 'Member'}
+                          </Text>
+                        </Pressable>
                         <View style={styles.commentActions}>
                           <Text style={styles.commentTime}>{formatTimeAgo(comment.createdat)}</Text>
                           {user ? (
                             <Pressable
                               onPress={() => handleCommentOverflow(comment)}
-                              style={styles.deleteCommentButton}
-                              hitSlop={8}
-                              accessibilityLabel="Comment options"
+                              style={styles.commentOverflowButton}
+                              hitSlop={12}
+                              accessibilityLabel="Comment options: report, block, or delete"
                             >
-                              <Ionicons name="ellipsis-horizontal" size={18} color={theme.colors.textMuted} />
+                              <Ionicons name="ellipsis-horizontal" size={16} color={theme.colors.textMuted} />
                             </Pressable>
                           ) : null}
                         </View>
                       </View>
                       <Text style={styles.commentText}>{comment.content}</Text>
                     </View>
-                  </Pressable>
+                  </View>
                 </View>
               ))
             )}
           </View>
 
-          <View style={{ height: 100 }} />
+          <View style={{ height: 24 + insets.bottom }} />
         </ScrollView>
 
-        <View style={styles.commentInputContainer}>
-          <View style={styles.commentInputWrapper}>
-            <TextInput
-              style={styles.commentInput}
-              placeholder="Write a comment..."
-              placeholderTextColor={theme.colors.textMuted}
-              value={newComment}
-              onChangeText={setNewComment}
-              multiline
-              maxLength={500}
-            />
-            <Text style={styles.charCounter}>{newComment.length}/500</Text>
-          </View>
-          <Pressable
-            style={[styles.sendButton, (!newComment.trim() || submittingComment) && styles.sendButtonDisabled]}
-            onPress={handleSubmitComment}
-            disabled={!newComment.trim() || submittingComment}
-          >
-            {submittingComment ? (
-              <ActivityIndicator size="small" color="#fff" />
-            ) : (
-              <Ionicons name="send" size={20} color="#fff" />
-            )}
-          </Pressable>
+        <View style={[styles.commentDock, { paddingBottom: Math.max(insets.bottom, 12) }]}>
+          <BlurView intensity={isDark ? 72 : 88} tint={isDark ? 'dark' : 'light'} style={styles.commentDockBlur}>
+            <View style={styles.commentDockInner}>
+              <View style={styles.commentInputShell}>
+                <TextInput
+                  style={styles.commentInput}
+                  placeholder="Share your thoughts..."
+                  placeholderTextColor={theme.colors.textMuted}
+                  value={newComment}
+                  onChangeText={setNewComment}
+                  multiline
+                  maxLength={500}
+                />
+                {newComment.length > 0 ? (
+                  <Text style={styles.charCounter}>{newComment.length}/500</Text>
+                ) : null}
+              </View>
+              <Pressable
+                style={[
+                  styles.sendButton,
+                  (!newComment.trim() || submittingComment) && styles.sendButtonDisabled,
+                ]}
+                onPress={handleSubmitComment}
+                disabled={!newComment.trim() || submittingComment}
+              >
+                {submittingComment ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <Ionicons name="arrow-up" size={20} color="#fff" />
+                )}
+              </Pressable>
+            </View>
+          </BlurView>
         </View>
       </KeyboardAvoidingView>
 
@@ -847,297 +944,442 @@ export function PostDetailScreen() {
 }
 
 function createPostDetailStyles(theme: Theme) {
+  const surfaces = theme.dark
+    ? {
+        canvas: '#050505',
+        post: '#0E0E11',
+        comments: '#0A0A0C',
+        dock: 'rgba(21, 21, 24, 0.72)',
+        engagement: 'rgba(255, 255, 255, 0.04)',
+        engagementActive: 'rgba(16, 185, 129, 0.14)',
+        commentBubble: '#141418',
+        input: 'rgba(255, 255, 255, 0.06)',
+        border: 'rgba(255, 255, 255, 0.08)',
+        shadow: '#000000',
+      }
+    : {
+        canvas: theme.colors.background,
+        post: theme.colors.surface,
+        comments: theme.colors.surfaceSecondary,
+        dock: 'rgba(255, 255, 255, 0.9)',
+        engagement: theme.colors.borderLight,
+        engagementActive: theme.colors.primaryLight,
+        commentBubble: theme.colors.surface,
+        input: theme.colors.borderLight,
+        border: theme.colors.border,
+        shadow: '#18181b',
+      };
+
   return StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: theme.colors.background,
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: theme.colors.border,
-  },
-  backButton: {
-    padding: 8,
-  },
-  headerTitle: {
-    fontSize: 17,
-    fontWeight: '600',
-    color: theme.colors.text,
-  },
-  shareButton: {
-    padding: 8,
-  },
-  headerActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  deletePostButton: {
-    padding: 8,
-    marginRight: 4,
-  },
-  keyboardAvoid: {
-    flex: 1,
-  },
-  scrollView: {
-    flex: 1,
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  errorContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: 40,
-  },
-  errorText: {
-    fontSize: 16,
-    color: theme.colors.textMuted,
-    marginTop: 12,
-    marginBottom: 20,
-    textAlign: 'center',
-  },
-  retryButton: {
-    backgroundColor: theme.colors.primary,
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    borderRadius: 8,
-  },
-  retryButtonText: {
-    color: '#fff',
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  pinnedBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 20,
-    paddingTop: 16,
-  },
-  pinnedText: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: theme.colors.warning,
-  },
-  postContainer: {
-    padding: 20,
-  },
-  authorRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  avatar: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-  },
-  avatarPlaceholder: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: theme.colors.borderLight,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  authorInfo: {
-    marginLeft: 12,
-  },
-  authorName: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: theme.colors.text,
-  },
-  authorNameClickable: {
-    color: theme.colors.primary,
-  },
-  timestamp: {
-    fontSize: 13,
-    color: theme.colors.textMuted,
-    marginTop: 2,
-  },
-  categoryBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    backgroundColor: theme.colors.primaryLight,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 16,
-    alignSelf: 'flex-start',
-    marginBottom: 16,
-  },
-  categoryText: {
-    fontSize: 13,
-    fontWeight: '500',
-    color: theme.colors.primary,
-  },
-  title: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: theme.colors.text,
-    lineHeight: 28,
-    marginBottom: 12,
-  },
-  content: {
-    fontSize: 16,
-    color: theme.colors.textSecondary,
-    lineHeight: 24,
-    marginBottom: 20,
-  },
-  actionsRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 20,
-    paddingTop: 16,
-    borderTopWidth: 1,
-    borderTopColor: theme.colors.border,
-  },
-  actionButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingVertical: 4,
-  },
-  actionText: {
-    fontSize: 14,
-    color: theme.colors.textMuted,
-    fontWeight: '500',
-  },
-  actionTextActive: {
-    color: theme.colors.error,
-  },
-  prayedText: {
-    color: theme.colors.primary,
-  },
-  commentsSection: {
-    paddingHorizontal: 20,
-    paddingTop: 20,
-    borderTopWidth: 8,
-    borderTopColor: theme.colors.borderLight,
-  },
-  commentsTitle: {
-    fontSize: 17,
-    fontWeight: '600',
-    color: theme.colors.text,
-    marginBottom: 16,
-  },
-  emptyComments: {
-    alignItems: 'center',
-    paddingVertical: 32,
-  },
-  emptyCommentsText: {
-    fontSize: 15,
-    fontWeight: '500',
-    color: theme.colors.textMuted,
-    marginTop: 12,
-  },
-  emptyCommentsSubtext: {
-    fontSize: 13,
-    color: theme.colors.textMuted,
-    marginTop: 4,
-  },
-  commentCard: {
-    marginBottom: 16,
-  },
-  commentRow: {
-    flexDirection: 'row',
-  },
-  commentAvatar: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-  },
-  commentAvatarPlaceholder: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: theme.colors.borderLight,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  commentContent: {
-    flex: 1,
-    marginLeft: 12,
-    backgroundColor: theme.colors.borderLight,
-    borderRadius: 12,
-    padding: 12,
-  },
-  commentHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 4,
-  },
-  commentAuthor: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: theme.colors.text,
-  },
-  commentTime: {
-    fontSize: 12,
-    color: theme.colors.textMuted,
-  },
-  commentActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  deleteCommentButton: {
-    padding: 4,
-  },
-  commentText: {
-    fontSize: 14,
-    color: theme.colors.textSecondary,
-    lineHeight: 20,
-  },
-  commentInputContainer: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    gap: 12,
-    padding: 16,
-    borderTopWidth: 1,
-    borderTopColor: theme.colors.border,
-    backgroundColor: theme.colors.background,
-  },
-  commentInputWrapper: {
-    flex: 1,
-  },
-  commentInput: {
-    backgroundColor: theme.colors.borderLight,
-    borderRadius: 20,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    paddingTop: 10,
-    fontSize: 15,
-    color: theme.colors.text,
-    maxHeight: 100,
-  },
-  charCounter: {
-    fontSize: 11,
-    color: theme.colors.textMuted,
-    textAlign: 'right',
-    marginTop: 4,
-    marginRight: 8,
-  },
-  sendButton: {
-    backgroundColor: theme.colors.primary,
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  sendButtonDisabled: {
-    backgroundColor: theme.colors.textMuted,
-  },
+    container: {
+      flex: 1,
+      backgroundColor: surfaces.canvas,
+    },
+    header: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      paddingHorizontal: 12,
+      paddingVertical: 10,
+    },
+    headerIconButton: {
+      width: 40,
+      height: 40,
+      borderRadius: 20,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    headerTitle: {
+      fontSize: 16,
+      fontWeight: '600',
+      letterSpacing: -0.2,
+      color: theme.colors.text,
+    },
+    headerActions: {
+      flexDirection: 'row',
+      alignItems: 'center',
+    },
+    keyboardAvoid: {
+      flex: 1,
+    },
+    scrollView: {
+      flex: 1,
+    },
+    scrollContent: {
+      paddingBottom: 8,
+    },
+    loadingContainer: {
+      flex: 1,
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    errorContainer: {
+      flex: 1,
+      justifyContent: 'center',
+      alignItems: 'center',
+      paddingHorizontal: 40,
+    },
+    errorText: {
+      fontSize: 16,
+      color: theme.colors.textMuted,
+      marginTop: 12,
+      marginBottom: 20,
+      textAlign: 'center',
+    },
+    retryButton: {
+      backgroundColor: theme.colors.primary,
+      paddingHorizontal: 24,
+      paddingVertical: 12,
+      borderRadius: 12,
+    },
+    retryButtonText: {
+      color: '#fff',
+      fontSize: 14,
+      fontWeight: '600',
+    },
+    pinnedRow: {
+      paddingHorizontal: 16,
+      paddingTop: 8,
+    },
+    pinnedBadge: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      alignSelf: 'flex-start',
+      gap: 6,
+      paddingHorizontal: 10,
+      paddingVertical: 5,
+      borderRadius: 999,
+      backgroundColor: theme.dark ? 'rgba(251, 191, 36, 0.12)' : '#fef3c7',
+    },
+    pinnedText: {
+      fontSize: 12,
+      fontWeight: '600',
+      color: theme.colors.warning,
+      letterSpacing: 0.2,
+    },
+    postCard: {
+      marginHorizontal: 16,
+      marginTop: 8,
+      marginBottom: 12,
+      paddingHorizontal: 20,
+      paddingTop: 20,
+      paddingBottom: 18,
+      borderRadius: 20,
+      backgroundColor: surfaces.post,
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: surfaces.border,
+      overflow: 'hidden',
+      ...Platform.select({
+        ios: {
+          shadowColor: surfaces.shadow,
+          shadowOffset: { width: 0, height: 8 },
+          shadowOpacity: theme.dark ? 0.35 : 0.08,
+          shadowRadius: 16,
+        },
+        android: { elevation: theme.dark ? 4 : 2 },
+      }),
+    },
+    postGlow: {
+      position: 'absolute',
+      top: 0,
+      left: 0,
+      right: 0,
+      height: 120,
+    },
+    authorRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      marginBottom: 18,
+    },
+    avatar: {
+      width: 42,
+      height: 42,
+      borderRadius: 21,
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: surfaces.border,
+    },
+    avatarPlaceholder: {
+      width: 42,
+      height: 42,
+      borderRadius: 21,
+      backgroundColor: surfaces.input,
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    authorInfo: {
+      marginLeft: 12,
+      flex: 1,
+    },
+    authorName: {
+      fontSize: 14,
+      fontWeight: '600',
+      letterSpacing: -0.1,
+      color: theme.colors.text,
+    },
+    authorNameClickable: {
+      color: theme.colors.primary,
+    },
+    timestamp: {
+      fontSize: 12,
+      color: theme.colors.textMuted,
+      marginTop: 3,
+    },
+    categoryBadge: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      backgroundColor: theme.dark ? 'rgba(16, 185, 129, 0.12)' : theme.colors.primaryLight,
+      paddingHorizontal: 10,
+      paddingVertical: 5,
+      borderRadius: 999,
+      alignSelf: 'flex-start',
+      marginBottom: 20,
+    },
+    categoryText: {
+      fontSize: 12,
+      fontWeight: '600',
+      color: theme.colors.primary,
+      letterSpacing: 0.15,
+    },
+    title: {
+      fontSize: 26,
+      fontWeight: '600',
+      letterSpacing: -0.6,
+      color: theme.colors.text,
+      lineHeight: 32,
+      marginBottom: 14,
+      maxWidth: '100%',
+    },
+    content: {
+      fontSize: 15,
+      color: theme.colors.textSecondary,
+      lineHeight: 23,
+      marginBottom: 22,
+      maxWidth: '100%',
+    },
+    engagementBar: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      gap: 8,
+      padding: 6,
+      borderRadius: 16,
+      backgroundColor: surfaces.engagement,
+    },
+    engagementChipPressable: {
+      flex: 1,
+    },
+    engagementChipPressed: {
+      opacity: 0.82,
+    },
+    engagementChip: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 6,
+      minHeight: 40,
+      paddingHorizontal: 10,
+      borderRadius: 12,
+    },
+    engagementChipActive: {
+      backgroundColor: surfaces.engagementActive,
+    },
+    engagementChipLabel: {
+      fontSize: 13,
+      fontWeight: '600',
+      color: theme.colors.textMuted,
+    },
+    engagementChipLabelActive: {
+      color: theme.colors.text,
+    },
+    commentsWell: {
+      marginHorizontal: 16,
+      marginBottom: 16,
+      paddingHorizontal: 16,
+      paddingTop: 18,
+      paddingBottom: 8,
+      borderRadius: 20,
+      backgroundColor: surfaces.comments,
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: surfaces.border,
+    },
+    commentsHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      marginBottom: 18,
+    },
+    commentsTitle: {
+      fontSize: 13,
+      fontWeight: '700',
+      letterSpacing: 0.8,
+      textTransform: 'uppercase',
+      color: theme.colors.textMuted,
+    },
+    commentsCount: {
+      fontSize: 13,
+      fontWeight: '700',
+      color: theme.colors.primary,
+      minWidth: 24,
+      textAlign: 'right',
+    },
+    emptyComments: {
+      alignItems: 'center',
+      paddingVertical: 28,
+      paddingHorizontal: 12,
+    },
+    emptyCommentsIconWrap: {
+      marginBottom: 16,
+    },
+    emptyCommentsIconGradient: {
+      width: 64,
+      height: 64,
+      borderRadius: 32,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    emptyCommentsText: {
+      fontSize: 16,
+      fontWeight: '600',
+      letterSpacing: -0.2,
+      color: theme.colors.text,
+      textAlign: 'center',
+    },
+    emptyCommentsSubtext: {
+      fontSize: 14,
+      lineHeight: 20,
+      color: theme.colors.textMuted,
+      marginTop: 8,
+      textAlign: 'center',
+      maxWidth: 260,
+      opacity: 0.9,
+    },
+    commentCard: {
+      marginBottom: 14,
+    },
+    commentRow: {
+      flexDirection: 'row',
+      alignItems: 'flex-start',
+    },
+    commentAvatar: {
+      width: 30,
+      height: 30,
+      borderRadius: 15,
+    },
+    commentAvatarPlaceholder: {
+      width: 30,
+      height: 30,
+      borderRadius: 15,
+      backgroundColor: surfaces.input,
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    commentBubble: {
+      flex: 1,
+      marginLeft: 10,
+      backgroundColor: surfaces.commentBubble,
+      borderRadius: 14,
+      paddingHorizontal: 12,
+      paddingVertical: 10,
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: surfaces.border,
+    },
+    commentHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      marginBottom: 6,
+      gap: 8,
+    },
+    commentAuthorPressable: {
+      flexShrink: 1,
+      marginRight: 8,
+    },
+    commentAuthor: {
+      fontSize: 13,
+      fontWeight: '600',
+      color: theme.colors.text,
+      flexShrink: 1,
+    },
+    commentTime: {
+      fontSize: 11,
+      color: theme.colors.textMuted,
+    },
+    commentActions: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 4,
+      flexShrink: 0,
+    },
+    commentOverflowButton: {
+      padding: 2,
+    },
+    commentText: {
+      fontSize: 14,
+      color: theme.colors.textSecondary,
+      lineHeight: 21,
+    },
+    commentDock: {
+      borderTopWidth: StyleSheet.hairlineWidth,
+      borderTopColor: surfaces.border,
+      overflow: 'hidden',
+    },
+    commentDockBlur: {
+      backgroundColor: surfaces.dock,
+    },
+    commentDockInner: {
+      flexDirection: 'row',
+      alignItems: 'flex-end',
+      gap: 10,
+      paddingHorizontal: 14,
+      paddingTop: 12,
+    },
+    commentInputShell: {
+      flex: 1,
+    },
+    commentInput: {
+      backgroundColor: surfaces.input,
+      borderRadius: 22,
+      paddingHorizontal: 16,
+      paddingVertical: 11,
+      paddingTop: 11,
+      fontSize: 15,
+      lineHeight: 20,
+      color: theme.colors.text,
+      maxHeight: 110,
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: surfaces.border,
+    },
+    charCounter: {
+      fontSize: 11,
+      color: theme.colors.textMuted,
+      textAlign: 'right',
+      marginTop: 6,
+      marginRight: 6,
+      opacity: 0.8,
+    },
+    sendButton: {
+      backgroundColor: theme.colors.primary,
+      width: 44,
+      height: 44,
+      borderRadius: 22,
+      justifyContent: 'center',
+      alignItems: 'center',
+      marginBottom: 2,
+      ...Platform.select({
+        ios: {
+          shadowColor: theme.colors.primary,
+          shadowOffset: { width: 0, height: 4 },
+          shadowOpacity: 0.35,
+          shadowRadius: 8,
+        },
+        android: { elevation: 4 },
+      }),
+    },
+    sendButtonDisabled: {
+      backgroundColor: theme.dark ? '#3f3f46' : theme.colors.textMuted,
+      shadowOpacity: 0,
+      elevation: 0,
+    },
   });
 }

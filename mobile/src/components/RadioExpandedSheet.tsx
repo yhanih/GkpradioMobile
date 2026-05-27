@@ -26,6 +26,7 @@ import * as Haptics from 'expo-haptics';
 import { useAudio } from '../contexts/AudioContext';
 import { useAuth } from '../contexts/AuthContext';
 import { fetchRadioQueueInfo, blockCommunityUser, fetchBlockedUserIds, sanitizeText } from '../lib/backend';
+import { UNRECOGNIZED_RADIO_ARTIST } from '../lib/radioNowPlaying';
 import { supabase } from '../lib/supabase';
 import { ReportContentModal } from './ReportContentModal';
 import { openLiveChatMessageMenu } from '../utils/contentOverflowMenu';
@@ -268,7 +269,7 @@ export function RadioExpandedSheet({ visible, onClose }: RadioExpandedSheetProps
   const song = nowPlaying?.now_playing?.song;
   const hasArt = Boolean(song?.art && song.art.trim() !== '');
   const title = song?.title || 'Kingdom Principles Radio';
-  const artist = song?.artist || 'Live stream';
+  const artist = song?.artist || UNRECOGNIZED_RADIO_ARTIST;
 
   const handleShare = useCallback(async () => {
     Haptics.selectionAsync();
@@ -342,7 +343,7 @@ export function RadioExpandedSheet({ visible, onClose }: RadioExpandedSheetProps
     }
     const parts: string[] = [];
     if (info.upNext) {
-      parts.push(`Up next\n${info.upNext.title} — ${info.upNext.artist || 'GKP Radio'}`);
+      parts.push(`Up next\n${info.upNext.title} — ${info.upNext.artist || UNRECOGNIZED_RADIO_ARTIST}`);
     } else {
       parts.push(
         'Up next isn’t published for this stream right now. It usually appears when AutoDJ schedules the following track.'
@@ -351,7 +352,9 @@ export function RadioExpandedSheet({ visible, onClose }: RadioExpandedSheetProps
     if (info.recent.length > 0) {
       parts.push(
         '\nRecently played\n' +
-          info.recent.map((r, i) => `${i + 1}. ${r.title} — ${r.artist || 'GKP Radio'}`).join('\n')
+          info.recent
+            .map((r, i) => `${i + 1}. ${r.title} — ${r.artist || UNRECOGNIZED_RADIO_ARTIST}`)
+            .join('\n')
       );
     }
     Alert.alert('Station queue', parts.join('\n'), [{ text: 'OK' }], { userInterfaceStyle: 'dark' });

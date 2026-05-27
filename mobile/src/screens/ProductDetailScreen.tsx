@@ -19,7 +19,6 @@ import { useTheme } from '../contexts/ThemeContext';
 import { useCart } from '../contexts/CartContext';
 import { RootStackParamList } from '../types/navigation';
 import { AnimatedButton } from '../components/AnimatedPressable';
-import { CartSheet } from '../components/CartSheet';
 import type { Product } from '../types/product';
 
 type ProductDetailRouteProp = RouteProp<RootStackParamList, 'ProductDetail'>;
@@ -29,7 +28,7 @@ export function ProductDetailScreen() {
   const route = useRoute<ProductDetailRouteProp>();
   const navigation = useNavigation<ProductDetailNavProp>();
   const { theme } = useTheme();
-  const { addToCart, cartCount } = useCart();
+  const { addToCart, cartCount, openCart } = useCart();
   const { product } = route.params as { product: Product };
 
   const [selectedSize, setSelectedSize] = useState<string | undefined>(
@@ -38,8 +37,6 @@ export function ProductDetailScreen() {
   const [selectedColor, setSelectedColor] = useState<string | undefined>(
     product.colors && product.colors.length > 0 ? product.colors[0] : undefined
   );
-  const [cartVisible, setCartVisible] = useState(false);
-
   const handleAddToCart = () => {
     if (!product.inStock) {
       Alert.alert('Out of Stock', 'This item is currently sold out.');
@@ -67,7 +64,7 @@ export function ProductDetailScreen() {
           text: 'View Cart',
           onPress: () => {
             Haptics.selectionAsync();
-            setCartVisible(true);
+            openCart();
           },
         },
       ]
@@ -114,7 +111,7 @@ export function ProductDetailScreen() {
           style={({ pressed }) => [styles.headerButton, { backgroundColor: theme.colors.surface }, pressed && styles.headerButtonPressed]}
           onPress={() => {
             Haptics.selectionAsync();
-            setCartVisible(true);
+            openCart();
           }}
           accessibilityLabel="Open shopping cart"
         >
@@ -266,8 +263,6 @@ export function ProductDetailScreen() {
         </AnimatedButton>
       </View>
 
-      {/* Slide up Cart Sheet */}
-      <CartSheet visible={cartVisible} onClose={() => setCartVisible(false)} />
     </SafeAreaView>
   );
 }

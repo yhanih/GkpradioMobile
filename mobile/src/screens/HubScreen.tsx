@@ -9,15 +9,11 @@ import {
   Linking,
   Alert,
   ActivityIndicator,
-  Image,
-  Share,
-  Platform,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
-import * as StoreReview from 'expo-store-review';
 import Constants from 'expo-constants';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
@@ -28,8 +24,10 @@ import { useOnboardingGate } from '../contexts/OnboardingGateContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { supabase } from '../lib/supabase';
 import { registerForPushNotifications } from '../lib/notifications';
+import { rateApp, runAfterPress, shareApp } from '../lib/appShare';
+import { Avatar } from '../components/ui/avatar';
 import * as Notifications from 'expo-notifications';
-import { FEEDBACK_EMAIL, HELP_DESK_EMAIL } from '../constants/contact';
+import { FEEDBACK_EMAIL, HELP_DESK_EMAIL, SAFETY_REPORT_EMAIL_SUBJECT } from '../constants/contact';
 import { ThemeToggleButton } from '../components/ThemeToggleButton';
 
 type HubNavigationProp = NativeStackNavigationProp<RootStackParamList>;
@@ -288,9 +286,14 @@ export function HubScreen() {
   };
 
   const handleTermsOfService = () => {
+    Haptics.selectionAsync();
+    navigation.navigate('TermsOfService');
+  };
+
+  const handleReportSafetyIssue = () => {
     openExternalLink(
-      'https://godkingdomprinciplesradio.com/terms',
-      'Could not open browser. Please visit our website manually.'
+      `mailto:${HELP_DESK_EMAIL}?subject=${encodeURIComponent(SAFETY_REPORT_EMAIL_SUBJECT)}`,
+      `Could not open email app. Please email ${HELP_DESK_EMAIL} directly.`
     );
   };
 
@@ -311,81 +314,29 @@ export function HubScreen() {
     );
   };
 
-  const handleRateApp = async () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    
-    try {
-      const isAvailable = await StoreReview.isAvailableAsync();
-      
-      if (isAvailable) {
-        await StoreReview.requestReview();
-        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-      } else {
-        const storeUrl = Platform.select({
-          ios: 'https://apps.apple.com/app/gkp-radio/id123456789',
-          android: 'https://play.google.com/store/apps/details?id=com.gkpradio.mobile',
-          default: 'https://godkingdomprinciplesradio.com/app',
-        });
-        
-        Alert.alert(
-          'Rate GKP Radio',
-          'Would you like to rate our app in the store?',
-          [
-            { text: 'Not Now', style: 'cancel' },
-            { 
-              text: 'Open Store', 
-              onPress: async () => {
-                try {
-                  await Linking.openURL(storeUrl);
-                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-                } catch (err) {
-                  Alert.alert('Error', 'Could not open app store.');
-                }
-              }
-            },
-          ]
-        );
+  const handleRateApp = () => {
+    runAfterPress(async () => {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      try {
+        await rateApp();
+      } catch (error) {
+        console.error('Error requesting review:', error);
+        Alert.alert('Error', 'Could not open the app store. Please try again later.');
       }
-    } catch (error) {
-      console.error('Error requesting review:', error);
-      Alert.alert('Error', 'Could not open app store. Please try again later.');
-    }
+    });
   };
 
-  const handleShareApp = async () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    
-    try {
-      const result = await Share.share({
-        message: Platform.select({
-          ios: 'Check out GKP Radio - Faith-based content, live radio, and community!\n\nhttps://godkingdomprinciplesradio.com/app',
-          android: 'Check out GKP Radio - Faith-based content, live radio, and community!\n\nhttps://godkingdomprinciplesradio.com/app',
-          default: 'Check out GKP Radio!\n\nhttps://godkingdomprinciplesradio.com/app',
-        }),
-        title: 'Share GKP Radio',
-        url: 'https://godkingdomprinciplesradio.com/app',
-      });
-      
-      if (result.action === Share.sharedAction) {
-        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+  const handleShareApp = () => {
+    runAfterPress(async () => {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      try {
+        await shareApp();
+      } catch (error) {
+        console.error('Error sharing:', error);
+        Alert.alert('Error', 'Could not open the share sheet. Please try again.');
       }
-    } catch (error) {
-      console.error('Error sharing:', error);
-      Alert.alert('Error', 'Could not share app. Please try again.');
-    }
+    });
   };
-
-  const getUserInitials = () => {
-    if (!user) return 'GK';
-    const name = user.fullname || user.email;
-    const parts = name.split(/[ @._-]/);
-    if (parts.length >= 2) {
-      return (parts[0][0] + parts[1][0]).toUpperCase();
-    }
-    return name.slice(0, 2).toUpperCase();
-  };
-
-  const avatarUrl = user?.avatarurl;
 
   return (
     <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
@@ -413,17 +364,16 @@ export function HubScreen() {
                 }}
               >
                 <View style={styles.avatarContainer}>
-                  {avatarUrl ? (
-                    <Image source={{ uri: avatarUrl }} style={styles.avatarImage} />
-                  ) : (
-                    <LinearGradient
-                      colors={['#ffffff', '#f0fdf4']}
-                      style={styles.avatar}
-                    >
-                      <Text style={styles.avatarText}>{getUserInitials()}</Text>
-                    </LinearGradient>
-                  )}
-                  <View style={styles.onlineIndicator} />
+                  <Avatar
+                    src={user.avatarurl}
+                    name={user.fullname}
+                    email={user.email}
+                    userId={user.id}
+                    avatarSeed={user.avatarseed}
+                    size="lg"
+                    showRing
+                    showOnlineIndicator
+                  />
                 </View>
                 <Text style={styles.welcomeText}>Welcome back!</Text>
                 <Text style={styles.emailText}>{user.fullname || user.email}</Text>
@@ -474,6 +424,18 @@ export function HubScreen() {
         <View style={styles.section}>
           <SectionHeader title="Preferences" theme={theme} />
           <View style={[styles.card, { backgroundColor: theme.colors.surface }]}>
+            <SettingItem
+              icon="heart-outline"
+              label="Activity"
+              subtitle={
+                user
+                  ? 'Likes, prayers, and replies on your posts'
+                  : 'Sign in to see likes, prayers, and replies'
+              }
+              onPress={() => navigation.navigate('Notifications')}
+              theme={theme}
+            />
+            <View style={[styles.divider, { backgroundColor: theme.colors.border }]} />
             <SettingItem
               icon="notifications-outline"
               label="Push Notifications"
@@ -546,6 +508,27 @@ export function HubScreen() {
               label="Rate Us"
               subtitle="Help us improve with your feedback"
               onPress={handleRateApp}
+              theme={theme}
+            />
+          </View>
+        </View>
+
+        <View style={styles.section}>
+          <SectionHeader title="Community Safety" theme={theme} />
+          <View style={[styles.card, { backgroundColor: theme.colors.surface }]}>
+            <SettingItem
+              icon="shield-checkmark-outline"
+              label="Terms & Community Guidelines"
+              subtitle="18+ community rules and zero-tolerance policy"
+              onPress={handleTermsOfService}
+              theme={theme}
+            />
+            <View style={[styles.divider, { backgroundColor: theme.colors.border }]} />
+            <SettingItem
+              icon="flag-outline"
+              label="Report a Problem"
+              subtitle={HELP_DESK_EMAIL}
+              onPress={handleReportSafetyIssue}
               theme={theme}
             />
           </View>

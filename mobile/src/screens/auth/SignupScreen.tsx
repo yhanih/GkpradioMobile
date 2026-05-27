@@ -19,6 +19,9 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useAuth } from '../../contexts/AuthContext';
 import { useTheme, type Theme } from '../../contexts/ThemeContext';
 import { RootStackParamList } from '../../types/navigation';
+import { AvatarVariantPicker } from '../../components/ui/avatar';
+import { DEFAULT_AVATAR_VARIANT } from '../../components/ui/avatar/avatarVariants';
+import { markTermsAcceptancePending } from '../../lib/termsAcceptance';
 
 
 type SignupNavigationProp = NativeStackNavigationProp<RootStackParamList>;
@@ -32,7 +35,8 @@ export function SignupScreen() {
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [agreedToTerms, setAgreedToTerms] = useState(false);
-  const { signUp } = useAuth();
+  const [avatarSeed, setAvatarSeed] = useState(DEFAULT_AVATAR_VARIANT);
+  const { signUp, acceptCommunityTerms } = useAuth();
   const { theme } = useTheme();
   const styles = useMemo(() => createSignupStyles(theme), [theme]);
 
@@ -61,8 +65,21 @@ export function SignupScreen() {
     const { error, needsEmailVerification, signupEmailNotProvisioned } = await signUp(
       email,
       password,
-      fullName
+      fullName,
+      avatarSeed,
     );
+
+    if (!error) {
+      if (needsEmailVerification || signupEmailNotProvisioned) {
+        await markTermsAcceptancePending();
+      } else {
+        const { error: termsError } = await acceptCommunityTerms();
+        if (termsError) {
+          console.warn('[Signup] terms acceptance:', termsError.message);
+        }
+      }
+    }
+
     setLoading(false);
 
     if (error) {
@@ -183,6 +200,12 @@ export function SignupScreen() {
               </View>
             </View>
 
+            <AvatarVariantPicker
+              selectedSeed={avatarSeed}
+              onSelect={setAvatarSeed}
+              disabled={loading}
+            />
+
             {/* EULA / Terms Agreement */}
             <View style={styles.termsRow} accessibilityRole="none">
               <Pressable
@@ -197,7 +220,7 @@ export function SignupScreen() {
                 </View>
               </Pressable>
               <Text style={styles.termsText}>
-                I agree to the{' '}
+                I confirm I am at least 18 years old and agree to the{' '}
                 <Text
                   style={styles.termsLink}
                   onPress={() => navigation.navigate('TermsOfService')}
@@ -205,6 +228,7 @@ export function SignupScreen() {
                 >
                   Terms of Service & Community Guidelines
                 </Text>
+                , including zero tolerance for objectionable content and abusive users.
               </Text>
             </View>
 

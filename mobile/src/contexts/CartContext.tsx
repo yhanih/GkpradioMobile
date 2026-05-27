@@ -1,4 +1,11 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, {
+  createContext,
+  useContext,
+  useState,
+  useEffect,
+  useRef,
+  useCallback,
+} from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export interface CartItem {
@@ -15,6 +22,10 @@ export interface CartItem {
 
 interface CartContextType {
   cartItems: CartItem[];
+  isCartReady: boolean;
+  isCartOpen: boolean;
+  openCart: () => void;
+  closeCart: () => void;
   addToCart: (item: Omit<CartItem, 'id' | 'quantity'> & { size?: string; color?: string; quantity?: number }) => void;
   removeFromCart: (id: string) => void;
   updateQuantity: (id: string, quantity: number) => void;
@@ -29,33 +40,62 @@ const CART_STORAGE_KEY = '@gkp_shopping_cart';
 
 export function CartProvider({ children }: { children: React.ReactNode }) {
   const [cartItems, setCartItems] = useState<CartItem[]>([]);
+  const [isCartReady, setIsCartReady] = useState(false);
+  const [isCartOpen, setIsCartOpen] = useState(false);
+  const cartTouchedRef = useRef(false);
+
+  const markCartTouched = () => {
+    cartTouchedRef.current = true;
+  };
 
   useEffect(() => {
-    loadCart();
+    let cancelled = false;
+
+    (async () => {
+      try {
+        const storedCart = await AsyncStorage.getItem(CART_STORAGE_KEY);
+        if (cancelled) return;
+
+        if (storedCart && !cartTouchedRef.current) {
+          const parsed = JSON.parse(storedCart) as CartItem[];
+          if (Array.isArray(parsed)) {
+            setCartItems(parsed);
+          }
+        }
+      } catch (error) {
+        console.error('[CartContext] Failed to load cart from storage:', error);
+      } finally {
+        if (!cancelled) {
+          setIsCartReady(true);
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
-  const loadCart = async () => {
-    try {
-      const storedCart = await AsyncStorage.getItem(CART_STORAGE_KEY);
-      if (storedCart) {
-        setCartItems(JSON.parse(storedCart));
-      }
-    } catch (error) {
-      console.error('[CartContext] Failed to load cart from storage:', error);
-    }
-  };
+  useEffect(() => {
+    if (!isCartReady) return;
 
-  const saveCart = async (items: CartItem[]) => {
-    try {
-      await AsyncStorage.setItem(CART_STORAGE_KEY, JSON.stringify(items));
-    } catch (error) {
+    AsyncStorage.setItem(CART_STORAGE_KEY, JSON.stringify(cartItems)).catch((error) => {
       console.error('[CartContext] Failed to save cart to storage:', error);
-    }
-  };
+    });
+  }, [cartItems, isCartReady]);
+
+  const openCart = useCallback(() => {
+    setIsCartOpen(true);
+  }, []);
+
+  const closeCart = useCallback(() => {
+    setIsCartOpen(false);
+  }, []);
 
   const addToCart = (
     item: Omit<CartItem, 'id' | 'quantity'> & { size?: string; color?: string; quantity?: number }
   ) => {
+    markCartTouched();
     setCartItems((prevItems) => {
       const quantityToAdd = item.quantity ?? 1;
       const sizeStr = item.size ?? '';
@@ -63,37 +103,34 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
       const itemId = `${item.productId}_${sizeStr}_${colorStr}`;
 
       const existingIndex = prevItems.findIndex((i) => i.id === itemId);
-      let updatedItems: CartItem[];
 
       if (existingIndex > -1) {
-        updatedItems = [...prevItems];
-        updatedItems[existingIndex].quantity += quantityToAdd;
-      } else {
-        const newItem: CartItem = {
-          id: itemId,
-          productId: item.productId,
-          name: item.name,
-          price: item.price,
-          image: item.image,
-          category: item.category,
-          size: item.size,
-          color: item.color,
-          quantity: quantityToAdd,
+        const updatedItems = [...prevItems];
+        updatedItems[existingIndex] = {
+          ...updatedItems[existingIndex],
+          quantity: updatedItems[existingIndex].quantity + quantityToAdd,
         };
-        updatedItems = [...prevItems, newItem];
+        return updatedItems;
       }
 
-      saveCart(updatedItems);
-      return updatedItems;
+      const newItem: CartItem = {
+        id: itemId,
+        productId: item.productId,
+        name: item.name,
+        price: item.price,
+        image: item.image,
+        category: item.category,
+        size: item.size,
+        color: item.color,
+        quantity: quantityToAdd,
+      };
+      return [...prevItems, newItem];
     });
   };
 
   const removeFromCart = (id: string) => {
-    setCartItems((prevItems) => {
-      const updatedItems = prevItems.filter((item) => item.id !== id);
-      saveCart(updatedItems);
-      return updatedItems;
-    });
+    markCartTouched();
+    setCartItems((prevItems) => prevItems.filter((item) => item.id !== id));
   };
 
   const updateQuantity = (id: string, quantity: number) => {
@@ -101,18 +138,18 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
       removeFromCart(id);
       return;
     }
-    setCartItems((prevItems) => {
-      const updatedItems = prevItems.map((item) =>
-        item.id === id ? { ...item, quantity } : item
-      );
-      saveCart(updatedItems);
-      return updatedItems;
-    });
+    markCartTouched();
+    setCartItems((prevItems) =>
+      prevItems.map((item) => (item.id === id ? { ...item, quantity } : item))
+    );
   };
 
   const clearCart = () => {
+    markCartTouched();
     setCartItems([]);
-    AsyncStorage.removeItem(CART_STORAGE_KEY);
+    AsyncStorage.removeItem(CART_STORAGE_KEY).catch((error) => {
+      console.error('[CartContext] Failed to clear cart from storage:', error);
+    });
   };
 
   const cartTotal = cartItems.reduce((acc, item) => acc + item.price * item.quantity, 0);
@@ -122,6 +159,10 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     <CartContext.Provider
       value={{
         cartItems,
+        isCartReady,
+        isCartOpen,
+        openCart,
+        closeCart,
         addToCart,
         removeFromCart,
         updateQuantity,

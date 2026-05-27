@@ -9,7 +9,9 @@ import {
   Pressable,
   Image,
   ActivityIndicator,
+  useWindowDimensions,
 } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, CompositeNavigationProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -19,7 +21,6 @@ import { ProfileAvatar } from '../components/ProfileAvatar';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { useCart } from '../contexts/CartContext';
-import { CartSheet } from '../components/CartSheet';
 import { fetchStoreProducts } from '../lib/merch';
 import type { Product } from '../types/product';
 
@@ -33,6 +34,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useTheme, type Theme } from '../contexts/ThemeContext';
 
 import { MediaRail } from '../components/MediaRail';
+import { SponsorBanner } from '../components/SponsorBanner';
 import { StatsStrip } from '../components/StatsStrip';
 import { MinistryFieldsList } from '../components/MinistryFieldsList';
 import { SkeletonList } from '../components/SkeletonLoader';
@@ -62,17 +64,26 @@ type HomeNavigationProp = CompositeNavigationProp<
   NativeStackNavigationProp<RootStackParamList>
 >;
 
+/** Scroll runway before sponsor strip — end-credits reveal after main content */
+const END_CREDITS_RUNWAY_MIN = 128;
+const END_CREDITS_RUNWAY_MAX = 240;
+const SCROLL_BOTTOM_SAFE_PADDING = 100;
+
 export function HomeScreen() {
   const { user } = useAuth();
   const { theme } = useTheme();
+  const { height: windowHeight } = useWindowDimensions();
   const navigation = useNavigation<HomeNavigationProp>();
   const styles = useMemo(() => createStyles(theme), [theme]);
+  const endCreditsRunwayHeight = Math.min(
+    END_CREDITS_RUNWAY_MAX,
+    Math.max(END_CREDITS_RUNWAY_MIN, Math.round(windowHeight * 0.2)),
+  );
 
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [userName, setUserName] = useState('Friend');
-  const [cartVisible, setCartVisible] = useState(false);
-  const { cartCount, addToCart } = useCart();
+  const { cartCount, addToCart, openCart } = useCart();
 
   // Data State
   const [featuredEpisodes, setFeaturedEpisodes] = useState<Episode[]>([]);
@@ -103,7 +114,12 @@ export function HomeScreen() {
         const list = await fetchStoreProducts();
         if (mounted) setSpotlightProducts(list.slice(0, 3));
       } catch (error) {
-        console.error('[HomeScreen] Error fetching store products:', error);
+        if (__DEV__) {
+          console.warn(
+            '[HomeScreen] Merch spotlight unavailable:',
+            error instanceof Error ? error.message : error,
+          );
+        }
         if (mounted) setSpotlightProducts([]);
       } finally {
         if (mounted) setMerchLoading(false);
@@ -235,7 +251,7 @@ export function HomeScreen() {
               ]}
               onPress={() => {
                 Haptics.selectionAsync();
-                setCartVisible(true);
+                openCart();
               }}
               accessibilityLabel="Open shopping cart"
               accessibilityRole="button"
@@ -251,7 +267,12 @@ export function HomeScreen() {
             {user ? (
               <ProfileAvatar
                 uri={user.avatarurl || null}
+                name={user.fullname}
+                email={user.email}
+                userId={user.id}
+                avatarSeed={user.avatarseed}
                 size="medium"
+                showBorder
                 onPress={() => navigation.navigate('Profile')}
                 showOnlineIndicator
                 accessibilityLabel="Open profile"
@@ -275,7 +296,7 @@ export function HomeScreen() {
           refreshControl={
             <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.colors.primary} />
           }
-          contentContainerStyle={{ paddingBottom: 100 }}
+          contentContainerStyle={{ paddingBottom: SCROLL_BOTTOM_SAFE_PADDING }}
         >
           <View style={{ height: 12 }} />
 
@@ -310,6 +331,55 @@ export function HomeScreen() {
                 prayersLifted={homeStats.prayersLifted}
                 mediaItems={homeStats.mediaItems}
               />
+
+              {/* Ministry Fields (Brand Element from Web) */}
+              <MinistryFieldsList onPressItem={handleMinistryCategoryPress} />
+
+              {/* Podcast Rail */}
+              {console.log('[HomeScreen] Rendering podcast rail, count:', featuredEpisodes.length)}
+              {featuredEpisodes.length > 0 ? (
+                <MediaRail
+                  title="Faith on Demand"
+                  type="podcast"
+                  items={featuredEpisodes.map(ep => ({
+                    id: ep.id,
+                    title: ep.title,
+                    subtitle: new Date(ep.created_at || new Date().toISOString()).toLocaleDateString(),
+                    imageUrl: ep.thumbnail_url || undefined,
+                    duration: ep.duration ? `${Math.floor(ep.duration / 60)}m` : undefined
+                  }))}
+                  onPressItem={(item) => {
+                    const episode = featuredEpisodes.find(ep => ep.id === item.id);
+                    if (episode) {
+                      navigation.navigate('EpisodePlayer', { episode });
+                    }
+                  }}
+                  onPressViewAll={() => navigation.navigate('Media')}
+                />
+              ) : null}
+
+              {/* Video Rail */}
+              {console.log('[HomeScreen] Rendering video rail, count:', recentVideos.length)}
+              {recentVideos.length > 0 ? (
+                <MediaRail
+                  title="Watch & Learn"
+                  type="video"
+                  items={recentVideos.map(vid => ({
+                    id: vid.id,
+                    title: vid.title,
+                    subtitle: 'GKP TV',
+                    imageUrl: vid.thumbnail_url || undefined,
+                    duration: vid.duration ? `${Math.floor(vid.duration / 60)}m` : undefined
+                  }))}
+                  onPressItem={(item) => {
+                    const video = recentVideos.find(vid => vid.id === item.id);
+                    if (video) {
+                      navigation.navigate('VideoPlayer', { video });
+                    }
+                  }}
+                  onPressViewAll={() => navigation.navigate('Media')}
+                />
+              ) : null}
 
               {/* Support the Ministry CTA */}
               <Pressable
@@ -423,61 +493,26 @@ export function HomeScreen() {
                   ))}
                 </ScrollView>
               </View>
-
-              {/* Ministry Fields (Brand Element from Web) */}
-              <MinistryFieldsList onPressItem={handleMinistryCategoryPress} />
-
-              {/* Podcast Rail */}
-              {console.log('[HomeScreen] Rendering podcast rail, count:', featuredEpisodes.length)}
-              {featuredEpisodes.length > 0 ? (
-                <MediaRail
-                  title="Faith on Demand"
-                  type="podcast"
-                  items={featuredEpisodes.map(ep => ({
-                    id: ep.id,
-                    title: ep.title,
-                    subtitle: new Date(ep.created_at || new Date().toISOString()).toLocaleDateString(),
-                    imageUrl: ep.thumbnail_url || undefined,
-                    duration: ep.duration ? `${Math.floor(ep.duration / 60)}m` : undefined
-                  }))}
-                  onPressItem={(item) => {
-                    const episode = featuredEpisodes.find(ep => ep.id === item.id);
-                    if (episode) {
-                      navigation.navigate('EpisodePlayer', { episode });
-                    }
-                  }}
-                  onPressViewAll={() => navigation.navigate('Media')}
-                />
-              ) : null}
-
-              {/* Video Rail */}
-              {console.log('[HomeScreen] Rendering video rail, count:', recentVideos.length)}
-              {recentVideos.length > 0 ? (
-                <MediaRail
-                  title="Watch & Learn"
-                  type="video"
-                  items={recentVideos.map(vid => ({
-                    id: vid.id,
-                    title: vid.title,
-                    subtitle: 'GKP TV',
-                    imageUrl: vid.thumbnail_url || undefined,
-                    duration: vid.duration ? `${Math.floor(vid.duration / 60)}m` : undefined
-                  }))}
-                  onPressItem={(item) => {
-                    const video = recentVideos.find(vid => vid.id === item.id);
-                    if (video) {
-                      navigation.navigate('VideoPlayer', { video });
-                    }
-                  }}
-                  onPressViewAll={() => navigation.navigate('Media')}
-                />
-              ) : null}
             </>
           )}
 
+          <View style={styles.endCreditsSection}>
+            <LinearGradient
+              colors={[`${theme.colors.background}00`, theme.colors.background]}
+              style={styles.endCreditsFade}
+              pointerEvents="none"
+            />
+            <View style={[styles.endCreditsRunway, { minHeight: endCreditsRunwayHeight }]} />
+            <View style={styles.sponsorFooter}>
+              <View style={styles.endCreditsRule} />
+              <View style={styles.sponsorBannerShell}>
+                <SponsorBanner variant="credits" />
+              </View>
+            </View>
+          </View>
+
         </ScrollView>
       </SafeAreaView>
-      <CartSheet visible={cartVisible} onClose={() => setCartVisible(false)} />
     </View>
   );
 }
@@ -536,7 +571,7 @@ function createStyles(theme: Theme) {
       flexDirection: 'row',
       alignItems: 'center',
       marginHorizontal: 20,
-      marginTop: 4,
+      marginTop: 24,
       marginBottom: 8,
       paddingVertical: 14,
       paddingHorizontal: 16,
@@ -570,9 +605,38 @@ function createStyles(theme: Theme) {
       fontSize: 12,
       color: theme.colors.textMuted,
     },
+    endCreditsSection: {
+      marginTop: 8,
+    },
+    endCreditsFade: {
+      height: 48,
+      marginBottom: -48,
+    },
+    endCreditsRunway: {
+      width: '100%',
+    },
+    sponsorFooter: {
+      marginHorizontal: 20,
+      paddingTop: 28,
+      paddingBottom: 8,
+      alignItems: 'center',
+    },
+    endCreditsRule: {
+      width: 48,
+      height: StyleSheet.hairlineWidth,
+      backgroundColor: theme.colors.border,
+      opacity: 0.55,
+      marginBottom: 20,
+      alignSelf: 'center',
+    },
+    sponsorBannerShell: {
+      alignSelf: 'stretch',
+      borderRadius: 8,
+      overflow: 'hidden',
+    },
     spotlightContainer: {
       marginTop: 12,
-      marginBottom: 20,
+      marginBottom: 12,
     },
     spotlightHeader: {
       flexDirection: 'row',

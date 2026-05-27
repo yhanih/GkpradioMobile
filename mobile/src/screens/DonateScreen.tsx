@@ -1,65 +1,126 @@
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   Pressable,
   ScrollView,
-  Linking,
   Alert,
+  TextInput,
+  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import { useTheme } from '../contexts/ThemeContext';
 import { RootStackParamList } from '../types/navigation';
 import { AnimatedButton } from '../components/AnimatedPressable';
+import {
+  DONATION_AMOUNTS,
+  DONATION_AMOUNT_STORAGE_KEY,
+  DONATION_DEFAULT_AMOUNT,
+  isPresetDonationAmount,
+  parseDonationAmount,
+} from '../lib/donation';
+import { openDonationBrowser } from '../lib/openDonationBrowser';
 
 type DonateScreenNavProp = NativeStackNavigationProp<RootStackParamList>;
-
-const DONATION_AMOUNTS = [10, 25, 50, 100, 250];
+type DonateRouteProp = RouteProp<RootStackParamList, 'Donate'>;
 
 export function DonateScreen() {
   const navigation = useNavigation<DonateScreenNavProp>();
+  const route = useRoute<DonateRouteProp>();
   const { theme, isDark } = useTheme();
-  const [selectedAmount, setSelectedAmount] = useState<number>(50);
+
+  const userEditedRef = useRef(false);
+  const [selectedAmount, setSelectedAmount] = useState(DONATION_DEFAULT_AMOUNT);
+  const [customAmountText, setCustomAmountText] = useState('');
+  const [hydrating, setHydrating] = useState(true);
+  const [openingBrowser, setOpeningBrowser] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    (async () => {
+      try {
+        if (userEditedRef.current) return;
+
+        const fromRoute = route.params?.amount;
+        const stored = await AsyncStorage.getItem(DONATION_AMOUNT_STORAGE_KEY);
+        const resolved = parseDonationAmount(
+          fromRoute ?? stored ?? DONATION_DEFAULT_AMOUNT,
+          DONATION_DEFAULT_AMOUNT,
+        );
+
+        if (cancelled || userEditedRef.current) return;
+
+        setSelectedAmount(resolved);
+        setCustomAmountText(isPresetDonationAmount(resolved) ? '' : String(resolved));
+      } finally {
+        if (!cancelled) setHydrating(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [route.params?.amount]);
+
+  const activeAmount = useMemo(() => {
+    const trimmed = customAmountText.trim().replace(/[^0-9.]/g, '');
+    if (trimmed) {
+      const custom = Number(trimmed);
+      if (Number.isFinite(custom) && custom > 0) {
+        return Math.round(custom);
+      }
+    }
+    return selectedAmount;
+  }, [customAmountText, selectedAmount]);
+
+  const commitAmount = (amount: number) => {
+    const resolved = parseDonationAmount(amount, DONATION_DEFAULT_AMOUNT);
+    userEditedRef.current = true;
+    setSelectedAmount(resolved);
+    if (!isPresetDonationAmount(resolved)) {
+      setCustomAmountText(String(resolved));
+    }
+    AsyncStorage.setItem(DONATION_AMOUNT_STORAGE_KEY, String(resolved)).catch(() => {});
+    return resolved;
+  };
 
   const handleAmountPress = (amount: number) => {
     Haptics.selectionAsync();
-    setSelectedAmount(amount);
+    commitAmount(amount);
+    setCustomAmountText('');
   };
 
-  const handleDonatePress = () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    const donationUrl = `https://godkingdomprinciplesradio.com/donate?amount=${selectedAmount}`;
+  const handleDonatePress = async () => {
+    if (openingBrowser) return;
 
-    Alert.alert(
-      'Secure Online Giving',
-      'In compliance with Apple App Store guidelines, charitable donations are processed securely outside the app through our official website browser gateway.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Continue in Browser',
-          onPress: async () => {
-            try {
-              await Linking.openURL(donationUrl);
-              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-            } catch (error) {
-              Alert.alert('Error', 'Could not open secure browser. Please try again.');
-            }
-          },
-        },
-      ]
-    );
+    const amount = commitAmount(activeAmount);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    setOpeningBrowser(true);
+
+    try {
+      await openDonationBrowser(amount);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } catch {
+      Alert.alert(
+        'Could not open giving page',
+        `We could not open the browser with your $${amount} gift. Please try again.`,
+      );
+    } finally {
+      setOpeningBrowser(false);
+    }
   };
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.background }]} edges={['top']}>
-      {/* Header */}
       <View style={styles.header}>
         <Pressable
           style={({ pressed }) => [styles.headerButton, { backgroundColor: theme.colors.surface }, pressed && styles.headerButtonPressed]}
@@ -78,11 +139,11 @@ export function DonateScreen() {
       </View>
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
-        {/* Inspirational Scripture Card */}
         <LinearGradient
-          colors={isDark 
-            ? ['#065f46', '#047857', '#064e3b'] 
-            : ['#047857', '#059669', '#0d9488']
+          colors={
+            isDark
+              ? ['#065f46', '#047857', '#064e3b']
+              : ['#047857', '#059669', '#0d9488']
           }
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}
@@ -95,7 +156,6 @@ export function DonateScreen() {
           <Text style={styles.scriptureRef}>2 Corinthians 9:7</Text>
         </LinearGradient>
 
-        {/* Support Statement */}
         <View style={styles.statementSection}>
           <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>Your Support Matters</Text>
           <Text style={[styles.descriptionText, { color: theme.colors.textSecondary }]}>
@@ -103,7 +163,6 @@ export function DonateScreen() {
           </Text>
         </View>
 
-        {/* Giving Pillars */}
         <View style={styles.pillarsGrid}>
           <View style={[styles.pillarCard, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}>
             <View style={[styles.pillarIconContainer, { backgroundColor: theme.colors.primaryLight }]}>
@@ -122,55 +181,88 @@ export function DonateScreen() {
           </View>
         </View>
 
-        {/* Amount Selector */}
         <View style={styles.amountSection}>
           <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>Select Amount</Text>
-          <View style={styles.amountsGrid}>
-            {DONATION_AMOUNTS.map((amount) => {
-              const isSelected = selectedAmount === amount;
-              return (
-                <Pressable
-                  key={amount}
-                  style={[
-                    styles.amountChip,
-                    {
-                      backgroundColor: isSelected ? theme.colors.primary : theme.colors.surface,
-                      borderColor: isSelected ? theme.colors.primary : theme.colors.border,
-                    },
-                  ]}
-                  onPress={() => handleAmountPress(amount)}
-                >
-                  <Text style={[styles.amountText, { color: isSelected ? '#fff' : theme.colors.text }]}>
-                    ${amount}
-                  </Text>
-                </Pressable>
-              );
-            })}
+          <Text style={[styles.amountHint, { color: theme.colors.textMuted }]}>
+            Tap below to open our giving page with ${activeAmount} pre-selected. Sign in on the website with the same account you use in this app.
+          </Text>
+          {hydrating ? (
+            <ActivityIndicator style={styles.amountLoader} color={theme.colors.primary} />
+          ) : (
+            <View style={styles.amountsGrid}>
+              {DONATION_AMOUNTS.map((amount) => {
+                const isSelected = !customAmountText.trim() && activeAmount === amount;
+                return (
+                  <Pressable
+                    key={amount}
+                    style={[
+                      styles.amountChip,
+                      {
+                        backgroundColor: isSelected ? theme.colors.primary : theme.colors.surface,
+                        borderColor: isSelected ? theme.colors.primary : theme.colors.border,
+                      },
+                    ]}
+                    onPress={() => handleAmountPress(amount)}
+                  >
+                    <Text style={[styles.amountText, { color: isSelected ? '#fff' : theme.colors.text }]}>
+                      ${amount}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          )}
+
+          <Text style={[styles.customLabel, { color: theme.colors.textSecondary }]}>Or enter a custom amount</Text>
+          <View
+            style={[
+              styles.customInputRow,
+              {
+                backgroundColor: theme.colors.surface,
+                borderColor: customAmountText.trim() ? theme.colors.primary : theme.colors.border,
+              },
+            ]}
+          >
+            <Text style={[styles.currencyPrefix, { color: theme.colors.textMuted }]}>$</Text>
+            <TextInput
+              style={[styles.customInput, { color: theme.colors.text }]}
+              placeholder="Other amount"
+              placeholderTextColor={theme.colors.textMuted}
+              keyboardType="decimal-pad"
+              value={customAmountText}
+              onChangeText={(text) => {
+                userEditedRef.current = true;
+                setCustomAmountText(text.replace(/[^0-9.]/g, ''));
+              }}
+            />
           </View>
         </View>
 
-        {/* Compliance Footer Info */}
         <View style={[styles.complianceInfo, { backgroundColor: theme.colors.surfaceSecondary, borderColor: theme.colors.border }]}>
           <Ionicons name="shield-checkmark" size={20} color={theme.colors.success} style={{ marginRight: 10 }} />
           <Text style={[styles.complianceText, { color: theme.colors.textSecondary }]}>
-            Apple App Store Compliant: All contributions are processed safely and securely via Safari through our official website giving portal.
+            Apple App Store Compliant: All contributions are processed safely and securely through our official website giving portal.
           </Text>
         </View>
 
         <View style={{ height: 120 }} />
       </ScrollView>
 
-      {/* Bottom CTA */}
       <View style={[styles.bottomBar, { backgroundColor: theme.colors.background, borderTopColor: theme.colors.border }]}>
         <AnimatedButton
           variant="primary"
           style={styles.donateButton}
           onPress={handleDonatePress}
+          disabled={openingBrowser || hydrating || activeAmount <= 0}
         >
           <View style={styles.donateButtonInner}>
-            <Ionicons name="heart" size={20} color="#fff" style={{ marginRight: 8 }} />
+            {openingBrowser ? (
+              <ActivityIndicator color="#fff" style={{ marginRight: 8 }} />
+            ) : (
+              <Ionicons name="heart" size={20} color="#fff" style={{ marginRight: 8 }} />
+            )}
             <Text style={styles.donateButtonText}>
-              Support GKP Radio with ${selectedAmount}
+              {openingBrowser ? 'Opening…' : `Give $${activeAmount} in Browser`}
             </Text>
           </View>
         </AnimatedButton>
@@ -281,6 +373,14 @@ const styles = StyleSheet.create({
   amountSection: {
     marginBottom: 24,
   },
+  amountHint: {
+    fontSize: 13,
+    lineHeight: 18,
+    marginBottom: 10,
+  },
+  amountLoader: {
+    marginVertical: 16,
+  },
   amountsGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -298,6 +398,30 @@ const styles = StyleSheet.create({
   amountText: {
     fontSize: 14,
     fontWeight: '700',
+  },
+  customLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+    marginTop: 16,
+    marginBottom: 8,
+  },
+  customInputRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    height: 52,
+  },
+  currencyPrefix: {
+    fontSize: 16,
+    fontWeight: '700',
+    marginRight: 6,
+  },
+  customInput: {
+    flex: 1,
+    fontSize: 16,
+    fontWeight: '600',
   },
   complianceInfo: {
     flexDirection: 'row',

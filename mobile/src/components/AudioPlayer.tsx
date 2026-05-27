@@ -6,6 +6,7 @@ import { BlurView } from 'expo-blur';
 import * as Haptics from 'expo-haptics';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAudio } from '../contexts/AudioContext';
+import { UNRECOGNIZED_RADIO_ARTIST } from '../lib/radioNowPlaying';
 import { RadioExpandedSheet } from './RadioExpandedSheet';
 import { useResponsive } from '../utils/responsive';
 
@@ -61,7 +62,7 @@ export function AudioPlayer() {
                   {currentSong?.title || (isPlaying ? 'Live Radio Stream' : nowPlaying?.station?.name || 'Kingdom Principles Radio')}
                 </Text>
                 <Text style={styles.trackArtist} numberOfLines={1}>
-                  {currentSong?.artist || (isPlaying ? 'Broadcasting Live' : 'Tap to listen')}
+                  {currentSong?.artist || (isPlaying ? UNRECOGNIZED_RADIO_ARTIST : 'Tap to listen')}
                 </Text>
               </View>
             </View>

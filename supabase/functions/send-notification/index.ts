@@ -33,7 +33,12 @@ Deno.serve(async (req: Request) => {
         };
 
         if (data && typeof data === 'object') {
-            payload.data = data;
+            payload.data = Object.fromEntries(
+                Object.entries(data as Record<string, unknown>).map(([key, value]) => [
+                    key,
+                    typeof value === 'string' ? value : JSON.stringify(value),
+                ])
+            );
         }
 
         if (typeof badge === 'number') {

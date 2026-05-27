@@ -1,6 +1,7 @@
 import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
 import Constants from 'expo-constants';
+import { openPostFromNotification } from './notificationNavigation';
 
 /** Remote push is not available in Expo Go on Android (SDK 53+). Avoid calling native token APIs there. */
 function isExpoGoAndroid(): boolean {
@@ -77,35 +78,10 @@ export async function registerForPushNotifications(): Promise<string | null> {
       return null;
     }
 
-    // EAS `extra.eas.projectId` is the canonical Expo project UUID for push; avoid a stale `expoProjectId` winning.
     const envProjectId = process.env.EXPO_PUBLIC_EXPO_PROJECT_ID;
     const easProjectId = Constants.expoConfig?.extra?.eas?.projectId as string | undefined;
     const legacyExpoProjectId = Constants.expoConfig?.extra?.expoProjectId as string | undefined;
     const projectId = envProjectId || easProjectId || legacyExpoProjectId;
-
-    // #region agent log
-    fetch('http://127.0.0.1:7678/ingest/06ebe8b1-f553-462c-9985-421ab8769eec', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '1b6f67' },
-      body: JSON.stringify({
-        sessionId: '1b6f67',
-        runId: 'push-register-pre',
-        hypothesisId: 'H1-env-override',
-        location: 'notifications.ts:registerForPushNotifications',
-        message: 'push projectId resolution',
-        data: {
-          hasEnvProjectId: !!envProjectId,
-          easProjectIdPresent: !!easProjectId,
-          legacyExpoProjectIdPresent: !!legacyExpoProjectId,
-          resolvedProjectId: projectId ?? null,
-          appOwnership: Constants.appOwnership,
-          configOwner: Constants.expoConfig?.owner ?? null,
-          slug: Constants.expoConfig?.slug ?? null,
-        },
-        timestamp: Date.now(),
-      }),
-    }).catch(() => {});
-    // #endregion
 
     if (!projectId) {
       console.warn(
@@ -118,39 +94,8 @@ export async function registerForPushNotifications(): Promise<string | null> {
       projectId,
     });
 
-    // #region agent log
-    fetch('http://127.0.0.1:7678/ingest/06ebe8b1-f553-462c-9985-421ab8769eec', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '1b6f67' },
-      body: JSON.stringify({
-        sessionId: '1b6f67',
-        runId: 'push-register-pre',
-        hypothesisId: 'H3-token-ok',
-        location: 'notifications.ts:registerForPushNotifications',
-        message: 'push token success',
-        data: { ok: true, tokenLength: token?.data?.length ?? 0 },
-        timestamp: Date.now(),
-      }),
-    }).catch(() => {});
-    // #endregion
-
     return token.data;
   } catch (error) {
-    // #region agent log
-    fetch('http://127.0.0.1:7678/ingest/06ebe8b1-f553-462c-9985-421ab8769eec', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '1b6f67' },
-      body: JSON.stringify({
-        sessionId: '1b6f67',
-        runId: 'push-register-pre',
-        hypothesisId: 'H2-experience-or-api',
-        location: 'notifications.ts:registerForPushNotifications',
-        message: 'push token error',
-        data: { err: error instanceof Error ? error.message.slice(0, 400) : String(error).slice(0, 400) },
-        timestamp: Date.now(),
-      }),
-    }).catch(() => {});
-    // #endregion
     console.error('Error registering for push notifications:', error);
     return null;
   }
@@ -158,22 +103,38 @@ export async function registerForPushNotifications(): Promise<string | null> {
 
 export type NotificationTapHandler = (data: Record<string, unknown>) => void;
 
+function handleNotificationResponseData(data: Record<string, unknown> | undefined, onTap?: NotificationTapHandler) {
+  if (!data) return;
+  if (onTap) {
+    onTap(data);
+    return;
+  }
+  openPostFromNotification(data);
+}
+
+export async function consumeInitialNotificationResponse(onTap?: NotificationTapHandler): Promise<void> {
+  try {
+    const response = await Notifications.getLastNotificationResponseAsync();
+    if (!response) return;
+    const data = response.notification.request.content.data as Record<string, unknown> | undefined;
+    handleNotificationResponseData(data, onTap);
+  } catch (error) {
+    console.warn('Failed to read initial notification response:', error);
+  }
+}
+
 export function setupNotificationListeners(onTap?: NotificationTapHandler) {
   try {
-    const notificationListener = Notifications.addNotificationReceivedListener(
-      (_notification) => {
-        // Foreground notification — the handler above already shows the alert
-      }
-    );
+    void consumeInitialNotificationResponse(onTap);
 
-    const responseListener = Notifications.addNotificationResponseReceivedListener(
-      (response) => {
-        const data = response.notification.request.content.data as Record<string, unknown> | undefined;
-        if (data && onTap) {
-          onTap(data);
-        }
-      }
-    );
+    const notificationListener = Notifications.addNotificationReceivedListener(() => {
+      // Foreground notification — banner tap handled by response listener below.
+    });
+
+    const responseListener = Notifications.addNotificationResponseReceivedListener((response) => {
+      const data = response.notification.request.content.data as Record<string, unknown> | undefined;
+      handleNotificationResponseData(data, onTap);
+    });
 
     return () => {
       notificationListener.remove();

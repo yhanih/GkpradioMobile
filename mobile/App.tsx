@@ -21,6 +21,7 @@ import { UserProfileScreen } from './src/screens/UserProfileScreen';
 import { VideoPlayerScreen } from './src/screens/VideoPlayerScreen';
 import { EpisodePlayerScreen } from './src/screens/EpisodePlayerScreen';
 import { LikedPostsScreen } from './src/screens/LikedPostsScreen';
+import { NotificationsScreen } from './src/screens/NotificationsScreen';
 import { TermsOfServiceScreen } from './src/screens/TermsOfServiceScreen';
 import { AudioPlayer } from './src/components/AudioPlayer';
 import { TabletMaxWidth } from './src/components/TabletMaxWidth';
@@ -30,6 +31,7 @@ import { ThemeProvider, useTheme } from './src/contexts/ThemeContext';
 import { BookmarksProvider } from './src/contexts/BookmarksContext';
 import { ToastProvider } from './src/components/Toast';
 import { CartProvider } from './src/contexts/CartContext';
+import { GlobalCartSheet } from './src/components/GlobalCartSheet';
 import { LoginScreen } from './src/screens/auth/LoginScreen';
 import { MerchStoreScreen } from './src/screens/MerchStoreScreen';
 import { ProductDetailScreen } from './src/screens/ProductDetailScreen';
@@ -44,14 +46,22 @@ import {
   resetOnboardingComplete,
 } from './src/screens/OnboardingScreen';
 import { OnboardingGateProvider } from './src/contexts/OnboardingGateContext';
+import { preloadOnboardingAssets } from './src/lib/onboardingAssets';
 import * as Linking from 'expo-linking';
 import { RootStackParamList, MainTabParamList } from './src/types/navigation';
 import { supabase } from './src/lib/supabase';
 import { ensureNotificationChannel, ensureNotificationPermissions, setupNotificationListeners, initNotificationHandler } from './src/lib/notifications';
+import {
+  bindNotificationNavigationRef,
+  flushPendingNotificationNavigation,
+  openPostFromNotification,
+  setPostsNavigationEnabled,
+} from './src/lib/notificationNavigation';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 const Tab = createBottomTabNavigator<MainTabParamList>();
 const navigationRef = createNavigationContainerRef<RootStackParamList>();
+bindNotificationNavigationRef(navigationRef);
 
 function withTabletMaxWidth<P extends object>(Screen: React.ComponentType<P>) {
   function Wrapped(props: P) {
@@ -184,7 +194,12 @@ function CommunityPostNotifier() {
           const notificationsEnabled = preference !== 'false';
           if (!notificationsEnabled) return;
 
-          const newPost = payload.new as { title?: string; content?: string; author_id?: string };
+          const newPost = payload.new as {
+            id?: string;
+            title?: string;
+            content?: string;
+            author_id?: string;
+          };
           if (user?.id && newPost.author_id && String(newPost.author_id) === String(user.id)) {
             return;
           }
@@ -201,6 +216,12 @@ function CommunityPostNotifier() {
               title,
               body,
               sound: true,
+              data: newPost.id
+                ? {
+                    post_id: String(newPost.id),
+                    type: 'community_post',
+                  }
+                : undefined,
             },
             trigger: null,
           });
@@ -331,6 +352,11 @@ function RootNavigator() {
         options={{ animation: 'slide_from_right' }}
       />
       <Stack.Screen
+        name="Notifications"
+        component={NotificationsScreen}
+        options={{ animation: 'slide_from_right' }}
+      />
+      <Stack.Screen
         name="TermsOfService"
         component={TermsOfServiceScreen}
         options={{ animation: 'slide_from_right' }}
@@ -360,25 +386,39 @@ function AppContent() {
   const [showOnboarding, setShowOnboarding] = useState<boolean | null>(null);
 
   useEffect(() => {
-    checkOnboardingComplete().then((complete) => {
-      setShowOnboarding(!complete);
-    });
+    let cancelled = false;
+    (async () => {
+      const [complete] = await Promise.all([
+        checkOnboardingComplete(),
+        preloadOnboardingAssets().catch(() => undefined),
+      ]);
+      if (!cancelled) {
+        setShowOnboarding(!complete);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const replayOnboarding = useCallback(async () => {
     await resetOnboardingComplete();
+    await preloadOnboardingAssets().catch(() => undefined);
     setShowOnboarding(true);
   }, []);
 
   useEffect(() => {
     const cleanup = setupNotificationListeners((data) => {
-      const postId = data.post_id as string | undefined;
-      if (postId && navigationRef.isReady()) {
-        navigationRef.navigate('PostDetail', { threadId: postId });
-      }
+      openPostFromNotification(data);
     });
     return cleanup;
   }, []);
+
+  useEffect(() => {
+    const enabled = !loading && showOnboarding === false;
+    setPostsNavigationEnabled(enabled);
+    return () => setPostsNavigationEnabled(false);
+  }, [loading, showOnboarding]);
 
   if (showOnboarding === null) {
     return (
@@ -404,6 +444,7 @@ function AppContent() {
     <OnboardingGateProvider replayOnboarding={replayOnboarding}>
       <CommunityPostNotifier />
       <RootNavigator />
+      <GlobalCartSheet />
     </OnboardingGateProvider>
   );
 }
@@ -441,7 +482,12 @@ function AppWithTheme() {
   return (
     <>
       <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} />
-      <NavigationContainer ref={navigationRef} theme={navigationTheme} linking={linking}>
+      <NavigationContainer
+        ref={navigationRef}
+        theme={navigationTheme}
+        linking={linking}
+        onReady={flushPendingNotificationNavigation}
+      >
         <AppContent />
       </NavigationContainer>
     </>

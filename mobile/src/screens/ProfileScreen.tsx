@@ -25,8 +25,11 @@ import { useBookmarks } from '../contexts/BookmarksContext';
 import { useTheme, type Theme } from '../contexts/ThemeContext';
 import { RootStackParamList } from '../types/navigation';
 import * as Haptics from 'expo-haptics';
-import { HELP_DESK_EMAIL } from '../constants/contact';
+import { HELP_DESK_EMAIL, SAFETY_REPORT_EMAIL_SUBJECT } from '../constants/contact';
 import { ThemeToggleButton } from '../components/ThemeToggleButton';
+import { Avatar, AvatarVariantPicker } from '../components/ui/avatar';
+import { DEFAULT_AVATAR_VARIANT, normalizeAvatarSeed } from '../components/ui/avatar/avatarVariants';
+import { saveProfileFields } from '../lib/profileAvatarStyle';
 
 interface Episode {
   id: string;
@@ -52,6 +55,7 @@ interface ProfileData {
   fullname: string | null;
   bio: string | null;
   avatarurl: string | null;
+  avatarseed: string;
   created_at: string;
 }
 
@@ -61,7 +65,7 @@ type ProfileNavigationProp = NativeStackNavigationProp<RootStackParamList>;
 
 export function ProfileScreen() {
   const navigation = useNavigation<ProfileNavigationProp>();
-  const { user, signOut } = useAuth();
+  const { user, signOut, refreshUser } = useAuth();
   const { theme, isDark } = useTheme();
   const styles = useMemo(() => createProfileStyles(theme, isDark), [theme, isDark]);
   const profileHeroGradient = useMemo(
@@ -90,6 +94,7 @@ export function ProfileScreen() {
 
   const [fullName, setFullName] = useState('');
   const [bio, setBio] = useState('');
+  const [avatarSeed, setAvatarSeed] = useState(DEFAULT_AVATAR_VARIANT);
 
   useEffect(() => {
     if (user) {
@@ -167,7 +172,7 @@ export function ProfileScreen() {
 
       const { data, error } = await supabase
         .from('profiles')
-        .select('id,full_name,avatar_url,bio,created_at')
+        .select('id,full_name,avatar_url,avatar_seed,bio,created_at')
         .eq('id', user.id)
         .maybeSingle();
 
@@ -177,16 +182,22 @@ export function ProfileScreen() {
         data?.full_name || user.fullname || user.email?.split('@')[0] || '';
       const resolvedBio = data?.bio ?? user.bio ?? '';
       const resolvedAvatarUrl = data?.avatar_url ?? user.avatarurl ?? null;
+      const resolvedAvatarSeed = normalizeAvatarSeed(
+        data?.avatar_seed ?? user.avatarseed,
+        user.id,
+      );
       const resolvedCreatedAt = data?.created_at || user.created_at || new Date().toISOString();
 
       setProfile({
         fullname: resolvedFullName || null,
         bio: resolvedBio || null,
         avatarurl: resolvedAvatarUrl,
+        avatarseed: resolvedAvatarSeed,
         created_at: resolvedCreatedAt,
       });
       setFullName(resolvedFullName);
       setBio(resolvedBio);
+      setAvatarSeed(resolvedAvatarSeed);
     } catch (error: any) {
       console.error('Error fetching profile:', error);
       const fallbackFullName = user?.fullname || user?.email?.split('@')[0] || '';
@@ -194,14 +205,17 @@ export function ProfileScreen() {
       const fallbackAvatarUrl = user?.avatarurl ?? null;
       const fallbackCreatedAt = user?.created_at || new Date().toISOString();
 
+      const fallbackAvatarSeed = normalizeAvatarSeed(user?.avatarseed, user?.id);
       setProfile({
         fullname: fallbackFullName || null,
         bio: fallbackBio || null,
         avatarurl: fallbackAvatarUrl,
+        avatarseed: fallbackAvatarSeed,
         created_at: fallbackCreatedAt,
       });
       setFullName(fallbackFullName);
       setBio(fallbackBio);
+      setAvatarSeed(fallbackAvatarSeed);
 
       if (refreshing) {
         Alert.alert('Error', 'Unable to load profile. Please try again.');
@@ -243,25 +257,31 @@ export function ProfileScreen() {
       const nextFullName = fullName.trim();
       const nextBio = bio.trim();
 
-      const { error } = await supabase.from('profiles').upsert({
-        id: user.id,
+      const nextAvatarSeed = normalizeAvatarSeed(avatarSeed, user.id);
+
+      const { error: profileError } = await saveProfileFields(user.id, {
         full_name: nextFullName || null,
         bio: nextBio || null,
+        avatar_seed: nextAvatarSeed,
       });
 
-      if (error) throw error;
+      if (profileError) throw profileError;
 
       const { error: updateUserError } = await supabase.auth.updateUser({
         data: {
           full_name: nextFullName,
+          avatar_seed: nextAvatarSeed,
         },
       });
 
-      if (updateUserError) throw updateUserError;
+      if (updateUserError) {
+        console.warn('[Profile] auth metadata update:', updateUserError.message);
+      }
 
       Alert.alert('Success', 'Profile updated successfully!');
       setEditing(false);
-      fetchProfile();
+      await fetchProfile();
+      await refreshUser();
     } catch (error: any) {
       console.error('Error updating profile:', error);
       Alert.alert('Error', error.message || 'Unable to update profile. Please try again.');
@@ -273,6 +293,7 @@ export function ProfileScreen() {
   const handleCancel = () => {
     setFullName(profile?.fullname || '');
     setBio(profile?.bio || '');
+    setAvatarSeed(profile?.avatarseed ?? DEFAULT_AVATAR_VARIANT);
     setEditing(false);
   };
 
@@ -324,15 +345,6 @@ export function ProfileScreen() {
       day: 'numeric',
       year: 'numeric',
     });
-  };
-
-  const getInitials = () => {
-    const baseName = fullName?.trim() || user?.email || 'GK';
-    const parts = baseName.split(/[ @._-]+/).filter(Boolean);
-    if (parts.length >= 2) {
-      return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
-    }
-    return baseName.slice(0, 2).toUpperCase();
   };
 
   const profileNavBar = (
@@ -449,13 +461,15 @@ export function ProfileScreen() {
         >
           <View style={styles.headerContent}>
             <View style={styles.avatarContainer}>
-              <View style={styles.avatar}>
-                {profile?.avatarurl ? (
-                  <Image source={{ uri: profile.avatarurl }} style={styles.avatarImage} />
-                ) : (
-                  <Text style={styles.avatarInitials}>{getInitials()}</Text>
-                )}
-              </View>
+              <Avatar
+                src={profile?.avatarurl}
+                name={fullName || profile?.fullname}
+                email={user?.email}
+                userId={user?.id}
+                avatarSeed={editing ? avatarSeed : profile?.avatarseed}
+                size="2xl"
+                showRing
+              />
             </View>
             <Text style={styles.headerName}>
               {fullName || user?.email?.split('@')[0] || 'User'}
@@ -494,6 +508,14 @@ export function ProfileScreen() {
                 placeholderTextColor={theme.colors.textMuted}
               />
             </View>
+
+            {editing ? (
+              <AvatarVariantPicker
+                selectedSeed={avatarSeed}
+                onSelect={setAvatarSeed}
+                disabled={saving}
+              />
+            ) : null}
 
             <View style={styles.inputGroup}>
               <Text style={styles.label}>Bio</Text>
@@ -736,19 +758,12 @@ export function ProfileScreen() {
               style={styles.settingItem}
               onPress={() => {
                 Haptics.selectionAsync();
-                Alert.alert(
-                  'Notifications',
-                  'Notification settings can be managed in your device settings.',
-                  [
-                    { text: 'Cancel', style: 'cancel' },
-                    { text: 'Open Settings', onPress: () => Linking.openSettings() }
-                  ]
-                );
+                navigation.navigate('Notifications');
               }}
             >
               <View style={styles.settingLeft}>
                 <Ionicons name="notifications-outline" size={24} color={theme.colors.textMuted} />
-                <Text style={[styles.settingText, { color: theme.colors.text }]}>Notifications</Text>
+                <Text style={[styles.settingText, { color: theme.colors.text }]}>Activity</Text>
               </View>
               <Ionicons name="chevron-forward" size={20} color={theme.colors.border} />
             </Pressable>
@@ -766,6 +781,44 @@ export function ProfileScreen() {
               </View>
               <ThemeToggleButton size={26} />
             </View>
+
+            <View style={[styles.divider, { backgroundColor: theme.colors.border }]} />
+
+            <Pressable
+              style={styles.settingItem}
+              onPress={() => {
+                Haptics.selectionAsync();
+                navigation.navigate('TermsOfService');
+              }}
+            >
+              <View style={styles.settingLeft}>
+                <Ionicons name="shield-checkmark-outline" size={24} color={theme.colors.textMuted} />
+                <Text style={[styles.settingText, { color: theme.colors.text }]}>
+                  Terms & Community Guidelines
+                </Text>
+              </View>
+              <Ionicons name="chevron-forward" size={20} color={theme.colors.border} />
+            </Pressable>
+
+            <View style={[styles.divider, { backgroundColor: theme.colors.border }]} />
+
+            <Pressable
+              style={styles.settingItem}
+              onPress={() => {
+                Haptics.selectionAsync();
+                Linking.openURL(
+                  `mailto:${HELP_DESK_EMAIL}?subject=${encodeURIComponent(SAFETY_REPORT_EMAIL_SUBJECT)}`
+                );
+              }}
+            >
+              <View style={styles.settingLeft}>
+                <Ionicons name="flag-outline" size={24} color={theme.colors.textMuted} />
+                <Text style={[styles.settingText, { color: theme.colors.text }]}>
+                  Report a Problem
+                </Text>
+              </View>
+              <Ionicons name="chevron-forward" size={20} color={theme.colors.border} />
+            </Pressable>
 
             <View style={[styles.divider, { backgroundColor: theme.colors.border }]} />
 

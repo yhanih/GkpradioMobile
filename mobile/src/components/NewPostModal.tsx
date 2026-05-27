@@ -155,6 +155,7 @@ export function NewPostModal({
                 id: user.id,
                 fullname: user.fullname || user.email?.split('@')[0] || 'You',
                 avatarurl: user.avatarurl || null,
+                avatarseed: user.avatarseed ?? null,
             },
         };
 
