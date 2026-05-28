@@ -24,8 +24,10 @@
     "release:android": "eas build --platform android --profile production && eas submit --platform android --profile production --latest",
     "release:ios": "eas build --platform ios --profile production && eas submit --platform ios --profile production --latest",
     "appstore:ios": "eas build --platform ios --profile production --non-interactive",
+    "appstore:ios:local": "eas build --platform ios --profile production --local",
     "appstore:ios:all": "eas build --platform ios --profile production --auto-submit",
     "appstore:ios:submit": "eas submit --platform ios --profile production --latest",
+    "appstore:ios:prebuild": "EAS_BUILD_PROFILE=production npx expo prebuild --platform ios --clean",
     "appstore:review-user": "node scripts/create-appstore-review-user.mjs",
     "optimize:onboarding-images": "node scripts/optimize-onboarding-images.mjs",
     "postinstall": "patch-package"

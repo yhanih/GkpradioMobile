@@ -1,6 +1,59 @@
-# One-command iOS upload (EAS)
+# iOS App Store build & upload
 
-## Recommended commands
+## No EAS cloud quota — local build + Transporter (default for this project)
+
+**We do not use EAS cloud builds when quota is exhausted.** Build on your Mac, then upload with Apple **Transporter** (or Xcode Organizer).
+
+### Prerequisites (one-time)
+
+- macOS with **Xcode** (signed in with your Apple Developer account)
+- **Transporter** from the Mac App Store
+- `npm install` already done in `mobile/`
+- Distribution cert + App Store provisioning profile for `com.gkpradio.mobile` (EAS can manage these once via `eas credentials`, or use Xcode **Signing & Capabilities**)
+
+### 1. Commit your changes
+
+EAS local and Xcode both use your working tree — commit so the IPA matches what you tested.
+
+### 2. Build IPA locally (recommended)
+
+From `mobile/`:
+
+```bash
+npm run appstore:ios:local
+```
+
+This runs `eas build --platform ios --profile production --local` — compiles on **your Mac**, does **not** use EAS cloud build minutes.
+
+When it finishes, note the `.ipa` path (often `mobile/build-*.ipa` in the project directory).
+
+**Alternative — Xcode only** (no EAS build CLI):
+
+```bash
+npm run appstore:ios:prebuild
+open ios/*.xcworkspace
+```
+
+In Xcode: select **Any iOS Device** → **Product → Archive** → **Distribute App** → **App Store Connect** → export `.ipa` or upload from Organizer.
+
+### 3. Upload with Transporter
+
+1. Open **Transporter** (Mac App Store).
+2. Sign in with the Apple ID that has App Store Connect access for GKP Radio.
+3. Drag the `.ipa` into Transporter → **Deliver**.
+4. Wait until processing completes in [App Store Connect](https://appstoreconnect.apple.com) → **TestFlight** / your app version.
+
+### 4. Submit for review (App Store Connect)
+
+1. Open the app version → select the new build → **Save**.
+2. Fill **What’s New** and review notes.
+3. **Submit for Review**.
+
+You do **not** need `npm run appstore:ios:submit` if you use Transporter (that command is for EAS Submit / API key upload).
+
+---
+
+## EAS cloud build (when you have quota)
 
 From `mobile/`:
 
