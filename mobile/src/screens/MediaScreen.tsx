@@ -71,6 +71,7 @@ const AUDIO_PLAYER_HEIGHT = 100;
 
 export function MediaScreen() {
   const navigation = useNavigation<MediaNavProp>();
+  const showBackButton = navigation.canGoBack();
   const { theme, isDark } = useTheme();
   const { user } = useAuth();
   const { isBookmarked, toggleBookmark } = useBookmarks();
@@ -317,7 +318,20 @@ export function MediaScreen() {
       {/* Fixed Header */}
       <View style={[styles.headerContainer, { paddingTop: insets.top, backgroundColor: theme.colors.background }]}>
         <View style={styles.header}>
-          <Text style={[styles.title, { color: theme.colors.text }]}>Media</Text>
+          {showBackButton ? (
+            <Pressable
+              onPress={() => {
+                Haptics.selectionAsync();
+                navigation.goBack();
+              }}
+              style={({ pressed }) => [styles.headerIconButton, pressed && { opacity: 0.7 }]}
+              accessibilityRole="button"
+              accessibilityLabel="Go back"
+            >
+              <Ionicons name="chevron-back" size={24} color={theme.colors.text} />
+            </Pressable>
+          ) : null}
+          <Text style={[styles.title, { color: theme.colors.text, flex: showBackButton ? 1 : undefined }]}>Media</Text>
           {showSearch ? (
             <View style={[styles.searchInputContainer, { backgroundColor: theme.colors.surface }]}>
               <Ionicons name="search" size={18} color={theme.colors.textMuted} style={styles.searchIcon} />
@@ -979,6 +993,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 24,
     height: HEADER_HEIGHT,
+    gap: 8,
+  },
+  headerIconButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   title: {
     fontSize: 34,

@@ -400,7 +400,7 @@ export function HubScreen() {
                   <Ionicons name="radio" size={36} color={theme.colors.primary} />
                 </View>
                 <Text style={styles.headerTitle}>GKP Radio</Text>
-                <Text style={styles.headerSubtitle}>Settings & More</Text>
+                <Text style={styles.headerSubtitle}>More</Text>
               </View>
             )}
           </View>
@@ -472,13 +472,13 @@ export function HubScreen() {
         </View>
 
         <View style={styles.section}>
-          <SectionHeader title="Kingdom Games" theme={theme} />
+          <SectionHeader title="Browse" theme={theme} />
           <View style={[styles.card, { backgroundColor: theme.colors.surface }]}>
             <SettingItem
-              icon="game-controller-outline"
-              label="GKP Bible Games"
-              subtitle="Righteous Quest, Word Search & Crossword — synced leaderboards"
-              onPress={() => navigation.navigate('Games')}
+              icon="play-circle-outline"
+              label="Media Library"
+              subtitle="Podcasts, videos, and on-demand teaching"
+              onPress={() => navigation.navigate('Media')}
               theme={theme}
             />
           </View>

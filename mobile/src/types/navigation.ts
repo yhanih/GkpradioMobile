@@ -32,6 +32,7 @@ export type RootStackParamList = {
   ProductDetail: { product: any };
   Donate: { amount?: number } | undefined;
   Games: undefined;
+  Media: undefined;
 };
 
 export type MainTabParamList = {
@@ -40,7 +41,7 @@ export type MainTabParamList = {
     categoryId?: string;
     mode?: 'prayers' | 'discussions';
   } | undefined;
+  Games: undefined;
   Live: undefined;
-  Media: undefined;
-  Hub: undefined;
+  More: undefined;
 };

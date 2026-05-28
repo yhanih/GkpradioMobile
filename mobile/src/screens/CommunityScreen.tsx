@@ -44,10 +44,6 @@ const COMMUNITY_SAFETY_MESSAGE =
 type SortOption = 'newest' | 'popular' | 'discussed';
 type ModeType = 'prayers' | 'discussions';
 
-const DISCUSSION_CATEGORIES = COMMUNITY_CATEGORIES
-  .filter(cat => cat.id !== 'all' && !isPrayerCategory(cat.id))
-  .map(cat => cat.id);
-
 interface ThreadWithUser {
   id: string;
   title: string;
@@ -104,20 +100,10 @@ export function CommunityScreen() {
   const [likingThreadId, setLikingThreadId] = useState<string | null>(null);
   const [unreadNotificationCount, setUnreadNotificationCount] = useState(0);
   const [likeAnimations] = useState<{ [key: string]: Animated.Value }>({});
-  const [modeTabTrackWidth, setModeTabTrackWidth] = useState(0);
   const fabScale = useRef(new Animated.Value(1)).current;
   const sortByRef = useRef(sortBy);
   const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const tabIndicatorAnim = useRef(new Animated.Value(0)).current;
   const realtimeDebounceRef = useRef<NodeJS.Timeout | null>(null);
-
-  const modeTabSlidePx = useMemo(
-    () =>
-      modeTabTrackWidth > 0
-        ? modeTabTrackWidth / 2
-        : Math.max(80, (windowWidth - 48) / 2),
-    [modeTabTrackWidth, windowWidth]
-  );
 
   const dedupeThreads = useCallback((items: ThreadWithUser[]) => {
     const seen = new Set<string>();
@@ -141,15 +127,6 @@ export function CommunityScreen() {
   useEffect(() => {
     sortByRef.current = sortBy;
   }, [sortBy]);
-
-  useEffect(() => {
-    Animated.spring(tabIndicatorAnim, {
-      toValue: activeMode === 'discussions' ? 0 : 1,
-      useNativeDriver: true,
-      tension: 100,
-      friction: 10,
-    }).start();
-  }, [activeMode, modeTabTrackWidth]);
 
   useEffect(() => {
     if (searchTimeoutRef.current) {
@@ -657,20 +634,7 @@ export function CommunityScreen() {
     return modeFiltered.filter(t => t.category === activeCategory);
   }, [threads, activeMode, activeCategory]);
 
-  // Get categories relevant to the active mode
-  const modeCategories = useMemo(() => {
-    if (activeMode === 'prayers') {
-      return [
-        { id: 'all', label: 'All', icon: 'grid-outline' as const, iconActive: 'grid' as const },
-        ...COMMUNITY_CATEGORIES.filter(cat => isPrayerCategory(cat.id))
-      ];
-    } else {
-      return [
-        { id: 'all', label: 'All', icon: 'grid-outline' as const, iconActive: 'grid' as const },
-        ...COMMUNITY_CATEGORIES.filter(cat => DISCUSSION_CATEGORIES.includes(cat.id))
-      ];
-    }
-  }, [activeMode]);
+  const modeCategories = useMemo(() => COMMUNITY_CATEGORIES, []);
 
   // Memoize category counts for performance (only for current mode)
   const categoryCounts = useMemo(() => {
@@ -705,6 +669,11 @@ export function CommunityScreen() {
         onPress={() => {
           Haptics.selectionAsync();
           setActiveCategory(category.id);
+          if (category.id === 'all') {
+            setActiveMode('discussions');
+          } else {
+            setActiveMode(isPrayerCategory(category.id) ? 'prayers' : 'discussions');
+          }
         }}
       >
         <Ionicons
@@ -1009,94 +978,6 @@ export function CommunityScreen() {
             </View>
             <Text style={[styles.statLabel, { marginTop: 4, fontWeight: '700', color: theme.colors.primary }]}>New Post</Text>
           </Pressable>
-        </View>
-
-        {/* Mode Tab Switcher */}
-        <View style={styles.tabContainer}>
-          <View
-            style={styles.tabBackground}
-            onLayout={e => setModeTabTrackWidth(e.nativeEvent.layout.width)}
-          >
-            <Animated.View
-              style={[
-                styles.tabIndicator,
-                {
-                  transform: [{
-                    translateX: tabIndicatorAnim.interpolate({
-                      inputRange: [0, 1],
-                      outputRange: [0, modeTabSlidePx],
-                    })
-                  }],
-                },
-              ]}
-            />
-            <Pressable
-              style={styles.tab}
-              onPress={() => {
-                Haptics.selectionAsync();
-                setActiveMode('discussions');
-                setActiveCategory('all');
-              }}
-            >
-              <Ionicons
-                name="chatbubbles"
-                size={18}
-                color={activeMode === 'discussions' ? '#fff' : theme.colors.textMuted}
-              />
-              <Text
-                style={[
-                  styles.tabText,
-                  { color: activeMode === 'discussions' ? '#fff' : theme.colors.textMuted },
-                ]}
-              >
-                Discussions
-              </Text>
-              <View style={[
-                styles.tabBadge,
-                { backgroundColor: activeMode === 'discussions' ? 'rgba(255,255,255,0.3)' : theme.colors.border }
-              ]}>
-                <Text style={[
-                  styles.tabBadgeText,
-                  { color: activeMode === 'discussions' ? '#fff' : theme.colors.textMuted }
-                ]}>
-                  {stats.total - stats.prayers}
-                </Text>
-              </View>
-            </Pressable>
-            <Pressable
-              style={styles.tab}
-              onPress={() => {
-                Haptics.selectionAsync();
-                setActiveMode('prayers');
-                setActiveCategory('all');
-              }}
-            >
-              <Ionicons
-                name="hand-right"
-                size={18}
-                color={activeMode === 'prayers' ? '#fff' : theme.colors.textMuted}
-              />
-              <Text
-                style={[
-                  styles.tabText,
-                  { color: activeMode === 'prayers' ? '#fff' : theme.colors.textMuted },
-                ]}
-              >
-                Prayers
-              </Text>
-              <View style={[
-                styles.tabBadge,
-                { backgroundColor: activeMode === 'prayers' ? 'rgba(255,255,255,0.3)' : theme.colors.border }
-              ]}>
-                <Text style={[
-                  styles.tabBadgeText,
-                  { color: activeMode === 'prayers' ? '#fff' : theme.colors.textMuted }
-                ]}>
-                  {stats.prayers}
-                </Text>
-              </View>
-            </Pressable>
-          </View>
         </View>
 
         <ScrollView

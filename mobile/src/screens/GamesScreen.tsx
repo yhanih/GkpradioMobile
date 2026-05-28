@@ -127,6 +127,7 @@ function GameCard({
 
 export function GamesScreen() {
   const navigation = useNavigation<GamesNavProp>();
+  const showBackButton = navigation.canGoBack();
   const { theme, isDark } = useTheme();
   const { user } = useAuth();
   const gamePlayerName = resolveGamePlayerName(user);
@@ -176,21 +177,25 @@ export function GamesScreen() {
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.background }]} edges={['top']}>
       <View style={styles.header}>
-        <Pressable
-          style={({ pressed }) => [
-            styles.headerButton,
-            { backgroundColor: theme.colors.surface },
-            pressed && styles.headerButtonPressed,
-          ]}
-          onPress={() => {
-            Haptics.selectionAsync();
-            navigation.goBack();
-          }}
-          accessibilityRole="button"
-          accessibilityLabel="Go back"
-        >
-          <Ionicons name="chevron-back" size={22} color={theme.colors.text} />
-        </Pressable>
+        {showBackButton ? (
+          <Pressable
+            style={({ pressed }) => [
+              styles.headerButton,
+              { backgroundColor: theme.colors.surface },
+              pressed && styles.headerButtonPressed,
+            ]}
+            onPress={() => {
+              Haptics.selectionAsync();
+              navigation.goBack();
+            }}
+            accessibilityRole="button"
+            accessibilityLabel="Go back"
+          >
+            <Ionicons name="chevron-back" size={22} color={theme.colors.text} />
+          </Pressable>
+        ) : (
+          <View style={styles.headerSpacer} />
+        )}
         <Text style={[styles.headerTitle, { color: theme.colors.text }]}>Bible Games</Text>
         <View style={styles.headerSpacer} />
       </View>

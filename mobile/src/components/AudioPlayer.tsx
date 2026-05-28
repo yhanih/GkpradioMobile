@@ -95,11 +95,9 @@ export function AudioPlayer() {
                 {isLoading ? (
                   <ActivityIndicator size="small" color="#fff" />
                 ) : (
-                  <Ionicons
-                    name={isPlaying ? 'pause' : 'play'}
-                    size={20}
-                    color="#fff"
-                  />
+                  <Text style={styles.playButtonLabel}>
+                    {isPlaying ? 'Pause' : 'Play'}
+                  </Text>
                 )}
               </LinearGradient>
             </Pressable>
@@ -203,7 +201,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   playButton: {
-    width: 44,
+    minWidth: 64,
     height: 44,
     borderRadius: 22,
     overflow: 'hidden',
@@ -217,5 +215,12 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+    paddingHorizontal: 14,
+  },
+  playButtonLabel: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: '#fff',
+    letterSpacing: 0.3,
   },
 });

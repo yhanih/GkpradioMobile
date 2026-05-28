@@ -99,3 +99,16 @@ npm run appstore:review-user
 - **Interactive prompts**: `ascAppId` missing or wrong → fix `eas.json`
 - **Submit failed**: run `eas submit --platform ios --latest` after build ID appears on [expo.dev](https://expo.dev)
 - **Build only**: `npm run build:ios`
+
+### `6763207173 is not a valid ID for this relationship` (409)
+
+Your **Apple ID** in App Information can be correct and upload still fail. Common fixes:
+
+1. **App Store Connect → Agreements** — accept any pending contracts (Business / Paid Apps).
+2. **Regenerate the Submit API key** (most common fix):
+   - [expo.dev](https://expo.dev) → project **gkp-radio** → **Credentials** → iOS → **com.gkpradio.mobile**
+   - Under **App Store Connect API Key**, remove the old Submit key
+   - Locally: `cd mobile && eas credentials` → iOS → production → **App Store Connect: Manage your API Key** → **Add a new API Key for EAS Submit**
+3. Confirm `eas.json` has `appleTeamId`: `C3C9R5MRL2` (GOD KINGDOM PRINCIPLES RADIO LLC / GKP RADIO LLC).
+4. Retry: `eas submit --platform ios --profile production --path ./build-XXXX.ipa`
+5. **Fallback:** upload the same `.ipa` with Apple **Transporter** (uses Apple ID login, not the API key).

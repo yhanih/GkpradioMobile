@@ -43,7 +43,7 @@ module.exports = {
   expo: {
     name: 'GKP Radio',
     slug: 'gkp-radio',
-    version: '1.0.4',
+    version: '1.0.5',
     description:
       'God Kingdom Principles Radio - Broadcasting Truth, Building Community, Transforming Lives',
     orientation: 'portrait',
@@ -137,6 +137,12 @@ module.exports = {
       playStoreUrl:
         process.env.EXPO_PUBLIC_PLAY_STORE_URL ||
         'https://play.google.com/store/apps/details?id=com.gkpradio.mobile',
+      wordpressApiBaseUrl:
+        process.env.EXPO_PUBLIC_WORDPRESS_API_BASE_URL ||
+        'https://godkingdomprinciplesradio.com/apis/wp-json',
+      donateUrl:
+        process.env.EXPO_PUBLIC_DONATE_URL ||
+        'https://godkingdomprinciplesradio.com/donate',
       merchStoreWebUrl:
         process.env.EXPO_PUBLIC_MERCH_STORE_WEB_URL ||
         'https://godkingdomprinciplesradio.com/apis/shop',

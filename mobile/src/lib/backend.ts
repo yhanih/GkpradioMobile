@@ -1,7 +1,7 @@
 import { supabase } from './supabase';
 import { PostType, getPostTypeForCategory, isPrayerCategory } from '../constants/categories';
 import { isCommunityTextBlocked, UGC_FILTER_USER_MESSAGE } from '../utils/contentUgcFilter';
-import { resolveRadioTrackArtist } from './radioNowPlaying';
+import { resolveRadioTrackArtist, resolveRadioTrackTitle } from './radioNowPlaying';
 
 export type SortOption = 'newest' | 'popular' | 'discussed';
 
@@ -76,6 +76,7 @@ export interface BackendRadioStatus {
     title: string;
     artist: string;
     art?: string;
+    text?: string;
   };
 }
 
@@ -113,6 +114,9 @@ const STREAM_URL_FALLBACK =
 const AZURACAST_NOW_PLAYING_URL =
   process.env.EXPO_PUBLIC_AZURACAST_NOW_PLAYING_URL ||
   'https://stream.godkingdomprinciplesradio.com/api/nowplaying/gkp_radio';
+
+const AZURACAST_NOW_PLAYING_FALLBACK_URL =
+  'http://74.208.102.89:8080/api/nowplaying/gkp_radio';
 
 const WORDPRESS_RADIO_STATUS_URL =
   process.env.EXPO_PUBLIC_WORDPRESS_RADIO_STATUS_URL ||
@@ -1243,7 +1247,7 @@ function mapNowPlayingPayloadToRadioStatus(data: unknown): BackendRadioStatus | 
 
   const station = record.station as { listen_url?: string } | undefined;
   const nowPlaying = record.now_playing as
-    | { song?: { title?: string; artist?: string; art?: string } }
+    | { song?: { title?: string; text?: string; artist?: string; art?: string } }
     | undefined;
   const live = record.live as { is_live?: boolean } | undefined;
 
@@ -1253,29 +1257,43 @@ function mapNowPlayingPayloadToRadioStatus(data: unknown): BackendRadioStatus | 
 
   return {
     is_live: Boolean(live?.is_live),
-    current_show: nowPlaying?.song?.title || 'Faith & Worship',
+    current_show: resolveRadioTrackTitle(nowPlaying?.song, 'Faith & Worship'),
     stream_url: station?.listen_url || STREAM_URL_FALLBACK,
     now_playing: nowPlaying?.song
       ? {
-          title: nowPlaying.song.title || 'Live Stream',
+          title: resolveRadioTrackTitle(nowPlaying.song, 'Live Stream'),
           artist: resolveRadioTrackArtist(nowPlaying.song.artist),
           art: nowPlaying.song.art,
+          text: nowPlaying.song.text,
         }
       : undefined,
   };
 }
 
 async function fetchAzuraCastRadioStatus(): Promise<BackendRadioStatus> {
-  const response = await fetch(AZURACAST_NOW_PLAYING_URL);
-  if (!response.ok) {
-    throw new Error(`AzuraCast now playing failed (${response.status})`);
+  const urls = [AZURACAST_NOW_PLAYING_URL, AZURACAST_NOW_PLAYING_FALLBACK_URL];
+  let lastError: Error | null = null;
+
+  for (const url of urls) {
+    try {
+      const response = await fetch(url);
+      if (!response.ok) {
+        lastError = new Error(`AzuraCast now playing failed (${response.status})`);
+        continue;
+      }
+      const data = await response.json();
+      const mapped = mapNowPlayingPayloadToRadioStatus(data);
+      if (!mapped) {
+        lastError = new Error('AzuraCast now playing payload invalid');
+        continue;
+      }
+      return mapped;
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error('AzuraCast now playing failed');
+    }
   }
-  const data = await response.json();
-  const mapped = mapNowPlayingPayloadToRadioStatus(data);
-  if (!mapped) {
-    throw new Error('AzuraCast now playing payload invalid');
-  }
-  return mapped;
+
+  throw lastError ?? new Error('AzuraCast now playing failed');
 }
 
 export async function fetchRadioStatusFromAzuraCast(): Promise<BackendRadioStatus> {
@@ -1312,7 +1330,7 @@ export async function fetchRadioQueueInfo(): Promise<RadioQueueInfo | null> {
     const nextSong = (data.playing_next as { song?: Record<string, string> } | null)?.song;
     const upNext: RadioQueueItem | null = nextSong
       ? {
-          title: String(nextSong.title || nextSong.text || 'Unknown').trim() || 'Unknown',
+          title: resolveRadioTrackTitle(nextSong, 'Unknown'),
           artist: resolveRadioTrackArtist(nextSong.artist),
         }
       : null;
@@ -1324,7 +1342,7 @@ export async function fetchRadioQueueInfo(): Promise<RadioQueueInfo | null> {
         const s = (entry as { song?: Record<string, string> })?.song;
         if (!s) continue;
         recent.push({
-          title: String(s.title || s.text || 'Unknown').trim() || 'Unknown',
+          title: resolveRadioTrackTitle(s, 'Unknown'),
           artist: resolveRadioTrackArtist(s.artist),
         });
       }

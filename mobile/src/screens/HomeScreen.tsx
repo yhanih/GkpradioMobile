@@ -10,6 +10,8 @@ import {
   Image,
   ActivityIndicator,
   useWindowDimensions,
+  Linking,
+  Alert,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -330,6 +332,13 @@ export function HomeScreen() {
                 familyMembers={homeStats.familyMembers}
                 prayersLifted={homeStats.prayersLifted}
                 mediaItems={homeStats.mediaItems}
+                onPressPromotions={() => {
+                  Linking.openURL('https://godkingdomprinciplesradio.com/promotions').catch(() => {
+                    Alert.alert('Could not open', 'Please visit godkingdomprinciplesradio.com/promotions');
+                  });
+                }}
+                onPressDonations={() => navigation.navigate('Donate')}
+                onPressMerch={() => navigation.navigate('MerchStore')}
               />
 
               {/* Ministry Fields (Brand Element from Web) */}
@@ -381,57 +390,7 @@ export function HomeScreen() {
                 />
               ) : null}
 
-              {/* Bible Games CTA */}
-              <Pressable
-                onPress={() => {
-                  Haptics.selectionAsync();
-                  navigation.navigate('Games');
-                }}
-                style={({ pressed }) => [
-                  styles.donateCard,
-                  pressed && styles.donateCardPressed,
-                ]}
-                accessibilityRole="button"
-                accessibilityLabel="Play GKP Bible Games"
-              >
-                <View style={styles.donateIconContainer}>
-                  <Ionicons name="game-controller" size={22} color={theme.colors.primary} />
-                </View>
-                <View style={styles.donateTextContainer}>
-                  <Text style={styles.donateTitle}>GKP Bible Games</Text>
-                  <Text style={styles.donateSubtitle}>
-                    Play & climb the Kingdom leaderboard
-                  </Text>
-                </View>
-                <Ionicons name="chevron-forward" size={20} color={theme.colors.textMuted} />
-              </Pressable>
-
-              {/* Support the Ministry CTA */}
-              <Pressable
-                onPress={() => {
-                  Haptics.selectionAsync();
-                  navigation.navigate('Donate');
-                }}
-                style={({ pressed }) => [
-                  styles.donateCard,
-                  pressed && styles.donateCardPressed,
-                ]}
-                accessibilityRole="button"
-                accessibilityLabel="Support GKP Radio with a donation"
-              >
-                <View style={styles.donateIconContainer}>
-                  <Ionicons name="heart" size={22} color={theme.colors.primary} />
-                </View>
-                <View style={styles.donateTextContainer}>
-                  <Text style={styles.donateTitle}>Support GKP Radio</Text>
-                  <Text style={styles.donateSubtitle}>
-                    Help us keep the gospel on the air
-                  </Text>
-                </View>
-                <Ionicons name="chevron-forward" size={20} color={theme.colors.textMuted} />
-              </Pressable>
-
-              {/* Ministry Merch Spotlight Rail */}
+              {/* Ministry Merch Spotlight Rail — featured products; shop link is on the stats strip */}
               <View style={styles.spotlightContainer}>
                 <View style={styles.spotlightHeader}>
                   <Text style={styles.spotlightTitle}>Ministry Merch</Text>

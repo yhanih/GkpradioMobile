@@ -86,7 +86,7 @@ function MainTabs() {
     <>
       <DeepLinkHandler />
       <Tab.Navigator
-        initialRouteName="Community"
+        initialRouteName="Home"
         screenOptions={({ route }) => ({
           tabBarIcon: ({ focused, color }) => {
             let iconName: keyof typeof Ionicons.glyphMap = 'home';
@@ -95,12 +95,12 @@ function MainTabs() {
               iconName = focused ? 'home' : 'home-outline';
             } else if (route.name === 'Community') {
               iconName = focused ? 'people' : 'people-outline';
+            } else if (route.name === 'Games') {
+              iconName = focused ? 'game-controller' : 'game-controller-outline';
             } else if (route.name === 'Live') {
               iconName = focused ? 'radio' : 'radio-outline';
-            } else if (route.name === 'Media') {
-              iconName = focused ? 'play-circle' : 'play-circle-outline';
-            } else if (route.name === 'Hub') {
-              iconName = focused ? 'settings' : 'settings-outline';
+            } else if (route.name === 'More') {
+              iconName = focused ? 'ellipsis-horizontal' : 'ellipsis-horizontal-outline';
             }
 
             const iconSize = focused ? 28 : 26;
@@ -110,14 +110,14 @@ function MainTabs() {
           tabBarInactiveTintColor: theme.colors.textSecondary,
           tabBarShowLabel: true,
           tabBarLabel:
-            route.name === 'Hub'
-              ? 'Settings'
+            route.name === 'More'
+              ? 'More'
               : route.name === 'Community'
                 ? 'Community'
-                : route.name === 'Live'
-                  ? 'Live'
-                  : route.name === 'Media'
-                    ? 'Media'
+                : route.name === 'Games'
+                  ? 'Games'
+                  : route.name === 'Live'
+                    ? 'Live'
                     : 'Home',
           headerShown: false,
           tabBarItemStyle: {
@@ -146,9 +146,9 @@ function MainTabs() {
       >
         <Tab.Screen name="Home" component={withTabletMaxWidth(HomeScreen)} />
         <Tab.Screen name="Community" component={withTabletMaxWidth(CommunityScreen)} />
+        <Tab.Screen name="Games" component={withTabletMaxWidth(GamesScreen)} />
         <Tab.Screen name="Live" component={withTabletMaxWidth(LiveScreen)} />
-        <Tab.Screen name="Media" component={withTabletMaxWidth(MediaScreen)} />
-        <Tab.Screen name="Hub" component={withTabletMaxWidth(HubScreen)} />
+        <Tab.Screen name="More" component={withTabletMaxWidth(HubScreen)} />
       </Tab.Navigator>
 
       <AudioPlayer />
@@ -380,6 +380,11 @@ function RootNavigator() {
       <Stack.Screen
         name="Games"
         component={GamesScreen}
+        options={{ animation: 'slide_from_right' }}
+      />
+      <Stack.Screen
+        name="Media"
+        component={MediaScreen}
         options={{ animation: 'slide_from_right' }}
       />
     </Stack.Navigator>

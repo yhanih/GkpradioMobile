@@ -86,6 +86,9 @@ export function buildGamesUrl(gameId?: GkpGameId, playerName?: string): string {
   if (trimmedName) {
     params.set('player_name', trimmedName.slice(0, 30));
   }
+  if (gameId === 'righteous-quest') {
+    params.set('game_audio', '0');
+  }
   return `${origin}${path}?${params.toString()}`;
 }
 

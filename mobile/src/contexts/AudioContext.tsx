@@ -15,7 +15,7 @@ import {
 } from 'expo-audio';
 import { Alert } from 'react-native';
 import { fetchRadioStatusFromAzuraCast } from '../lib/backend';
-import { resolveRadioTrackArtist } from '../lib/radioNowPlaying';
+import { resolveRadioTrackArtist, resolveRadioTrackTitle } from '../lib/radioNowPlaying';
 import { isExpoGoClient } from '../lib/isExpoGoClient';
 import {
   activateLockScreenControls,
@@ -151,7 +151,16 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
       const data = await fetchRadioStatusFromAzuraCast();
       if (!data) return;
 
-      const songTitle = data.now_playing?.title || data.current_show || 'GKP Radio Live';
+      const songTitle = resolveRadioTrackTitle(
+        data.now_playing
+          ? {
+              title: data.now_playing.title,
+              text: data.now_playing.text,
+              artist: data.now_playing.artist,
+            }
+          : null,
+        data.current_show || 'GKP Radio Live',
+      );
       const songArtist = resolveRadioTrackArtist(data.now_playing?.artist);
 
       const next: NowPlayingData = {

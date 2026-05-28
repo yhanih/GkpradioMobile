@@ -1,12 +1,11 @@
 #!/usr/bin/env python3
+# Idempotent: safe to re-run after Vite deploy overwrites index.html / assets.
 from pathlib import Path
 
 ROOT = Path("/var/www/vhosts/godkingdomprinciplesradio.com/httpdocs")
 LAZY = '.useState(()=>{try{return localStorage.getItem("gkp_player_name")||""}catch(e){return""}})'
 
-index = ROOT / "index.html"
-text = index.read_text()
-bridge = """    <script>
+BRIDGE = """    <script>
       (function () {
         try {
           var params = new URLSearchParams(window.location.search);
@@ -14,16 +13,35 @@ bridge = """    <script>
           if (name && name.trim()) {
             localStorage.setItem("gkp_player_name", name.trim().slice(0, 100));
           }
+          if (params.get("game_audio") === "0" || params.get("mobile") === "1") {
+            localStorage.setItem("gkp_mute_game_audio", "1");
+          }
         } catch (e) {}
       })();
     </script>
 """
+MUTE_BLOCK = """          if (params.get("game_audio") === "0" || params.get("mobile") === "1") {
+            localStorage.setItem("gkp_mute_game_audio", "1");
+          }"""
+PLAYER_NAME_BLOCK_END = """          if (name && name.trim()) {
+            localStorage.setItem("gkp_player_name", name.trim().slice(0, 100));
+          }"""
+
+index = ROOT / "index.html"
+text = index.read_text()
 if "gkp_player_name" not in text:
-    text = text.replace('    <script type="module"', bridge + '    <script type="module"')
+    text = text.replace('    <script type="module"', BRIDGE + '    <script type="module"')
     index.write_text(text)
-    print("index.html updated")
+    print("index.html: injected full bridge (player_name + mute)")
+elif "gkp_mute_game_audio" not in text:
+    if PLAYER_NAME_BLOCK_END in text:
+        text = text.replace(PLAYER_NAME_BLOCK_END, PLAYER_NAME_BLOCK_END + "\n" + MUTE_BLOCK, 1)
+        index.write_text(text)
+        print("index.html: extended bridge with mute logic")
+    else:
+        print("index.html: gkp_player_name present but bridge pattern not found; mute not added")
 else:
-    print("index.html already has bridge")
+    print("index.html: player_name and mute bridge already present")
 
 replacements = {
     "RighteousQuest": ("[D,Be]=H.useState(\"\")", f"[D,Be]=H{LAZY}"),
@@ -40,7 +58,26 @@ for prefix, (old, new) in replacements.items():
     if old not in data:
         print(f"pattern missing in {f.name}")
         continue
-    f.write_text(data.replace(old, new, 1))
+    data = data.replace(old, new, 1)
+    if prefix == "RighteousQuest":
+        audio_hook = (
+            'try{var __gkpMute=(()=>{try{return localStorage.getItem("gkp_mute_game_audio")==="1"'
+            '||new URLSearchParams(location.search).get("game_audio")==="0"}catch(e){return false}})();'
+            'if(__gkpMute){x.volume=0;x.muted=true}}catch(e){}'
+        )
+        audio_needle = 'x=new Audio("/Shattered_Crown.mp3");x.preload="auto"'
+        if "__gkpMute" in data or "gkp_mute_game_audio" in data:
+            print(f"game audio mute already in {f.name}")
+        elif audio_needle in data:
+            data = data.replace(
+                audio_needle,
+                audio_needle + ";" + audio_hook,
+                1,
+            )
+            print(f"muted game audio in {f.name}")
+        else:
+            print(f"audio pattern missing in {f.name}")
+    f.write_text(data)
     print(f"patched {f.name}")
 
 scores_files = list((ROOT / "assets").glob("useGameScores*.js"))
