@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 /**
  * Resize + compress onboarding PNGs for fast decode on device.
- * Run: node scripts/optimize-onboarding-images.mjs
+ * Run: npm install --no-save sharp && node scripts/optimize-onboarding-images.mjs
+ * (sharp is not a project dependency — EAS builds must not install native image tooling.)
  */
 import { readdir, rename, unlink } from 'node:fs/promises';
 import path from 'node:path';
