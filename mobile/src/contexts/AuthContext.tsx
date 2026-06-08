@@ -1,5 +1,6 @@
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useContext, useEffect, useState, useRef } from 'react';
 import { Platform } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '../lib/supabase';
 import { registerForPushNotifications } from '../lib/notifications';
 import { normalizeAvatarSeed } from '../components/ui/avatar/avatarVariants';
@@ -11,6 +12,14 @@ const EMAIL_AUTH_REDIRECT = 'gkpradio://auth/callback';
 
 function normalizeEmail(email: string) {
   return email.trim().toLowerCase();
+}
+
+/** Supabase may return a session before the user taps the email link. */
+function isSupabaseEmailVerified(user: {
+  email_confirmed_at?: string | null;
+  confirmed_at?: string | null;
+} | null | undefined): boolean {
+  return Boolean(user?.email_confirmed_at ?? user?.confirmed_at);
 }
 
 interface AuthContextType {
@@ -43,10 +52,53 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+const CACHE_KEY_PREFIX = '@gkp_cached_profile_';
+
+const cacheProfile = async (userId: string, profile: any) => {
+  try {
+    await AsyncStorage.setItem(`${CACHE_KEY_PREFIX}${userId}`, JSON.stringify(profile));
+  } catch (e) {
+    console.warn('Failed to cache profile:', e);
+  }
+};
+
+const getCachedProfile = async (userId: string) => {
+  try {
+    const data = await AsyncStorage.getItem(`${CACHE_KEY_PREFIX}${userId}`);
+    return data ? JSON.parse(data) : null;
+  } catch (e) {
+    console.warn('Failed to get cached profile:', e);
+    return null;
+  }
+};
+
+const getProvisionalUser = (sessionUser: any, profile: any = null) => {
+  if (!sessionUser) return null;
+  const avatarseed = normalizeAvatarSeed(
+    profile?.avatar_seed ??
+      (typeof sessionUser.user_metadata?.avatar_seed === 'string'
+        ? sessionUser.user_metadata.avatar_seed
+        : null),
+    sessionUser.id,
+  );
+  return {
+    id: sessionUser.id,
+    email: sessionUser.email,
+    fullname: profile?.full_name || sessionUser.user_metadata?.full_name || null,
+    avatarurl: profile?.avatar_url || null,
+    avatarseed,
+    bio: profile?.bio || null,
+    created_at: profile?.created_at || sessionUser.created_at || null,
+    terms_accepted_at: profile?.terms_accepted_at ?? null,
+  };
+};
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<any | null>(null);
   const [session, setSession] = useState<any | null>(null);
   const [loading, setLoading] = useState(true);
+  const lastFetchedUserIdRef = useRef<string | null>(null);
+  const isMountedRef = useRef(true);
 
   const savePushToken = async (userId: string) => {
     if (Platform.OS === 'web') return;
@@ -82,52 +134,117 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       .eq('id', sessionUser.id)
       .maybeSingle();
 
-    const avatarseed = normalizeAvatarSeed(
-      profile?.avatar_seed ??
-        (typeof sessionUser.user_metadata?.avatar_seed === 'string'
-          ? sessionUser.user_metadata.avatar_seed
-          : null),
-      sessionUser.id,
-    );
+    if (profile) {
+      await cacheProfile(sessionUser.id, profile);
+    }
 
-    return {
-      id: sessionUser.id,
-      email: sessionUser.email,
-      fullname: profile?.full_name || sessionUser.user_metadata?.full_name || null,
-      avatarurl: profile?.avatar_url || null,
-      avatarseed,
-      bio: profile?.bio || null,
-      created_at: profile?.created_at || sessionUser.created_at || null,
-      terms_accepted_at: profile?.terms_accepted_at ?? null,
-    };
+    return getProvisionalUser(sessionUser, profile);
+  };
+
+  const handleAuthState = (nextSession: any | null) => {
+    const sessionUser = nextSession?.user ?? null;
+    if (!sessionUser) {
+      setSession(null);
+      setUser(null);
+      lastFetchedUserIdRef.current = null;
+      setLoading(false);
+      return;
+    }
+
+    // Synchronously check if we have already initialized/are initializing this user's session
+    if (lastFetchedUserIdRef.current === sessionUser.id) {
+      // If we are already initialized, we still update the session state to keep refreshed tokens in sync.
+      setSession(nextSession);
+      return;
+    }
+    lastFetchedUserIdRef.current = sessionUser.id;
+
+    // Defer the asynchronous operations to prevent blocking the Supabase auth listener / call stack.
+    setTimeout(async () => {
+      if (!isMountedRef.current) return;
+
+      setSession(nextSession);
+
+      // 1. Instantly construct a user object from local metadata and unblock UI
+      let initialUser = getProvisionalUser(sessionUser);
+      setUser(initialUser);
+      setLoading(false); // IMMEDIATELY UNBLOCK THE UI HERE BEFORE ASYNC STORAGE READS!
+
+      // 2. Load cached profile from AsyncStorage in background
+      try {
+        const cachedProfile = await getCachedProfile(sessionUser.id);
+        if (cachedProfile && isMountedRef.current) {
+          initialUser = getProvisionalUser(sessionUser, cachedProfile);
+          setUser(initialUser);
+        }
+      } catch (err) {
+        console.warn('[Auth] Failed to load cached profile:', err);
+      }
+
+      // Save push token in background
+      savePushToken(sessionUser.id);
+
+      // 3. Fetch the latest profile from the database in the background (non-blocking)
+      try {
+        const { data: profile, error } = await supabase
+          .from('profiles')
+          .select('id,full_name,avatar_url,avatar_seed,bio,created_at,terms_accepted_at')
+          .eq('id', sessionUser.id)
+          .maybeSingle();
+
+        if (error) throw error;
+
+        if (profile && isMountedRef.current) {
+          await cacheProfile(sessionUser.id, profile);
+          setUser(getProvisionalUser(sessionUser, profile));
+        }
+      } catch (err) {
+        console.warn('[Auth] Background profile fetch failed:', err);
+      }
+    }, 0);
   };
 
   useEffect(() => {
+    isMountedRef.current = true;
+
     const initializeAuth = async () => {
+      // Safety timeout: if auth takes longer than 2.5 seconds, force unblock the UI
+      const timer = setTimeout(() => {
+        console.warn('[Auth] Initialization safety timeout reached. Unblocking UI.');
+        if (isMountedRef.current && loading) {
+          setLoading(false);
+        }
+      }, 2500);
+
       try {
         const { data, error } = await supabase.auth.getSession();
+        clearTimeout(timer);
         if (error) throw error;
-        setSession(data.session);
-        setUser(await mapUser(data.session?.user ?? null));
-        if (data.session?.user?.id) {
-          savePushToken(data.session.user.id);
-        }
+        handleAuthState(data.session);
       } catch (error) {
+        clearTimeout(timer);
         console.error('Error loading session:', error);
-      } finally {
-        setLoading(false);
+        if (isMountedRef.current) {
+          setLoading(false);
+        }
       }
     };
 
     initializeAuth();
 
-    const { data: subscription } = supabase.auth.onAuthStateChange(async (_event, nextSession) => {
-      setSession(nextSession);
-      setUser(await mapUser(nextSession?.user ?? null));
-      setLoading(false);
+    const { data: subscription } = supabase.auth.onAuthStateChange((_event, nextSession) => {
+      try {
+        handleAuthState(nextSession);
+      } catch (e) {
+        console.warn('[Auth] onAuthStateChange error:', e);
+        if (isMountedRef.current) {
+          setLoading(false);
+        }
+      }
     });
 
     return () => {
+      isMountedRef.current = false;
       subscription.subscription.unsubscribe();
     };
   }, []);
@@ -200,17 +317,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
       }
 
+      const needsEmailVerification =
+        Boolean(data.user && hasEmailIdentity) &&
+        (!data.session || !isSupabaseEmailVerified(data.user));
+
       if (data.session) {
         setSession(data.session);
         setUser(await mapUser(data.session.user));
-        if (data.session.user?.id) {
+        if (data.session.user?.id && !needsEmailVerification) {
           await applyPendingTermsAcceptance(data.session.user.id);
         }
-        return { error: null, needsEmailVerification: false };
+        return { error: null, needsEmailVerification };
       }
 
-      // Supabase returns no session when email confirmation is required before first sign-in.
-      const needsEmailVerification = Boolean(data.user && hasEmailIdentity);
       return { error: null, needsEmailVerification };
     } catch (error) {
       console.error('Error signing up:', error);
@@ -264,15 +383,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setSession(data.session);
         const sessionUser = data.session.user;
         if (sessionUser?.id) {
-          await syncAvatarFromAuthMetadata(
+          // Fire-and-forget side-effects: avatar sync, push token, and terms acceptance
+          // must NOT block the success path — a failure here should never prevent navigation.
+          syncAvatarFromAuthMetadata(
             sessionUser.id,
             sessionUser.user_metadata,
             typeof sessionUser.user_metadata?.full_name === 'string'
               ? sessionUser.user_metadata.full_name
               : null,
-          );
+          ).catch((e: unknown) => console.warn('[Auth] syncAvatar after OTP:', e));
           savePushToken(sessionUser.id);
-          await applyPendingTermsAcceptance(sessionUser.id);
+          applyPendingTermsAcceptance(sessionUser.id)
+            .catch((e: unknown) => console.warn('[Auth] terms acceptance after OTP:', e));
         }
         setUser(await mapUser(sessionUser));
       }

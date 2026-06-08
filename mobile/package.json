@@ -1,6 +1,6 @@
 {
   "name": "mobile",
-  "version": "1.0.5",
+  "version": "2.5.0",
   "main": "index.ts",
   "scripts": {
     "start": "expo start",
@@ -48,7 +48,6 @@
     "expo": "^56.0.0",
     "expo-asset": "~56.0.16",
     "expo-audio": "~56.0.11",
-    "expo-av": "~16.0.8",
     "expo-blur": "~56.0.3",
     "expo-build-properties": "~56.0.17",
     "expo-calendar": "~56.0.8",
@@ -88,7 +87,6 @@
     "doctor": {
       "reactNativeDirectoryCheck": {
         "exclude": [
-          "expo-av",
           "expo-modules-jsi"
         ]
       }

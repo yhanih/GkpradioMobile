@@ -1,10 +1,11 @@
 
 export type RootStackParamList = {
-  MainTabs: undefined;
+  MainTabs: { screen: keyof MainTabParamList } | undefined;
   PostDetail: {
     threadId: string | number;
     testimony?: any;
     thread?: any;
+    focusReply?: boolean;
   };
   UserProfile: {
     userId: string | number;
@@ -14,7 +15,7 @@ export type RootStackParamList = {
   Login: { redirectBack?: boolean } | undefined;
   Signup: undefined;
   /** Enter signup email + 6-digit code (optional email pre-filled from Login/Signup). */
-  ConfirmEmail: { email?: string } | undefined;
+  ConfirmEmail: { email?: string; fromSignup?: boolean } | undefined;
   ForgotPassword: undefined;
   ResetPassword: undefined;
   VideoPlayer: {
@@ -32,7 +33,14 @@ export type RootStackParamList = {
   ProductDetail: { product: any };
   Donate: { amount?: number } | undefined;
   Games: undefined;
+  GameWebView: {
+    url: string;
+    title?: string;
+    /** Main tab to open when user taps the primary return action (default Live). */
+    returnTab?: 'Live' | 'Home';
+  };
   Media: undefined;
+  DailySchedule: undefined;
 };
 
 export type MainTabParamList = {

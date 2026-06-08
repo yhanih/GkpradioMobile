@@ -16,6 +16,9 @@ import * as Haptics from 'expo-haptics';
 
 import { useTheme } from '../contexts/ThemeContext';
 import { useCart, CartItem } from '../contexts/CartContext';
+import { useNavigation } from '@react-navigation/native';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { RootStackParamList } from '../types/navigation';
 import { AnimatedButton } from './AnimatedPressable';
 import { prepareStoreCheckout } from '../lib/merch';
 import * as WebBrowser from 'expo-web-browser';
@@ -26,6 +29,7 @@ interface CartSheetProps {
 }
 
 export function CartSheet({ visible, onClose }: CartSheetProps) {
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const { theme } = useTheme();
   const { cartItems, isCartReady, updateQuantity, removeFromCart, cartTotal, clearCart } = useCart();
   const [checkoutLoading, setCheckoutLoading] = useState(false);
@@ -56,22 +60,14 @@ export function CartSheet({ visible, onClose }: CartSheetProps) {
 
     try {
       const checkoutUrl = await prepareStoreCheckout(cartItems);
-
-      try {
-        await WebBrowser.openBrowserAsync(checkoutUrl, {
-          presentationStyle: WebBrowser.WebBrowserPresentationStyle.FULL_SCREEN,
-          dismissButtonStyle: 'done',
-          enableBarCollapsing: true,
-        });
-      } catch {
-        const canOpen = await Linking.canOpenURL(checkoutUrl);
-        if (!canOpen) {
-          throw new Error('Could not open secure checkout in your browser');
-        }
-        await Linking.openURL(checkoutUrl);
-      }
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       onClose();
+
+      navigation.navigate('GameWebView', {
+        url: checkoutUrl,
+        title: 'Secure Checkout',
+        returnTab: 'Home',
+      });
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch (error) {
       const message =
         error instanceof Error ? error.message : 'Checkout could not be started. Please try again.';

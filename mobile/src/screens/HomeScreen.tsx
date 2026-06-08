@@ -7,12 +7,11 @@ import {
   Text,
   Animated,
   Pressable,
-  Image,
   ActivityIndicator,
   useWindowDimensions,
-  Linking,
   Alert,
 } from 'react-native';
+import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, CompositeNavigationProp } from '@react-navigation/native';
@@ -38,6 +37,7 @@ import { useTheme, type Theme } from '../contexts/ThemeContext';
 import { MediaRail } from '../components/MediaRail';
 import { SponsorBanner } from '../components/SponsorBanner';
 import { StatsStrip } from '../components/StatsStrip';
+import { openPromotionsBrowser } from '../lib/openPromotionsBrowser';
 import { MinistryFieldsList } from '../components/MinistryFieldsList';
 import { SkeletonList } from '../components/SkeletonLoader';
 import { Category, getPostTypeForCategory } from '../constants/categories';
@@ -134,56 +134,23 @@ export function HomeScreen() {
 
   useEffect(() => {
     fetchData();
+  }, []);
+
+  useEffect(() => {
     const fullName = user?.fullname?.trim();
     const emailName = user?.email?.split('@')?.[0];
     setUserName(fullName || emailName || 'Friend');
   }, [user]);
-
-  useEffect(() => {
-    let mounted = true;
-    let refreshTimer: ReturnType<typeof setTimeout> | null = null;
-
-    const refreshStats = async () => {
-      try {
-        const stats = await fetchHomeStats();
-        if (mounted) setHomeStats(stats);
-      } catch (error) {
-        console.error('[HomeScreen] Error fetching home stats:', error);
-      }
-    };
-
-    const queueStatsRefresh = () => {
-      if (refreshTimer) clearTimeout(refreshTimer);
-      refreshTimer = setTimeout(() => {
-        refreshStats();
-      }, 250);
-    };
-
-    refreshStats();
-
-    const channel = supabase
-      .channel('home-stats-realtime')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, queueStatsRefresh)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'posts' }, queueStatsRefresh)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'podcasts' }, queueStatsRefresh)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'videos' }, queueStatsRefresh)
-      .subscribe();
-
-    return () => {
-      mounted = false;
-      if (refreshTimer) clearTimeout(refreshTimer);
-      supabase.removeChannel(channel);
-    };
-  }, []);
 
   const fetchData = async () => {
     console.log('[HomeScreen] fetchData started');
     try {
       setLoading(true);
 
-      const [podcastsRes, videosRes] = await Promise.all([
+      const [podcastsRes, videosRes, statsRes] = await Promise.all([
         fetchPodcasts(5),
         fetchVideos(3),
+        fetchHomeStats(),
       ]);
 
       setFeaturedEpisodes(podcastsRes.map((p: any) => ({
@@ -202,6 +169,8 @@ export function HomeScreen() {
         thumbnail_url: v.thumbnail_url,
         video_url: v.video_url
       } as any)));
+
+      setHomeStats(statsRes);
 
       console.log(`[HomeScreen] State updated: ${podcastsRes.length || 0} pods, ${videosRes.length || 0} vids`);
 
@@ -333,8 +302,8 @@ export function HomeScreen() {
                 prayersLifted={homeStats.prayersLifted}
                 mediaItems={homeStats.mediaItems}
                 onPressPromotions={() => {
-                  Linking.openURL('https://godkingdomprinciplesradio.com/promotions').catch(() => {
-                    Alert.alert('Could not open', 'Please visit godkingdomprinciplesradio.com/promotions');
+                  openPromotionsBrowser({ navigation }).catch(() => {
+                    Alert.alert('Could not open', 'Promotions could not be loaded. Please try again.');
                   });
                 }}
                 onPressDonations={() => navigation.navigate('Donate')}

@@ -47,7 +47,7 @@ export function MinistryFieldsList({ onPressItem }: MinistryFieldsListProps) {
     loadCounts();
 
     const channel = supabase
-      .channel('community-category-counts')
+      .channel(`community-category-counts-${Math.random().toString(36).substring(2, 9)}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'posts' }, queueRefresh)
       .subscribe();
 

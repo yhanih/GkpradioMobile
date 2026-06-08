@@ -127,10 +127,16 @@ export function LikedPostsScreen() {
                 {thread.like_count || 0}
               </Text>
             </View>
-            <View style={styles.statButton}>
+            <Pressable
+              style={styles.statButton}
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                navigation.navigate('PostDetail', { threadId: thread.id, thread, focusReply: true });
+              }}
+            >
               <Ionicons name="chatbubble-outline" size={18} color="#71717a" />
               <Text style={styles.statText}>{thread.comment_count || 0}</Text>
-            </View>
+            </Pressable>
           </View>
         </View>
       </Pressable>

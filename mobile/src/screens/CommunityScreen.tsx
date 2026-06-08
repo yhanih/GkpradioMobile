@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { View, Text, ScrollView, StyleSheet, Pressable, ActivityIndicator, RefreshControl, Alert, TextInput, Animated, Share, Modal, useWindowDimensions } from 'react-native';
+import { View, Text, ScrollView, StyleSheet, Pressable, ActivityIndicator, RefreshControl, Alert, TextInput, Animated, Share, Modal, useWindowDimensions, FlatList, Platform } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useFocusEffect, useRoute, RouteProp } from '@react-navigation/native';
@@ -34,7 +34,7 @@ import { RootStackParamList, MainTabParamList } from '../types/navigation';
 import { useToast } from '../components/Toast';
 import { openPostOverflowMenu } from '../utils/contentOverflowMenu';
 import { REPORT_SUBMITTED_ALERT } from '../constants/reportReasons';
-import { Avatar } from '../components/ui/avatar';
+import { PostCard } from '../components/PostCard';
 import { NotificationBadge } from '../components/NotificationBadge';
 import { HELP_DESK_EMAIL } from '../constants/contact';
 
@@ -90,6 +90,9 @@ export function CommunityScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [stats, setStats] = useState({ prayers: 0, testimonies: 0, total: 0 });
+  const [page, setPage] = useState(1);
+  const [hasMore, setHasMore] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [showNewPostModal, setShowNewPostModal] = useState(false);
   const [reportPostId, setReportPostId] = useState<string | null>(null);
   const [showSafetyModal, setShowSafetyModal] = useState(false);
@@ -99,11 +102,11 @@ export function CommunityScreen() {
   const [showSortMenu, setShowSortMenu] = useState(false);
   const [likingThreadId, setLikingThreadId] = useState<string | null>(null);
   const [unreadNotificationCount, setUnreadNotificationCount] = useState(0);
-  const [likeAnimations] = useState<{ [key: string]: Animated.Value }>({});
   const fabScale = useRef(new Animated.Value(1)).current;
   const sortByRef = useRef(sortBy);
   const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const realtimeDebounceRef = useRef<NodeJS.Timeout | null>(null);
+  const isLoadingMoreRef = useRef(false);
 
   const dedupeThreads = useCallback((items: ThreadWithUser[]) => {
     const seen = new Set<string>();
@@ -116,13 +119,27 @@ export function CommunityScreen() {
     return result;
   }, []);
 
-  const sortByNewest = useCallback((items: ThreadWithUser[]) => {
-    return [...items].sort((a, b) => {
-      const aTime = new Date(a.createdat).getTime() || 0;
-      const bTime = new Date(b.createdat).getTime() || 0;
-      return bTime - aTime;
-    });
-  }, []);
+  const sortThreads = useCallback((items: ThreadWithUser[], sortOpt: SortOption) => {
+    const deduplicated = dedupeThreads(items);
+    if (sortOpt === 'popular') {
+      return [...deduplicated].sort(
+        (a, b) =>
+          Math.max(b.prayer_count || 0, b.like_count || 0) - Math.max(a.prayer_count || 0, a.like_count || 0) ||
+          new Date(b.createdat).getTime() - new Date(a.createdat).getTime()
+      );
+    } else if (sortOpt === 'discussed') {
+      return [...deduplicated].sort(
+        (a, b) => (b.comment_count || 0) - (a.comment_count || 0) ||
+        new Date(b.createdat).getTime() - new Date(a.createdat).getTime()
+      );
+    } else {
+      return [...deduplicated].sort((a, b) => {
+        const aTime = new Date(a.createdat).getTime() || 0;
+        const bTime = new Date(b.createdat).getTime() || 0;
+        return bTime - aTime;
+      });
+    }
+  }, [dedupeThreads]);
 
   useEffect(() => {
     sortByRef.current = sortBy;
@@ -189,10 +206,24 @@ export function CommunityScreen() {
       }
       setError(null);
 
-      const data = await fetchCommunityPosts(sortBy, user?.id);
+      const targetPostType = activeCategory === 'all'
+        ? (activeMode === 'prayers' ? 'prayer' : 'discussion' as PostType)
+        : getPostTypeForCategory(activeCategory);
+
+      const PAGE_SIZE = 15;
+      const data = await fetchCommunityPosts(
+        sortBy,
+        user?.id,
+        1,
+        PAGE_SIZE,
+        activeCategory,
+        targetPostType
+      );
       console.log(`[CommunityScreen] Posts fetched: ${data.length}`);
-      const ordered = sortByNewest(dedupeThreads(data as ThreadWithUser[]));
+      const ordered = sortThreads(data as ThreadWithUser[], sortBy);
       setThreads(ordered);
+      setPage(1);
+      setHasMore(data.length === PAGE_SIZE);
     } catch (err: any) {
       console.error('[CommunityScreen] Error fetching community data:', err);
       if (err.stack) console.error(err.stack);
@@ -202,7 +233,47 @@ export function CommunityScreen() {
         setLoading(false);
       }
     }
-  }, [dedupeThreads, sortByNewest, sortBy, user?.id]);
+  }, [dedupeThreads, sortThreads, sortBy, user?.id, activeCategory, activeMode]);
+
+  const loadNextPage = useCallback(async () => {
+    if (loading || loadingMore || !hasMore || isLoadingMoreRef.current) {
+      return;
+    }
+
+    isLoadingMoreRef.current = true;
+    console.log(`[CommunityScreen] loadNextPage called. Loading page: ${page + 1}`);
+    setLoadingMore(true);
+
+    try {
+      const nextPage = page + 1;
+      const targetPostType = activeCategory === 'all'
+        ? (activeMode === 'prayers' ? 'prayer' : 'discussion' as PostType)
+        : getPostTypeForCategory(activeCategory);
+
+      const PAGE_SIZE = 15;
+      const data = await fetchCommunityPosts(
+        sortBy,
+        user?.id,
+        nextPage,
+        PAGE_SIZE,
+        activeCategory,
+        targetPostType
+      );
+      console.log(`[CommunityScreen] Page ${nextPage} fetched: ${data.length} posts`);
+
+      if (data.length > 0) {
+        setThreads(prev => sortThreads([...prev, ...data] as ThreadWithUser[], sortBy));
+        setPage(nextPage);
+      }
+      
+      setHasMore(data.length === PAGE_SIZE);
+    } catch (err) {
+      console.error('[CommunityScreen] Error loading next page:', err);
+    } finally {
+      isLoadingMoreRef.current = false;
+      setLoadingMore(false);
+    }
+  }, [loading, loadingMore, hasMore, page, sortBy, user?.id, activeCategory, activeMode, sortThreads]);
 
   useEffect(() => {
     fetchData();
@@ -234,7 +305,7 @@ export function CommunityScreen() {
     refreshUnreadCount();
 
     const channel = supabase
-      .channel(`community-notifications-${user.id}`)
+      .channel(`community-notifications-${user.id}-${Math.random().toString(36).substring(2, 9)}`)
       .on(
         'postgres_changes',
         {
@@ -252,21 +323,7 @@ export function CommunityScreen() {
     };
   }, [user?.id]);
 
-  const getLikeAnimation = (threadId: string) => {
-    if (!likeAnimations[threadId]) {
-      likeAnimations[threadId] = new Animated.Value(1);
-    }
-    return likeAnimations[threadId];
-  };
 
-  useEffect(() => {
-    const threadIds = new Set(threads.map(t => t.id));
-    Object.keys(likeAnimations).forEach(threadId => {
-      if (!threadIds.has(threadId)) {
-        delete likeAnimations[threadId];
-      }
-    });
-  }, [threads]);
 
   useEffect(() => {
     const queueRealtimeRefresh = () => {
@@ -279,7 +336,7 @@ export function CommunityScreen() {
       }, 350);
     };
 
-    const channel = supabase.channel('community-feed-realtime');
+    const channel = supabase.channel(`community-feed-realtime-${Math.random().toString(36).substring(2, 9)}`);
     channel
       .on('postgres_changes', { event: '*', schema: 'public', table: 'posts' }, queueRealtimeRefresh)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'post_likes' }, queueRealtimeRefresh)
@@ -306,15 +363,7 @@ export function CommunityScreen() {
     };
   }, [fetchData, fetchStats, user?.id]);
 
-  const animateLike = (threadId: string) => {
-    const anim = getLikeAnimation(threadId);
-    Animated.sequence([
-      Animated.timing(anim, { toValue: 1.3, duration: 100, useNativeDriver: true }),
-      Animated.timing(anim, { toValue: 1, duration: 100, useNativeDriver: true }),
-    ]).start();
-  };
-
-  const handleLike = async (threadId: string, currentlyLiked: boolean) => {
+  const handleLike = useCallback(async (threadId: string, currentlyLiked: boolean) => {
     if (!user) {
       showToast('Please sign in to like posts', 'info');
       return;
@@ -326,22 +375,21 @@ export function CommunityScreen() {
 
     setLikingThreadId(threadId);
 
-    const currentThread = threads.find(t => t.id === threadId);
-    const currentCount = currentThread?.like_count ?? 0;
-    const newCount = currentlyLiked ? Math.max(currentCount - 1, 0) : currentCount + 1;
-
-    animateLike(threadId);
-
-    setThreads(prev => prev.map(t => {
-      if (t.id === threadId) {
-        return {
-          ...t,
-          user_has_liked: !currentlyLiked,
-          like_count: newCount
-        };
-      }
-      return t;
-    }));
+    setThreads(prev => {
+      const currentThread = prev.find(t => t.id === threadId);
+      const currentCount = currentThread?.like_count ?? 0;
+      const newCount = currentlyLiked ? Math.max(currentCount - 1, 0) : currentCount + 1;
+      return prev.map(t => {
+        if (t.id === threadId) {
+          return {
+            ...t,
+            user_has_liked: !currentlyLiked,
+            like_count: newCount
+          };
+        }
+        return t;
+      });
+    });
 
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
 
@@ -349,23 +397,27 @@ export function CommunityScreen() {
       await togglePostReaction(threadId, user.id, 'like');
     } catch (error: any) {
       console.error('Error toggling like:', error);
-      setThreads(prev => prev.map(t => {
-        if (t.id === threadId) {
-          return {
-            ...t,
-            user_has_liked: currentlyLiked,
-            like_count: currentCount
-          };
-        }
-        return t;
-      }));
+      setThreads(prev => {
+        return prev.map(t => {
+          if (t.id === threadId) {
+            const prevLiked = currentlyLiked;
+            const prevCount = t.like_count + (currentlyLiked ? 1 : -1);
+            return {
+              ...t,
+              user_has_liked: prevLiked,
+              like_count: prevCount
+            };
+          }
+          return t;
+        });
+      });
       showToast('Unable to update like. Please try again.', 'error');
     } finally {
       setLikingThreadId(null);
     }
-  };
+  }, [user, likingThreadId, showToast]);
 
-  const handlePray = async (threadId: string, currentlyPrayed: boolean) => {
+  const handlePray = useCallback(async (threadId: string, currentlyPrayed: boolean) => {
     if (!user) {
       showToast('Please sign in to pray with the community', 'info');
       return;
@@ -377,22 +429,21 @@ export function CommunityScreen() {
 
     setLikingThreadId(threadId);
 
-    const currentThread = threads.find(t => t.id === threadId);
-    const currentCount = currentThread?.prayer_count ?? 0;
-    const newCount = currentlyPrayed ? Math.max(currentCount - 1, 0) : currentCount + 1;
-
-    animateLike(threadId);
-
-    setThreads(prev => prev.map(t => {
-      if (t.id === threadId) {
-        return {
-          ...t,
-          user_has_prayed: !currentlyPrayed,
-          prayer_count: newCount
-        };
-      }
-      return t;
-    }));
+    setThreads(prev => {
+      const currentThread = prev.find(t => t.id === threadId);
+      const currentCount = currentThread?.prayer_count ?? 0;
+      const newCount = currentlyPrayed ? Math.max(currentCount - 1, 0) : currentCount + 1;
+      return prev.map(t => {
+        if (t.id === threadId) {
+          return {
+            ...t,
+            user_has_prayed: !currentlyPrayed,
+            prayer_count: newCount
+          };
+        }
+        return t;
+      });
+    });
 
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
 
@@ -400,31 +451,35 @@ export function CommunityScreen() {
       await togglePostReaction(threadId, user.id, 'pray');
     } catch (error: any) {
       console.error('Error toggling prayer reaction:', error);
-      setThreads(prev => prev.map(t => {
-        if (t.id === threadId) {
-          return {
-            ...t,
-            user_has_prayed: currentlyPrayed,
-            prayer_count: currentCount
-          };
-        }
-        return t;
-      }));
+      setThreads(prev => {
+        return prev.map(t => {
+          if (t.id === threadId) {
+            const prevPrayed = currentlyPrayed;
+            const prevCount = t.prayer_count + (currentlyPrayed ? 1 : -1);
+            return {
+              ...t,
+              user_has_prayed: prevPrayed,
+              prayer_count: prevCount
+            };
+          }
+          return t;
+        });
+      });
       showToast('Unable to update prayer response. Please try again.', 'error');
     } finally {
       setLikingThreadId(null);
     }
-  };
+  }, [user, likingThreadId, showToast]);
 
-  const handleReportPost = (postId: string) => {
+  const handleReportPost = useCallback((postId: string) => {
     if (!user) {
       showToast('Please sign in to report content', 'info');
       return;
     }
     setReportPostId(postId);
-  };
+  }, [user, showToast]);
 
-  const handleBlockUser = (blockedUserId: string) => {
+  const handleBlockUser = useCallback((blockedUserId: string) => {
     if (!user) {
       Alert.alert('Authentication Required', 'Please sign in to block users.', [
         { text: 'Cancel', style: 'cancel' },
@@ -459,7 +514,7 @@ export function CommunityScreen() {
         },
       ]
     );
-  };
+  }, [user, navigation, showToast, fetchData]);
 
   const onRefresh = async () => {
     setRefreshing(true);
@@ -467,7 +522,7 @@ export function CommunityScreen() {
     setRefreshing(false);
   };
 
-  const handleBookmarkToggle = async (threadId: string) => {
+  const handleBookmarkToggle = useCallback(async (threadId: string) => {
     if (!user) {
       showToast('Please sign in to save posts', 'info');
       return;
@@ -485,9 +540,9 @@ export function CommunityScreen() {
       console.error('Error toggling bookmark:', error);
       showToast('Unable to save post. Please try again.', 'error');
     }
-  };
+  }, [user, toggleBookmark, showToast]);
 
-  const handleSharePost = async (thread: ThreadWithUser) => {
+  const handleSharePost = useCallback(async (thread: ThreadWithUser) => {
     Haptics.selectionAsync();
     try {
       const content = thread.content || '';
@@ -501,9 +556,9 @@ export function CommunityScreen() {
         showToast('Unable to share post. Please try again.', 'error');
       }
     }
-  };
+  }, [showToast]);
 
-  const handleDeletePost = async (threadId: string, threadUserId: string) => {
+  const handleDeletePost = useCallback(async (threadId: string, threadUserId: string) => {
     if (!user || String(user.id) !== threadUserId) {
       showToast('You can only delete your own posts', 'warning');
       return;
@@ -534,9 +589,9 @@ export function CommunityScreen() {
         }
       ]
     );
-  };
+  }, [user, showToast, fetchStats]);
 
-  const handleThreadOverflowMenu = (thread: ThreadWithUser) => {
+  const handleThreadOverflowMenu = useCallback((thread: ThreadWithUser) => {
     if (!user) {
       showToast('Please sign in', 'info');
       return;
@@ -552,7 +607,7 @@ export function CommunityScreen() {
         handleBlockUser(thread.userid);
       }
     });
-  };
+  }, [user, showToast, handleDeletePost, handleReportPost, handleBlockUser]);
 
   const handleFabPress = () => {
     if (!user) {
@@ -598,7 +653,7 @@ export function CommunityScreen() {
     setDebouncedSearchQuery('');
   }, [route.params?.categoryId, route.params?.mode]);
 
-  const formatTimeAgo = (dateString: string) => {
+  const formatTimeAgo = useCallback((dateString: string) => {
     try {
       if (!dateString) return 'recently';
       const date = new Date(dateString);
@@ -613,7 +668,7 @@ export function CommunityScreen() {
     } catch (error) {
       return 'recently';
     }
-  };
+  }, []);
 
   // Filter threads by mode first, then by category
   const filteredThreads = useMemo(() => {
@@ -695,16 +750,16 @@ export function CommunityScreen() {
     );
   };
 
-  const navigateToPost = (thread: ThreadWithUser) => {
+  const navigateToPost = useCallback((thread: ThreadWithUser) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     navigation.navigate('PostDetail', { threadId: thread.id, thread });
-  };
+  }, [navigation]);
 
-  const navigateToUserProfile = (userId: string, userData?: { id: string; fullname: string | null; avatarurl: string | null } | null) => {
+  const navigateToUserProfile = useCallback((userId: string, userData?: { id: string; fullname: string | null; avatarurl: string | null } | null) => {
     if (!userId || userId.trim() === '') return;
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     navigation.navigate('UserProfile', { userId, user: userData ? { ...userData, username: '' } as any : undefined });
-  };
+  }, [navigation]);
 
   // Memoize filtered search results
   const filteredBySearch = useMemo(() => {
@@ -720,149 +775,10 @@ export function CommunityScreen() {
   const pinnedThreads = filteredBySearch.filter(t => t.ispinned);
   const regularThreads = filteredBySearch.filter(t => !t.ispinned);
 
-  const renderThread = (thread: ThreadWithUser, isPinned = false) => {
-    const postType = thread.post_type || getPostTypeForCategory(thread.category);
-    const isPrayerPost = postType === 'prayer';
-    const authorName = thread.is_anonymous
-      ? 'Anonymous'
-      : thread.users?.fullname || 'Member';
-    return (
-      <View key={thread.id} style={[styles.card, isPinned && styles.pinnedCard]}>
-        {isPinned && (
-          <View style={styles.pinnedBadge}>
-            <Ionicons name="pin" size={12} color="#f59e0b" />
-            <Text style={styles.pinnedText}>Pinned</Text>
-          </View>
-        )}
-        <View style={styles.cardHeader}>
-          <Pressable
-            style={styles.authorInfo}
-            onPress={() => {
-              if (!thread.is_anonymous && thread.users) {
-                navigateToUserProfile(thread.userid, thread.users);
-              }
-            }}
-          >
-            <Avatar
-              src={thread.is_anonymous ? null : thread.users?.avatarurl}
-              name={authorName}
-              userId={thread.is_anonymous ? null : thread.userid}
-              avatarSeed={thread.is_anonymous ? null : thread.users?.avatarseed}
-              size="sm"
-              anonymous={thread.is_anonymous}
-              showRing
-            />
-            <View style={styles.authorMeta}>
-              <Text style={[styles.authorName, !thread.is_anonymous && styles.authorNameClickable]}>
-                {authorName}
-              </Text>
-              <Text style={styles.time}>{formatTimeAgo(thread.createdat)}</Text>
-            </View>
-          </Pressable>
-          <View style={styles.categoryBadge}>
-            <Ionicons
-              name={getCategoryIcon(thread.category)}
-              size={12}
-              color={theme.colors.primary}
-            />
-            <Text style={styles.categoryBadgeText}>{getCategoryLabel(thread.category)}</Text>
-          </View>
-        </View>
-
-        <Pressable
-          onPress={() => navigateToPost(thread)}
-          accessibilityRole="button"
-          accessibilityLabel={`Open post: ${thread.title}`}
-        >
-          <Text style={styles.cardTitle} numberOfLines={2}>
-            {thread.title}
-          </Text>
-          <Text style={styles.cardDescription} numberOfLines={3}>
-            {thread.content}
-          </Text>
-        </Pressable>
-
-        <View style={styles.cardFooter}>
-          <View style={styles.engagementStats}>
-            <Pressable
-              style={styles.statButton}
-              onPress={(e) => {
-                e?.stopPropagation?.();
-                if (isPrayerPost) {
-                  handlePray(thread.id, thread.user_has_prayed || false);
-                } else {
-                  handleLike(thread.id, thread.user_has_liked || false);
-                }
-              }}
-            >
-              <Animated.View style={{ transform: [{ scale: getLikeAnimation(thread.id) }] }}>
-                <Ionicons
-                  name={
-                    isPrayerPost
-                      ? (thread.user_has_prayed ? 'hand-right' : 'hand-right-outline')
-                      : (thread.user_has_liked ? "heart" : "heart-outline")
-                  }
-                  size={18}
-                  color={
-                    isPrayerPost
-                      ? (thread.user_has_prayed ? theme.colors.primary : theme.colors.textMuted)
-                      : (thread.user_has_liked ? theme.colors.error : theme.colors.textMuted)
-                  }
-                />
-              </Animated.View>
-              <Text
-                style={[
-                  styles.statText,
-                  isPrayerPost
-                    ? thread.user_has_prayed && styles.prayStatTextActive
-                    : thread.user_has_liked && styles.statTextActive
-                ]}
-              >
-                {isPrayerPost ? `${thread.prayer_count || 0} prayed` : (thread.like_count || 0)}
-              </Text>
-            </Pressable>
-            <View style={styles.statButton}>
-              <Ionicons name="chatbubble-outline" size={18} color={theme.colors.textMuted} />
-              <Text style={styles.statText}>
-                {thread.comment_count || 0}
-                {!isPrayerPost ? ' replies' : ''}
-              </Text>
-            </View>
-            <Pressable
-              style={styles.statButton}
-              onPress={() => handleSharePost(thread)}
-            >
-              <Ionicons name="share-outline" size={18} color={theme.colors.textMuted} />
-            </Pressable>
-          </View>
-          <View style={styles.cardActions}>
-            <Pressable
-              onPress={() => handleBookmarkToggle(thread.id)}
-              style={styles.actionButton}
-              accessibilityLabel="Save post"
-              hitSlop={12}
-            >
-              <Ionicons
-                name={isBookmarked('thread', thread.id) ? "bookmark" : "bookmark-outline"}
-                size={16}
-                color={isBookmarked('thread', thread.id) ? theme.colors.primary : theme.colors.textMuted}
-              />
-            </Pressable>
-            {user ? (
-              <Pressable
-                onPress={() => handleThreadOverflowMenu(thread)}
-                style={styles.actionButton}
-                accessibilityLabel="Post options: report, block, or delete"
-                hitSlop={12}
-              >
-                <Ionicons name="ellipsis-horizontal" size={20} color={theme.colors.textMuted} />
-              </Pressable>
-            ) : null}
-          </View>
-        </View>
-      </View>
-    );
-  };
+  const handleCommentPress = useCallback((thread: ThreadWithUser) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    navigation.navigate('PostDetail', { threadId: thread.id, thread, focusReply: true });
+  }, [navigation]);
 
   const getSortLabel = () => {
     switch (sortBy) {
@@ -871,215 +787,270 @@ export function CommunityScreen() {
       case 'discussed': return 'Most Discussed';
       default: return 'Newest';
     }
+  };  const combinedThreads = useMemo(() => {
+    if (loading || error) return [];
+    const pinned = pinnedThreads.map(t => ({ ...t, isPinnedItem: true }));
+    const regular = regularThreads.map(t => ({ ...t, isPinnedItem: false }));
+    return [...pinned, ...regular];
+  }, [pinnedThreads, regularThreads, loading, error]);
+
+  const renderHeader = () => (
+    <>
+      <View style={styles.header}>
+        <View style={styles.headerTopRow}>
+          <Text style={styles.title} accessibilityRole="header">
+            Community
+          </Text>
+          <View style={styles.headerActions}>
+            <Pressable
+              onPress={() => {
+                Haptics.selectionAsync();
+                navigation.navigate('Notifications');
+              }}
+              style={({ pressed }) => [styles.headerIconButton, pressed && styles.headerIconButtonPressed]}
+              hitSlop={12}
+              accessibilityRole="button"
+              accessibilityLabel="View notifications"
+            >
+              <Ionicons name="notifications-outline" size={26} color={theme.colors.primary} />
+              {user ? <NotificationBadge count={unreadNotificationCount} /> : null}
+            </Pressable>
+            <Pressable
+              onPress={() => {
+                Haptics.selectionAsync();
+                setShowSafetyModal(true);
+              }}
+              style={({ pressed }) => [styles.headerIconButton, pressed && styles.headerIconButtonPressed]}
+              hitSlop={12}
+              accessibilityRole="button"
+              accessibilityLabel="Community safety guidelines"
+            >
+              <Ionicons name="shield-checkmark-outline" size={26} color={theme.colors.primary} />
+            </Pressable>
+          </View>
+        </View>
+        <Text style={styles.subtitle}>
+          Share testimonies, lift prayers, and encourage one another
+        </Text>
+        <Pressable
+          onPress={() => {
+            Haptics.selectionAsync();
+            setShowSafetyModal(true);
+          }}
+          accessibilityRole="button"
+          accessibilityLabel="Read full community safety guidelines"
+        >
+          <Text style={styles.safetyHint}>
+            No peer-to-peer payments or donations between members.{' '}
+            <Text style={styles.safetyHintLink}>Details</Text>
+          </Text>
+        </Pressable>
+      </View>
+
+      <View style={styles.searchContainer}>
+        <TextInput
+          style={styles.searchInput}
+          placeholder="Search posts..."
+          placeholderTextColor={theme.colors.textMuted}
+          value={searchQuery}
+          onChangeText={setSearchQuery}
+        />
+        {searchQuery.length > 0 && (
+          <Pressable
+            onPress={() => setSearchQuery('')}
+            style={styles.searchButton}
+          >
+            <Ionicons name="close-circle" size={20} color={theme.colors.textMuted} />
+          </Pressable>
+        )}
+      </View>
+
+      <View style={styles.stats}>
+        <View style={styles.statBox}>
+          <View style={[styles.statIconContainer, { backgroundColor: theme.dark ? 'rgba(16, 185, 129, 0.15)' : 'rgba(5, 150, 105, 0.1)' }]}>
+            <Ionicons name="chatbubbles" size={20} color={theme.colors.primary} />
+          </View>
+          <Text style={styles.statValue}>{stats.prayers}</Text>
+          <Text style={styles.statLabel}>Prayers</Text>
+        </View>
+        <View style={styles.statBox}>
+          <View style={[styles.statIconContainer, { backgroundColor: theme.dark ? 'rgba(16, 185, 129, 0.2)' : 'rgba(16, 185, 129, 0.1)' }]}>
+            <Ionicons name="sparkles" size={20} color={theme.colors.primary} />
+          </View>
+          <Text style={styles.statValue}>{stats.testimonies}</Text>
+          <Text style={styles.statLabel}>Testimonies</Text>
+        </View>
+        <Pressable
+          style={styles.statBox}
+          onPress={() => {
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+            setShowNewPostModal(true);
+          }}
+        >
+          <View style={[styles.statIconContainer, { backgroundColor: theme.dark ? 'rgba(16, 185, 129, 0.15)' : 'rgba(4, 120, 87, 0.1)' }]}>
+            <Ionicons name="add-circle" size={24} color={theme.colors.primary} />
+          </View>
+          <Text style={[styles.statLabel, { marginTop: 4, fontWeight: '700', color: theme.colors.primary }]}>New Post</Text>
+        </Pressable>
+      </View>
+
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        style={styles.categoryScroll}
+        contentContainerStyle={styles.categoryScrollContent}
+      >
+        {modeCategories.map(renderCategoryTab)}
+      </ScrollView>
+
+      <View style={styles.sortContainer}>
+        <Pressable
+          style={styles.sortButton}
+          onPress={() => {
+            Haptics.selectionAsync();
+            setShowSortMenu(!showSortMenu);
+          }}
+        >
+          <Ionicons name="funnel-outline" size={16} color={theme.colors.textMuted} />
+          <Text style={styles.sortButtonText}>{getSortLabel()}</Text>
+          <Ionicons name="chevron-down" size={14} color={theme.colors.textMuted} />
+        </Pressable>
+
+        {showSortMenu && (
+          <>
+            <Pressable
+              style={StyleSheet.absoluteFill}
+              onPress={() => setShowSortMenu(false)}
+            />
+            <View style={styles.sortMenu}>
+              {(['newest', 'popular', 'discussed'] as SortOption[]).map(option => (
+                <Pressable
+                  key={option}
+                  style={[styles.sortMenuItem, sortBy === option && styles.sortMenuItemActive]}
+                  onPress={() => {
+                    Haptics.selectionAsync();
+                    setSortBy(option);
+                    setShowSortMenu(false);
+                  }}
+                >
+                  <Text style={[styles.sortMenuItemText, sortBy === option && styles.sortMenuItemTextActive]}>
+                    {option === 'newest' ? 'Newest' : option === 'popular' ? 'Most Liked' : 'Most Discussed'}
+                  </Text>
+                  {sortBy === option && <Ionicons name="checkmark" size={16} color={theme.colors.primary} />}
+                </Pressable>
+              ))}
+            </View>
+          </>
+        )}
+      </View>
+    </>
+  );
+
+  const renderEmptyComponent = () => {
+    if (error) {
+      return (
+        <View style={styles.content}>
+          <View style={styles.errorContainer}>
+            <Ionicons name="alert-circle-outline" size={48} color={theme.colors.error} />
+            <Text style={styles.errorText}>{error}</Text>
+            <Pressable style={styles.retryButton} onPress={() => { fetchData(); fetchStats(); }}>
+              <Text style={styles.retryButtonText}>Retry</Text>
+            </Pressable>
+          </View>
+        </View>
+      );
+    }
+    if (loading) {
+      return (
+        <View style={styles.content}>
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color={theme.colors.primary} />
+            <Text style={styles.loadingText}>Loading...</Text>
+          </View>
+        </View>
+      );
+    }
+    return (
+      <View style={styles.content}>
+        <View style={styles.emptyState}>
+          <Ionicons
+            name={activeMode === 'prayers' ? 'hand-right-outline' : 'chatbubbles-outline'}
+            size={48}
+            color={theme.colors.border}
+          />
+          <Text style={styles.emptyStateTitle}>
+            {activeCategory === 'all' 
+              ? `No ${activeMode === 'prayers' ? 'prayers' : 'discussions'} yet`
+              : `No ${getCategoryLabel(activeCategory).toLowerCase()} yet`}
+          </Text>
+          <Text style={styles.emptyStateText}>
+            {activeMode === 'prayers' 
+              ? 'Be the first to share a prayer request'
+              : 'Be the first to start a discussion'}
+          </Text>
+          <Pressable
+            style={styles.emptyStateButton}
+            onPress={() => setShowNewPostModal(true)}
+          >
+            <Text style={styles.emptyStateButtonText}>
+              {activeMode === 'prayers' ? 'Share Prayer' : 'Start Discussion'}
+            </Text>
+          </Pressable>
+        </View>
+      </View>
+    );
   };
+
+  const renderItem = useCallback(({ item }: { item: ThreadWithUser & { isPinnedItem: boolean } }) => (
+    <View style={styles.content}>
+      <PostCard
+        thread={item}
+        isPinned={item.isPinnedItem}
+        theme={theme}
+        isBookmarked={isBookmarked('thread', item.id)}
+        onPress={navigateToPost}
+        onPressAuthor={navigateToUserProfile}
+        onLike={handleLike}
+        onPray={handlePray}
+        onCommentPress={handleCommentPress}
+        onBookmarkToggle={handleBookmarkToggle}
+        onShare={handleSharePost}
+        onOverflowMenu={handleThreadOverflowMenu}
+        formatTimeAgo={formatTimeAgo}
+      />
+    </View>
+  ), [theme, isBookmarked, navigateToPost, navigateToUserProfile, handleLike, handlePray, handleCommentPress, handleBookmarkToggle, handleSharePost, handleThreadOverflowMenu, formatTimeAgo, styles.content]);
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      <ScrollView
-        style={styles.scrollView}
+      <FlatList
+        data={combinedThreads}
+        renderItem={renderItem}
+        keyExtractor={(item) => item.id}
+        ListHeaderComponent={renderHeader}
+        ListEmptyComponent={renderEmptyComponent}
+        ListFooterComponent={
+          <View style={{ paddingBottom: 120, alignItems: 'center', justifyContent: 'center' }}>
+            {loadingMore && (
+              <ActivityIndicator
+                size="small"
+                color={theme.colors.primary}
+                style={{ marginVertical: 15 }}
+              />
+            )}
+          </View>
+        }
         showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.colors.primary} />
         }
-      >
-        <View style={styles.header}>
-          <View style={styles.headerTopRow}>
-            <Text style={styles.title} accessibilityRole="header">
-              Community
-            </Text>
-            <View style={styles.headerActions}>
-              <Pressable
-                onPress={() => {
-                  Haptics.selectionAsync();
-                  navigation.navigate('Notifications');
-                }}
-                style={({ pressed }) => [styles.headerIconButton, pressed && styles.headerIconButtonPressed]}
-                hitSlop={12}
-                accessibilityRole="button"
-                accessibilityLabel="View notifications"
-              >
-                <Ionicons name="notifications-outline" size={26} color={theme.colors.primary} />
-                {user ? <NotificationBadge count={unreadNotificationCount} /> : null}
-              </Pressable>
-              <Pressable
-                onPress={() => {
-                  Haptics.selectionAsync();
-                  setShowSafetyModal(true);
-                }}
-                style={({ pressed }) => [styles.headerIconButton, pressed && styles.headerIconButtonPressed]}
-                hitSlop={12}
-                accessibilityRole="button"
-                accessibilityLabel="Community safety guidelines"
-              >
-                <Ionicons name="shield-checkmark-outline" size={26} color={theme.colors.primary} />
-              </Pressable>
-            </View>
-          </View>
-          <Text style={styles.subtitle}>
-            Share testimonies, lift prayers, and encourage one another
-          </Text>
-          <Pressable
-            onPress={() => {
-              Haptics.selectionAsync();
-              setShowSafetyModal(true);
-            }}
-            accessibilityRole="button"
-            accessibilityLabel="Read full community safety guidelines"
-          >
-            <Text style={styles.safetyHint}>
-              No peer-to-peer payments or donations between members.{' '}
-              <Text style={styles.safetyHintLink}>Details</Text>
-            </Text>
-          </Pressable>
-        </View>
-
-        <View style={styles.searchContainer}>
-          <TextInput
-            style={styles.searchInput}
-            placeholder="Search posts..."
-            placeholderTextColor={theme.colors.textMuted}
-            value={searchQuery}
-            onChangeText={setSearchQuery}
-          />
-          {searchQuery.length > 0 && (
-            <Pressable
-              onPress={() => setSearchQuery('')}
-              style={styles.searchButton}
-            >
-              <Ionicons name="close-circle" size={20} color={theme.colors.textMuted} />
-            </Pressable>
-          )}
-        </View>
-
-        <View style={styles.stats}>
-          <View style={styles.statBox}>
-            <View style={[styles.statIconContainer, { backgroundColor: theme.dark ? 'rgba(16, 185, 129, 0.15)' : 'rgba(5, 150, 105, 0.1)' }]}>
-              <Ionicons name="chatbubbles" size={20} color={theme.colors.primary} />
-            </View>
-            <Text style={styles.statValue}>{stats.prayers}</Text>
-            <Text style={styles.statLabel}>Prayers</Text>
-          </View>
-          <View style={styles.statBox}>
-            <View style={[styles.statIconContainer, { backgroundColor: theme.dark ? 'rgba(16, 185, 129, 0.2)' : 'rgba(16, 185, 129, 0.1)' }]}>
-              <Ionicons name="sparkles" size={20} color={theme.colors.primary} />
-            </View>
-            <Text style={styles.statValue}>{stats.testimonies}</Text>
-            <Text style={styles.statLabel}>Testimonies</Text>
-          </View>
-          <Pressable
-            style={styles.statBox}
-            onPress={() => {
-              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-              setShowNewPostModal(true);
-            }}
-          >
-            <View style={[styles.statIconContainer, { backgroundColor: theme.dark ? 'rgba(16, 185, 129, 0.15)' : 'rgba(4, 120, 87, 0.1)' }]}>
-              <Ionicons name="add-circle" size={24} color={theme.colors.primary} />
-            </View>
-            <Text style={[styles.statLabel, { marginTop: 4, fontWeight: '700', color: theme.colors.primary }]}>New Post</Text>
-          </Pressable>
-        </View>
-
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          style={styles.categoryScroll}
-          contentContainerStyle={styles.categoryScrollContent}
-        >
-          {modeCategories.map(renderCategoryTab)}
-        </ScrollView>
-
-        <View style={styles.sortContainer}>
-          <Pressable
-            style={styles.sortButton}
-            onPress={() => {
-              Haptics.selectionAsync();
-              setShowSortMenu(!showSortMenu);
-            }}
-          >
-            <Ionicons name="funnel-outline" size={16} color={theme.colors.textMuted} />
-            <Text style={styles.sortButtonText}>{getSortLabel()}</Text>
-            <Ionicons name="chevron-down" size={14} color={theme.colors.textMuted} />
-          </Pressable>
-
-          {showSortMenu && (
-            <>
-              <Pressable
-                style={StyleSheet.absoluteFill}
-                onPress={() => setShowSortMenu(false)}
-              />
-              <View style={styles.sortMenu}>
-                {(['newest', 'popular', 'discussed'] as SortOption[]).map(option => (
-                  <Pressable
-                    key={option}
-                    style={[styles.sortMenuItem, sortBy === option && styles.sortMenuItemActive]}
-                    onPress={() => {
-                      Haptics.selectionAsync();
-                      setSortBy(option);
-                      setShowSortMenu(false);
-                    }}
-                  >
-                    <Text style={[styles.sortMenuItemText, sortBy === option && styles.sortMenuItemTextActive]}>
-                      {option === 'newest' ? 'Newest' : option === 'popular' ? 'Most Liked' : 'Most Discussed'}
-                    </Text>
-                    {sortBy === option && <Ionicons name="checkmark" size={16} color={theme.colors.primary} />}
-                  </Pressable>
-                ))}
-              </View>
-            </>
-          )}
-        </View>
-
-        <View style={styles.content}>
-          {error ? (
-            <View style={styles.errorContainer}>
-              <Ionicons name="alert-circle-outline" size={48} color={theme.colors.error} />
-              <Text style={styles.errorText}>{error}</Text>
-              <Pressable style={styles.retryButton} onPress={() => { fetchData(); fetchStats(); }}>
-                <Text style={styles.retryButtonText}>Retry</Text>
-              </Pressable>
-            </View>
-          ) : loading ? (
-            <View style={styles.loadingContainer}>
-              <ActivityIndicator size="large" color={theme.colors.primary} />
-              <Text style={styles.loadingText}>Loading...</Text>
-            </View>
-          ) : filteredBySearch.length === 0 ? (
-            <View style={styles.emptyState}>
-              <Ionicons
-                name={activeMode === 'prayers' ? 'hand-right-outline' : 'chatbubbles-outline'}
-                size={48}
-                color={theme.colors.border}
-              />
-              <Text style={styles.emptyStateTitle}>
-                {activeCategory === 'all' 
-                  ? `No ${activeMode === 'prayers' ? 'prayers' : 'discussions'} yet`
-                  : `No ${getCategoryLabel(activeCategory).toLowerCase()} yet`}
-              </Text>
-              <Text style={styles.emptyStateText}>
-                {activeMode === 'prayers' 
-                  ? 'Be the first to share a prayer request'
-                  : 'Be the first to start a discussion'}
-              </Text>
-              <Pressable
-                style={styles.emptyStateButton}
-                onPress={() => setShowNewPostModal(true)}
-              >
-                <Text style={styles.emptyStateButtonText}>
-                  {activeMode === 'prayers' ? 'Share Prayer' : 'Start Discussion'}
-                </Text>
-              </Pressable>
-            </View>
-          ) : (
-            <>
-              {pinnedThreads.map(thread => renderThread(thread, true))}
-              {regularThreads.map(thread => renderThread(thread, false))}
-            </>
-          )}
-        </View>
-
-        <View style={{ height: 120 }} />
-      </ScrollView>
+        style={styles.scrollView}
+        windowSize={5}
+        maxToRenderPerBatch={10}
+        removeClippedSubviews={Platform.OS === 'android'}
+        onEndReached={loadNextPage}
+        onEndReachedThreshold={0.5}
+      />
 
       <Animated.View style={[styles.fab, { transform: [{ scale: fabScale }] }]}>
         <Pressable onPress={handleFabPress} style={styles.fabButton}>
@@ -1209,14 +1180,15 @@ export function CommunityScreen() {
         defaultPostType={activeMode === 'prayers' ? 'prayer' : 'discussion'}
         onOptimisticCreate={(tempPost) => {
           focusFeedOnCreatedCategory(tempPost.category);
-          setThreads((prev) => sortByNewest(dedupeThreads([tempPost as ThreadWithUser, ...prev])));
+          setThreads((prev) => sortThreads([tempPost as ThreadWithUser, ...prev], sortByRef.current));
         }}
         onCommitCreate={(tempId, persistedPost) => {
           focusFeedOnCreatedCategory(persistedPost.category);
           setThreads((prev) => {
             const withoutTemp = prev.filter((t) => t.id !== tempId);
-            return sortByNewest(
-              dedupeThreads([persistedPost as ThreadWithUser, ...withoutTemp])
+            return sortThreads(
+              [persistedPost as ThreadWithUser, ...withoutTemp],
+              sortByRef.current
             );
           });
         }}

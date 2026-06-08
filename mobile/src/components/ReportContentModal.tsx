@@ -57,18 +57,16 @@ export function ReportContentModal({
   const [selectedId, setSelectedId] = useState<ReportReasonId>(REPORT_REASONS[0].id);
   const [details, setDetails] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [prevVisible, setPrevVisible] = useState(visible);
 
-  const reset = useCallback(() => {
-    setSelectedId(REPORT_REASONS[0].id);
-    setDetails('');
-    setSubmitting(false);
-  }, []);
-
-  useEffect(() => {
+  if (visible !== prevVisible) {
+    setPrevVisible(visible);
     if (!visible) {
-      reset();
+      setSelectedId(REPORT_REASONS[0].id);
+      setDetails('');
+      setSubmitting(false);
     }
-  }, [visible, reset]);
+  }
 
   const title =
     targetType === 'post'

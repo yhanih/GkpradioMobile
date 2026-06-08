@@ -23,6 +23,7 @@ import { EpisodePlayerScreen } from './src/screens/EpisodePlayerScreen';
 import { LikedPostsScreen } from './src/screens/LikedPostsScreen';
 import { NotificationsScreen } from './src/screens/NotificationsScreen';
 import { TermsOfServiceScreen } from './src/screens/TermsOfServiceScreen';
+import { DailyScheduleScreen } from './src/screens/DailyScheduleScreen';
 import { AudioPlayer } from './src/components/AudioPlayer';
 import { TabletMaxWidth } from './src/components/TabletMaxWidth';
 import { AudioProvider } from './src/contexts/AudioContext';
@@ -37,6 +38,7 @@ import { MerchStoreScreen } from './src/screens/MerchStoreScreen';
 import { ProductDetailScreen } from './src/screens/ProductDetailScreen';
 import { DonateScreen } from './src/screens/DonateScreen';
 import { GamesScreen } from './src/screens/GamesScreen';
+import { GameWebViewScreen } from './src/screens/GameWebViewScreen';
 import { SignupScreen } from './src/screens/auth/SignupScreen';
 import { ConfirmEmailScreen } from './src/screens/auth/ConfirmEmailScreen';
 import { ForgotPasswordScreen } from './src/screens/auth/ForgotPasswordScreen';
@@ -51,6 +53,7 @@ import { preloadOnboardingAssets } from './src/lib/onboardingAssets';
 import * as Linking from 'expo-linking';
 import { RootStackParamList, MainTabParamList } from './src/types/navigation';
 import { supabase } from './src/lib/supabase';
+import { fetchUnreadNotificationCount } from './src/lib/backend';
 import { ensureNotificationChannel, ensureNotificationPermissions, setupNotificationListeners, initNotificationHandler } from './src/lib/notifications';
 import {
   bindNotificationNavigationRef,
@@ -81,6 +84,84 @@ function MainTabs() {
   const { theme } = useTheme();
   const insets = useSafeAreaInsets();
   const tabBarBottomPad = Math.max(insets.bottom, 12);
+  const { user } = useAuth();
+  const [unreadCount, setUnreadCount] = useState(0);
+
+  useEffect(() => {
+    if (!user) {
+      setUnreadCount(0);
+      return;
+    }
+
+    let isMounted = true;
+
+    const initCount = async () => {
+      try {
+        const count = await fetchUnreadNotificationCount(user.id);
+        if (isMounted) setUnreadCount(count);
+      } catch (err) {
+        console.warn('Failed to fetch initial notification count:', err);
+      }
+    };
+    initCount();
+
+    const channel = supabase
+      .channel(`user-notifications-${user.id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'notifications',
+          filter: `recipient_id=eq.${user.id}`,
+        },
+        async (payload) => {
+          try {
+            const count = await fetchUnreadNotificationCount(user.id);
+            if (isMounted) setUnreadCount(count);
+
+            if (payload.eventType === 'INSERT') {
+              const newNotif = payload.new as {
+                id: string;
+                message: string;
+                post_id: string;
+                type: string;
+              };
+
+              const preference = await AsyncStorage.getItem(NOTIFICATION_KEY);
+              const notificationsEnabled = preference !== 'false';
+              if (!notificationsEnabled) return;
+
+              let title = 'New Notification';
+              if (newNotif.type === 'comment') title = 'New Comment';
+              else if (newNotif.type === 'like') title = 'New Like';
+              else if (newNotif.type === 'pray') title = 'New Prayer';
+
+              await Notifications.scheduleNotificationAsync({
+                content: {
+                  title,
+                  body: newNotif.message,
+                  sound: true,
+                  data: {
+                    post_id: String(newNotif.post_id),
+                    type: newNotif.type,
+                  },
+                },
+                trigger: null,
+              });
+            }
+          } catch (err) {
+            console.warn('Error handling real-time notification update:', err);
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      isMounted = false;
+      supabase.removeChannel(channel);
+    };
+  }, [user]);
 
   return (
     <>
@@ -117,7 +198,7 @@ function MainTabs() {
                 : route.name === 'Games'
                   ? 'Games'
                   : route.name === 'Live'
-                    ? 'Live'
+                    ? 'Live Event'
                     : 'Home',
           headerShown: false,
           tabBarItemStyle: {
@@ -148,7 +229,13 @@ function MainTabs() {
         <Tab.Screen name="Community" component={withTabletMaxWidth(CommunityScreen)} />
         <Tab.Screen name="Games" component={withTabletMaxWidth(GamesScreen)} />
         <Tab.Screen name="Live" component={withTabletMaxWidth(LiveScreen)} />
-        <Tab.Screen name="More" component={withTabletMaxWidth(HubScreen)} />
+        <Tab.Screen
+          name="More"
+          component={withTabletMaxWidth(HubScreen)}
+          options={{
+            tabBarBadge: unreadCount > 0 ? unreadCount : undefined,
+          }}
+        />
       </Tab.Navigator>
 
       <AudioPlayer />
@@ -188,7 +275,7 @@ function CommunityPostNotifier() {
     if (!notificationsReady) return;
 
     const channel = supabase
-      .channel('community-post-notifications')
+      .channel(`community-post-notifications-${Math.random().toString(36).substring(2, 9)}`)
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'posts' }, async (payload) => {
         try {
           const preference = await AsyncStorage.getItem(NOTIFICATION_KEY);
@@ -200,17 +287,22 @@ function CommunityPostNotifier() {
             title?: string;
             content?: string;
             author_id?: string;
+            post_type?: string | null;
           };
+          const postType = newPost.post_type ?? 'discussion';
+          if (postType !== 'discussion') {
+            return;
+          }
           if (user?.id && newPost.author_id && String(newPost.author_id) === String(user.id)) {
             return;
           }
 
-          const title = newPost.title?.trim()
-            ? `New community post: ${newPost.title.trim()}`
-            : 'New community message';
-          const body = newPost.content?.trim()
-            ? newPost.content.trim().slice(0, 140)
-            : 'Someone posted a new message in the community.';
+          const title = 'New Discussion';
+          const body = newPost.title?.trim()
+            ? `New discussion: ${newPost.title.trim()}`
+            : newPost.content?.trim()
+              ? newPost.content.trim().slice(0, 140)
+              : 'Someone started a new discussion in the community.';
 
           await Notifications.scheduleNotificationAsync({
             content: {
@@ -220,7 +312,7 @@ function CommunityPostNotifier() {
               data: newPost.id
                 ? {
                     post_id: String(newPost.id),
-                    type: 'community_post',
+                    type: 'discussion',
                   }
                 : undefined,
             },
@@ -363,6 +455,11 @@ function RootNavigator() {
         options={{ animation: 'slide_from_right' }}
       />
       <Stack.Screen
+        name="DailySchedule"
+        component={DailyScheduleScreen}
+        options={{ animation: 'slide_from_right' }}
+      />
+      <Stack.Screen
         name="MerchStore"
         component={MerchStoreScreen}
         options={{ animation: 'slide_from_right' }}
@@ -383,6 +480,11 @@ function RootNavigator() {
         options={{ animation: 'slide_from_right' }}
       />
       <Stack.Screen
+        name="GameWebView"
+        component={GameWebViewScreen}
+        options={{ animation: 'slide_from_right' }}
+      />
+      <Stack.Screen
         name="Media"
         component={MediaScreen}
         options={{ animation: 'slide_from_right' }}
@@ -398,17 +500,36 @@ function AppContent() {
 
   useEffect(() => {
     let cancelled = false;
-    (async () => {
-      const [complete] = await Promise.all([
-        checkOnboardingComplete(),
-        preloadOnboardingAssets().catch(() => undefined),
-      ]);
+    const timer = setTimeout(() => {
       if (!cancelled) {
-        setShowOnboarding(!complete);
+        console.warn('[App] Onboarding check safety timeout reached. Unblocking onboarding gate.');
+        setShowOnboarding(false);
+      }
+    }, 2000);
+
+    (async () => {
+      try {
+        const complete = await checkOnboardingComplete();
+        clearTimeout(timer);
+        if (cancelled) return;
+
+        if (complete) {
+          setShowOnboarding(false);
+        } else {
+          // Only preload onboarding assets if onboarding is actually needed
+          preloadOnboardingAssets().catch(() => undefined);
+          setShowOnboarding(true);
+        }
+      } catch (err) {
+        clearTimeout(timer);
+        if (!cancelled) {
+          setShowOnboarding(false);
+        }
       }
     })();
     return () => {
       cancelled = true;
+      clearTimeout(timer);
     };
   }, []);
 

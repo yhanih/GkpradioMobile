@@ -2,6 +2,12 @@
 
 A professional administrative panel for managing the GKP Radio ecosystem.
 
+## 🏢 Organizations & Project Ownership
+
+This project involves two distinct organizations:
+- **GKP Radio** (God Kingdom Principles Radio): The main client, ministry, and public brand. All consumer-facing branding, stream server configurations (Azuracast), database content, and public domains (`godkingdomprinciplesradio.com`) belong to GKP Radio.
+- **BuildRight Client** (`buildright-studio-llc` / BuildRight Studio): The development, studio, and administrative owner. Used for Expo/EAS configuration, repository ownership, development setup, and administration of the GKP Radio project stack.
+
 ## Features
 - **Dashboard**: Real-time stats from Supabase.
 - **Live Events**: Instantly update radio stream URLs and go live.

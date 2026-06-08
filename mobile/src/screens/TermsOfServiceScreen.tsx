@@ -91,11 +91,10 @@ export function TermsOfServiceScreen() {
 
         {/* Zero-Tolerance UGC Policy */}
         <Section title="2. Community Content — Zero-Tolerance Policy" theme={theme}>
-          <AlertBanner theme={theme}>
-            GKP Radio has a strict ZERO TOLERANCE policy for objectionable content and abusive
-            behaviour. Violations will result in immediate content removal and permanent account
-            termination.
-          </AlertBanner>
+          <AlertBanner
+            theme={theme}
+            message="GKP Radio has a strict ZERO TOLERANCE policy for objectionable content and abusive behaviour. Violations will result in immediate content removal and permanent account termination."
+          />
 
           <Body theme={theme}>
             The GKP Radio Community is a Christ-centred, faith-based space intended for uplifting
@@ -315,7 +314,7 @@ function Body({ children, theme }: { children: React.ReactNode; theme: Theme }) 
   );
 }
 
-function AlertBanner({ children, theme }: { children: React.ReactNode; theme: Theme }) {
+function AlertBanner({ message, theme }: { message: string; theme: Theme }) {
   return (
     <View
       style={{
@@ -335,7 +334,7 @@ function AlertBanner({ children, theme }: { children: React.ReactNode; theme: Th
           lineHeight: 20,
         }}
       >
-        {children}
+        {message}
       </Text>
     </View>
   );

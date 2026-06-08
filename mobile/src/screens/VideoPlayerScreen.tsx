@@ -44,22 +44,7 @@ export function VideoPlayerScreen() {
   
   const videoSource = video?.video_url || liveEvent?.video_url || '';
   const [playbackError, setPlaybackError] = useState<string | null>(null);
-  
-  if (!videoSource) {
-    return (
-      <SafeAreaView style={[styles.container, { backgroundColor: '#000' }]}>
-        <View style={styles.errorContainer}>
-          <Ionicons name="alert-circle-outline" size={48} color="#ef4444" />
-          <Text style={styles.errorText}>Video URL not available</Text>
-          <Pressable style={styles.backButton} onPress={() => navigation.goBack()}>
-            <Text style={styles.backButtonText}>Go Back</Text>
-          </Pressable>
-        </View>
-      </SafeAreaView>
-    );
-  }
-  
-  const player = useVideoPlayer(videoSource, (player) => {
+  const player = useVideoPlayer(videoSource || '', (player) => {
     player.loop = false;
     if (liveEvent?.status === 'live') {
       // For live streams, start playing immediately
@@ -293,7 +278,7 @@ const styles = StyleSheet.create({
     height: SCREEN_HEIGHT,
   },
   loadingOverlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: 'rgba(0,0,0,0.7)',
@@ -304,7 +289,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
   errorOverlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: 'rgba(0,0,0,0.9)',
@@ -329,7 +314,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   controlsOverlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     justifyContent: 'space-between',
   },
   topControls: {

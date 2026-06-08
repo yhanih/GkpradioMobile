@@ -77,7 +77,7 @@ export function MediaRail({ title, items, type, onPressItem, onPressViewAll }: M
                                 <Ionicons name={type === 'video' ? 'play' : 'play-circle'} size={type === 'video' ? 24 : 32} color="#fff" />
                             </View>
 
-                            {item.duration && (
+                            {!!item.duration && (
                                 <View style={styles.durationBadge}>
                                     <Text style={styles.durationText}>{item.duration}</Text>
                                 </View>

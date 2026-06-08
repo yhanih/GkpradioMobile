@@ -1,0 +1,17 @@
+# Project Organization context
+
+Always keep in mind that this project involves two distinct organizations:
+
+1. **GKP Radio** (God Kingdom Principles Radio)
+   - **Role**: The main client, ministry, and public brand for the application.
+   - **Details**: All consumer-facing branding, stream servers (e.g., Azuracast), web content, titles, package names (e.g., `com.gkpradio.mobile`), and public domains (`godkingdomprinciplesradio.com` or `gkpradio.com`) belong to GKP Radio.
+   - **Focus**: Spreading truth, building community, and broadcasting radio stream content.
+
+2. **BuildRight Client** (`buildright-studio-llc` / BuildRight Studio)
+   - **Role**: The development, studio, and administrative owner entity.
+   - **Details**: Used for Expo/EAS configuration (e.g., `owner: 'buildright-studio-llc'` in `app.config.js`), repository/deployment ownership, and project administration.
+   - **Focus**: Software development, infrastructure setup, and publishing the application on behalf of GKP Radio.
+
+## Guidelines for Coding Agents
+- Never confuse the two entities. Keep client-facing labels, titles, and assets branded as **GKP Radio**.
+- Keep project administrative/publishing configs (like EAS `owner` properties) set to **BuildRight Client** (`buildright-studio-llc`).

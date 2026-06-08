@@ -13,12 +13,6 @@ const plugins = [
   ['expo-font'],
   ['expo-video'],
   [
-    'expo-av',
-    {
-      microphonePermission: 'GKP Radio needs microphone access for audio features.',
-    },
-  ],
-  [
     'expo-audio',
     {
       microphonePermission: 'GKP Radio needs microphone access for audio features.',
@@ -33,7 +27,7 @@ const plugins = [
         usesCleartextTraffic: true,
       },
       ios: {
-        deploymentTarget: '15.1',
+        deploymentTarget: '16.4',
       },
     },
   ],
@@ -43,7 +37,7 @@ module.exports = {
   expo: {
     name: 'GKP Radio',
     slug: 'gkp-radio',
-    version: '1.0.5',
+    version: '2.5',
     description:
       'God Kingdom Principles Radio - Broadcasting Truth, Building Community, Transforming Lives',
     orientation: 'portrait',

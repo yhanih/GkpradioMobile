@@ -1,0 +1,21 @@
+---
+description: Context on the two project organizations — GKP Radio and BuildRight Client
+alwaysApply: true
+---
+
+# Project Organizations Context
+
+Always remember that this project involves two separate organizations:
+
+1. **GKP Radio** (God Kingdom Principles Radio)
+   - **Role**: The main client, ministry, and public brand.
+   - **Context**: Consumer-facing branding, stream servers (Azuracast), mobile app UI, public URLs (`godkingdomprinciplesradio.com`), and metadata belong to GKP Radio.
+
+2. **BuildRight Client** (`buildright-studio-llc` / BuildRight Studio)
+   - **Role**: The development, studio, and administrative owner.
+   - **Context**: Used for Expo/EAS configuration (e.g., `owner: 'buildright-studio-llc'` in `app.config.js`), repository/deployment ownership, and project administration.
+
+## Rules for Agents
+- Do not mix up the two organizations.
+- App store submissions and EAS builds are owned/configured under **BuildRight Client** (`buildright-studio-llc`).
+- App name, labels, and logos must always reference **GKP Radio**.

@@ -21,14 +21,28 @@ export function OptimisticImage({
   onLoad,
   onError,
 }: OptimisticImageProps) {
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(false);
-  const fadeAnim = React.useRef(new Animated.Value(0)).current;
+  const sourceKey = typeof source === 'object' && source !== null && 'uri' in source ? source.uri : String(source);
+  const hasUriInitial = typeof source === 'object' && source !== null && 'uri' in source;
+  const initialError = hasUriInitial && !((source as any).uri);
+  const initialLoading = !initialError;
 
-  useEffect(() => {
-    setLoading(true);
-    setError(false);
-  }, [typeof source === 'object' ? source.uri : source]);
+  const [loading, setLoading] = useState(initialLoading);
+  const [error, setError] = useState(initialError);
+  const [prevSourceKey, setPrevSourceKey] = useState(sourceKey);
+
+  if (sourceKey !== prevSourceKey) {
+    setPrevSourceKey(sourceKey);
+    const hasUri = typeof source === 'object' && 'uri' in source;
+    if (hasUri && !source.uri) {
+      setLoading(false);
+      setError(true);
+    } else {
+      setLoading(true);
+      setError(false);
+    }
+  }
+
+  const fadeAnim = React.useRef(new Animated.Value(0)).current;
 
   const handleLoad = () => {
     setLoading(false);
@@ -74,7 +88,7 @@ export function OptimisticImage({
           onLoad={handleLoad}
           onError={handleError}
         />
-      ) : (
+      ) : !isUri ? (
         <Image
           source={source as number}
           style={[StyleSheet.absoluteFill, { opacity: loading ? 0 : 1 }]}
@@ -82,7 +96,7 @@ export function OptimisticImage({
           onLoad={handleLoad}
           onError={handleError}
         />
-      )}
+      ) : null}
 
       <Animated.View
         style={[

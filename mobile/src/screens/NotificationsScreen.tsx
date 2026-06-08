@@ -34,6 +34,8 @@ function getNotificationIcon(type: BackendNotification['type']): keyof typeof Io
       return 'hand-left';
     case 'comment':
       return 'chatbubble';
+    case 'discussion':
+      return 'chatbubbles';
     default:
       return 'notifications';
   }
@@ -47,6 +49,8 @@ function getNotificationIconColor(type: BackendNotification['type']): string {
       return '#047857';
     case 'comment':
       return '#2563eb';
+    case 'discussion':
+      return '#047857';
     default:
       return '#71717a';
   }

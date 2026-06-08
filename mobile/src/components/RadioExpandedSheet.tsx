@@ -117,8 +117,10 @@ export function RadioExpandedSheet({ visible, onClose }: RadioExpandedSheetProps
   const [draft, setDraft] = useState('');
   const [sending, setSending] = useState(false);
   const [queueLoading, setQueueLoading] = useState(false);
+  const [prevVisible, setPrevVisible] = useState(visible);
 
-  useEffect(() => {
+  if (visible !== prevVisible) {
+    setPrevVisible(visible);
     if (!visible) {
       setMessages([]);
       setReportChatMessageId(null);
@@ -130,7 +132,7 @@ export function RadioExpandedSheet({ visible, onClose }: RadioExpandedSheetProps
       pullDismissArmedRef.current = false;
       blockedIdsRef.current = new Set();
     }
-  }, [visible]);
+  }
 
   const closeSheet = useCallback(() => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -195,7 +197,7 @@ export function RadioExpandedSheet({ visible, onClose }: RadioExpandedSheetProps
     void loadChatMessages();
 
     const channel = supabase
-      .channel(`live_radio:${LIVE_CHAT_ROOM_ID}`)
+      .channel(`live_radio:${LIVE_CHAT_ROOM_ID}-${Math.random().toString(36).substring(2, 9)}`)
       .on(
         'postgres_changes',
         {
@@ -660,7 +662,7 @@ function createStyles(artSize: number) {
       backgroundColor: C.bg,
     },
     bgBlur: {
-      ...StyleSheet.absoluteFillObject,
+      ...StyleSheet.absoluteFill,
       transform: [{ scale: 1.15 }],
     },
     safe: {

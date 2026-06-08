@@ -22,6 +22,7 @@ import { RootStackParamList } from '../../types/navigation';
 import { AvatarVariantPicker } from '../../components/ui/avatar';
 import { DEFAULT_AVATAR_VARIANT } from '../../components/ui/avatar/avatarVariants';
 import { markTermsAcceptancePending } from '../../lib/termsAcceptance';
+import { SIGNUP_VERIFY_EMAIL_MESSAGE } from '../../constants/authMessages';
 
 
 type SignupNavigationProp = NativeStackNavigationProp<RootStackParamList>;
@@ -36,6 +37,10 @@ export function SignupScreen() {
   const [showPassword, setShowPassword] = useState(false);
   const [agreedToTerms, setAgreedToTerms] = useState(false);
   const [avatarSeed, setAvatarSeed] = useState(DEFAULT_AVATAR_VARIANT);
+  const [signupSuccess, setSignupSuccess] = useState<{
+    email: string;
+    needsEmailVerification: boolean;
+  } | null>(null);
   const { signUp, acceptCommunityTerms } = useAuth();
   const { theme } = useTheme();
   const styles = useMemo(() => createSignupStyles(theme), [theme]);
@@ -89,15 +94,64 @@ export function SignupScreen() {
         'This email may already be in use',
         'No new signup email was sent for this address. Try signing in, or use Forgot password if you already registered. If you are sure you are new here, try a different email or contact support.'
       );
-    } else if (needsEmailVerification) {
-      navigation.navigate('ConfirmEmail', { email: email.trim().toLowerCase() });
     } else {
-      // On success, sign in auto-runs inside signUp; pop back to wherever the user came from
-      if (navigation.canGoBack()) {
-        navigation.goBack();
-      }
+      setSignupSuccess({
+        email: email.trim().toLowerCase(),
+        needsEmailVerification: Boolean(needsEmailVerification),
+      });
     }
   };
+
+  if (signupSuccess) {
+    const { email: successEmail, needsEmailVerification } = signupSuccess;
+    return (
+      <SafeAreaView style={styles.container} edges={['top']}>
+        <View style={styles.verificationSuccessWrap}>
+          <View style={[styles.verificationIconCircle, { backgroundColor: theme.colors.primaryLight }]}>
+            <Ionicons
+              name={needsEmailVerification ? 'mail-unread-outline' : 'checkmark-circle-outline'}
+              size={40}
+              color={theme.colors.primary}
+            />
+          </View>
+          <Text style={[styles.verificationSuccessTitle, { color: theme.colors.text }]}>Account created</Text>
+          <Text style={[styles.verificationSuccessBody, { color: theme.colors.textSecondary }]}>
+            {needsEmailVerification
+              ? SIGNUP_VERIFY_EMAIL_MESSAGE
+              : 'Welcome to GKP Radio! Your account is ready — you are signed in.'}
+          </Text>
+          {needsEmailVerification ? (
+            <Pressable
+              style={[styles.signupButton, { marginTop: 24 }]}
+              onPress={() =>
+                navigation.replace('ConfirmEmail', {
+                  email: successEmail,
+                  fromSignup: true,
+                })
+              }
+            >
+              <Text style={styles.signupButtonText}>Enter verification code</Text>
+              <Ionicons name="arrow-forward" size={20} color="#fff" />
+            </Pressable>
+          ) : (
+            <Pressable
+              style={[styles.signupButton, { marginTop: 24 }]}
+              onPress={() => {
+                if (navigation.canGoBack()) {
+                  navigation.goBack();
+                } else {
+                  navigation.navigate('MainTabs');
+                }
+              }}
+            >
+              <Text style={styles.signupButtonText}>Continue</Text>
+              <Ionicons name="arrow-forward" size={20} color="#fff" />
+            </Pressable>
+          )}
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -285,6 +339,32 @@ function createSignupStyles(theme: Theme) {
   container: {
     flex: 1,
     backgroundColor: theme.colors.background,
+  },
+  verificationSuccessWrap: {
+    flex: 1,
+    justifyContent: 'center',
+    paddingHorizontal: 28,
+    paddingBottom: 40,
+  },
+  verificationIconCircle: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    alignSelf: 'center',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 20,
+  },
+  verificationSuccessTitle: {
+    fontSize: 24,
+    fontWeight: '700',
+    textAlign: 'center',
+    marginBottom: 16,
+  },
+  verificationSuccessBody: {
+    fontSize: 16,
+    lineHeight: 24,
+    textAlign: 'center',
   },
   keyboardView: {
     flex: 1,

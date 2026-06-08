@@ -242,24 +242,62 @@ function errorSuggestsMissingPostsColumn(error: any, column: string): boolean {
   );
 }
 
-async function loadPostsWithCompatibility() {
+async function loadPostsWithCompatibility(
+  page?: number,
+  pageSize?: number,
+  category?: string,
+  postType?: PostType | null
+) {
   const selectWithTypeAndAnonymous =
     'id,title,content,category,post_type,author_id,is_pinned,created_at,is_anonymous';
-  const withTypeAndAnonymous = await supabase
+
+  let query1 = supabase
     .from('posts')
     .select(selectWithTypeAndAnonymous)
-    .order('created_at', { ascending: false })
-    .limit(100);
+    .order('created_at', { ascending: false });
+
+  if (category && category !== 'all') {
+    query1 = query1.eq('category', category);
+  }
+  if (postType) {
+    query1 = query1.eq('post_type', postType);
+  }
+
+  if (page !== undefined && pageSize !== undefined) {
+    const from = (page - 1) * pageSize;
+    const to = from + pageSize - 1;
+    query1 = query1.range(from, to);
+  } else {
+    query1 = query1.limit(100);
+  }
+
+  const withTypeAndAnonymous = await query1;
 
   if (!withTypeAndAnonymous.error) {
     return withTypeAndAnonymous;
   }
 
-  const withTypeOnly = await supabase
+  let query2 = supabase
     .from('posts')
     .select('id,title,content,category,post_type,author_id,is_pinned,created_at')
-    .order('created_at', { ascending: false })
-    .limit(100);
+    .order('created_at', { ascending: false });
+
+  if (category && category !== 'all') {
+    query2 = query2.eq('category', category);
+  }
+  if (postType) {
+    query2 = query2.eq('post_type', postType);
+  }
+
+  if (page !== undefined && pageSize !== undefined) {
+    const from = (page - 1) * pageSize;
+    const to = from + pageSize - 1;
+    query2 = query2.range(from, to);
+  } else {
+    query2 = query2.limit(100);
+  }
+
+  const withTypeOnly = await query2;
 
   if (!withTypeOnly.error) {
     return withTypeOnly;
@@ -269,11 +307,24 @@ async function loadPostsWithCompatibility() {
     return withTypeOnly;
   }
 
-  return supabase
+  let query3 = supabase
     .from('posts')
     .select('id,title,content,category,author_id,is_pinned,created_at')
-    .order('created_at', { ascending: false })
-    .limit(100);
+    .order('created_at', { ascending: false });
+
+  if (category && category !== 'all') {
+    query3 = query3.eq('category', category);
+  }
+
+  if (page !== undefined && pageSize !== undefined) {
+    const from = (page - 1) * pageSize;
+    const to = from + pageSize - 1;
+    query3 = query3.range(from, to);
+  } else {
+    query3 = query3.limit(100);
+  }
+
+  return query3;
 }
 
 function isMissingTableError(error: any, tableName: string): boolean {
@@ -382,47 +433,80 @@ async function getReactionAggregates(
     return { likeCounts, prayCounts, userLiked, userPrayed };
   }
 
-  const reactionsRes = await supabase
-    .from('post_reactions')
-    .select('post_id,user_id,reaction_type')
-    .in('post_id', postIds);
+  const [countsRes, userReactionsRes] = await Promise.all([
+    supabase
+      .from('post_reaction_counts')
+      .select('post_id, like_count, prayer_count')
+      .in('post_id', postIds),
+    currentUserId
+      ? supabase
+          .from('post_reactions')
+          .select('post_id, reaction_type')
+          .eq('user_id', currentUserId)
+          .in('post_id', postIds)
+      : Promise.resolve({ data: [], error: null } as any),
+  ]);
 
-  if (!reactionsRes.error) {
-    (reactionsRes.data || []).forEach((row: { post_id: string; user_id: string; reaction_type: ReactionType }) => {
-      if (row.reaction_type === 'pray') {
-        prayCounts.set(row.post_id, (prayCounts.get(row.post_id) || 0) + 1);
-        if (currentUserId && row.user_id === currentUserId) {
-          userPrayed.add(row.post_id);
+  if (countsRes.error) {
+    // Legacy fallback (no post_reaction_counts view yet, fallback to querying all reactions)
+    const reactionsRes = await supabase
+      .from('post_reactions')
+      .select('post_id,user_id,reaction_type')
+      .in('post_id', postIds);
+
+    if (!reactionsRes.error) {
+      (reactionsRes.data || []).forEach((row: { post_id: string; user_id: string; reaction_type: ReactionType }) => {
+        if (row.reaction_type === 'pray') {
+          prayCounts.set(row.post_id, (prayCounts.get(row.post_id) || 0) + 1);
+          if (currentUserId && row.user_id === currentUserId) {
+            userPrayed.add(row.post_id);
+          }
+        } else {
+          likeCounts.set(row.post_id, (likeCounts.get(row.post_id) || 0) + 1);
+          if (currentUserId && row.user_id === currentUserId) {
+            userLiked.add(row.post_id);
+          }
         }
-      } else {
-        likeCounts.set(row.post_id, (likeCounts.get(row.post_id) || 0) + 1);
-        if (currentUserId && row.user_id === currentUserId) {
-          userLiked.add(row.post_id);
-        }
+      });
+      return { likeCounts, prayCounts, userLiked, userPrayed };
+    }
+
+    if (!isMissingSchemaError(reactionsRes.error, 'post_reactions')) {
+      throw new Error(reactionsRes.error.message);
+    }
+
+    // Backward compatibility fallback: legacy post_likes table.
+    const likesRes = await supabase.from('post_likes').select('post_id,user_id').in('post_id', postIds);
+    if (likesRes.error) {
+      throw new Error(likesRes.error.message);
+    }
+
+    (likesRes.data || []).forEach((row: { post_id: string; user_id: string }) => {
+      likeCounts.set(row.post_id, (likeCounts.get(row.post_id) || 0) + 1);
+      prayCounts.set(row.post_id, (prayCounts.get(row.post_id) || 0) + 1);
+      if (currentUserId && row.user_id === currentUserId) {
+        userLiked.add(row.post_id);
+        userPrayed.add(row.post_id);
       }
     });
 
     return { likeCounts, prayCounts, userLiked, userPrayed };
   }
 
-  if (!isMissingSchemaError(reactionsRes.error, 'post_reactions')) {
-    throw new Error(reactionsRes.error.message);
-  }
-
-  // Backward compatibility fallback: legacy post_likes table.
-  const likesRes = await supabase.from('post_likes').select('post_id,user_id').in('post_id', postIds);
-  if (likesRes.error) {
-    throw new Error(likesRes.error.message);
-  }
-
-  (likesRes.data || []).forEach((row: { post_id: string; user_id: string }) => {
-    likeCounts.set(row.post_id, (likeCounts.get(row.post_id) || 0) + 1);
-    prayCounts.set(row.post_id, (prayCounts.get(row.post_id) || 0) + 1);
-    if (currentUserId && row.user_id === currentUserId) {
-      userLiked.add(row.post_id);
-      userPrayed.add(row.post_id);
-    }
+  (countsRes.data || []).forEach((row: { post_id: string; like_count: number; prayer_count: number }) => {
+    likeCounts.set(row.post_id, row.like_count || 0);
+    prayCounts.set(row.post_id, row.prayer_count || 0);
   });
+
+  if (!userReactionsRes.error) {
+    (userReactionsRes.data || []).forEach((row: { post_id: string; reaction_type: ReactionType }) => {
+      if (row.reaction_type === 'pray') {
+        userPrayed.add(row.post_id);
+      } else {
+        userLiked.add(row.post_id);
+      }
+    });
+  }
 
   return { likeCounts, prayCounts, userLiked, userPrayed };
 }
@@ -483,16 +567,44 @@ async function withTimeout<T>(promise: PromiseLike<T>, timeoutMs: number): Promi
 
 export async function fetchCommunityPosts(
   sortBy: SortOption,
-  currentUserId?: string
+  currentUserId?: string,
+  page?: number,
+  pageSize?: number,
+  category?: string,
+  postType?: PostType | null
 ): Promise<BackendThread[]> {
-  const { data: posts, error } = await loadPostsWithCompatibility();
+  const { data: posts, error } = await loadPostsWithCompatibility(page, pageSize, category, postType);
 
   if (error || !posts) {
     throw new Error(error?.message || 'Failed to load posts');
   }
 
+  let combinedRaw = [...posts];
+
+  if (page === 1) {
+    try {
+      const { data: pinnedData } = await supabase
+        .from('posts')
+        .select('id,title,content,category,post_type,author_id,is_pinned,created_at,is_anonymous')
+        .eq('is_pinned', true);
+
+      if (pinnedData && pinnedData.length > 0) {
+        let filteredPinned = pinnedData;
+        if (category && category !== 'all') {
+          filteredPinned = filteredPinned.filter((p) => p.category === category);
+        }
+        if (postType) {
+          filteredPinned = filteredPinned.filter((p) => p.post_type === postType);
+        }
+        combinedRaw = [...filteredPinned, ...combinedRaw];
+      }
+    } catch (pinErr) {
+      console.warn('[backend] Failed to fetch pinned posts:', pinErr);
+    }
+  }
+
   const blockedIds = currentUserId ? new Set(await fetchBlockedUserIds(currentUserId)) : new Set<string>();
-  const visiblePosts = posts.filter((p: { author_id: string }) => !blockedIds.has(p.author_id));
+  const visiblePosts = combinedRaw.filter((p: { author_id: string }) => !blockedIds.has(p.author_id));
 
   const postIds = visiblePosts.map((p) => p.id);
   const authorIds = [...new Set(visiblePosts.map((p) => p.author_id))];
@@ -500,28 +612,39 @@ export async function fetchCommunityPosts(
   const [reactionAgg, commentsRes, profilesRes] = await Promise.all([
     getReactionAggregates(postIds, currentUserId),
     postIds.length
-      ? supabase.from('comments').select('id,post_id').in('post_id', postIds)
+      ? supabase.from('post_comment_counts').select('post_id, comment_count').in('post_id', postIds)
       : Promise.resolve({ data: [], error: null } as any),
     authorIds.length
       ? supabase.from('profiles').select('id,full_name,avatar_url,avatar_seed').in('id', authorIds)
       : Promise.resolve({ data: [], error: null } as any),
   ]);
 
-  if (commentsRes.error) throw new Error(commentsRes.error.message);
   if (profilesRes.error) throw new Error(profilesRes.error.message);
 
-  const comments = commentsRes.data || [];
   const profiles = profilesRes.data || [];
-
   const commentsByPost = new Map<string, number>();
+
+  if (commentsRes.error) {
+    // Fallback: Query all comments for the post IDs and count in JS
+    const fallbackCommentsRes = postIds.length
+      ? await supabase.from('comments').select('id,post_id').in('post_id', postIds)
+      : { data: [], error: null };
+      
+    if (fallbackCommentsRes.error) throw new Error(fallbackCommentsRes.error.message);
+    
+    (fallbackCommentsRes.data || []).forEach((c: { post_id: string }) => {
+      commentsByPost.set(c.post_id, (commentsByPost.get(c.post_id) || 0) + 1);
+    });
+  } else {
+    (commentsRes.data || []).forEach((c: { post_id: string; comment_count: number }) => {
+      commentsByPost.set(c.post_id, c.comment_count || 0);
+    });
+  }
+
   const profileById = new Map<
     string,
     { full_name: string | null; avatar_url: string | null; avatar_seed: string | null }
   >();
-
-  comments.forEach((c: { post_id: string }) => {
-    commentsByPost.set(c.post_id, (commentsByPost.get(c.post_id) || 0) + 1);
-  });
 
   profiles.forEach(
     (p: {
@@ -570,21 +693,26 @@ export async function fetchCommunityPosts(
     } as BackendThread;
   });
 
+  let result = mapped;
+  if (postType) {
+    result = mapped.filter((p) => p.post_type === postType);
+  }
+
   if (sortBy === 'popular') {
-    mapped.sort(
+    result.sort(
       (a, b) =>
         Math.max(b.like_count, b.prayer_count) - Math.max(a.like_count, a.prayer_count) ||
         b.createdat.localeCompare(a.createdat)
     );
   } else if (sortBy === 'discussed') {
-    mapped.sort(
+    result.sort(
       (a, b) => b.comment_count - a.comment_count || b.createdat.localeCompare(a.createdat)
     );
   } else {
-    mapped.sort((a, b) => b.createdat.localeCompare(a.createdat));
+    result.sort((a, b) => b.createdat.localeCompare(a.createdat));
   }
 
-  return dedupeThreads(mapped);
+  return dedupeThreads(result);
 }
 
 export async function getCommunityStats(): Promise<{ prayers: number; testimonies: number; total: number }> {
@@ -883,7 +1011,7 @@ export async function getPostById(postId: string, currentUserId?: string): Promi
   const postIds = [post.id];
   const [reactionAgg, commentsRes, profileRes] = await Promise.all([
     getReactionAggregates(postIds, currentUserId),
-    supabase.from('comments').select('id,post_id').eq('post_id', postId),
+    supabase.from('post_comment_counts').select('comment_count').eq('post_id', postId).maybeSingle(),
     supabase
       .from('profiles')
       .select('id,full_name,avatar_url,avatar_seed')
@@ -891,11 +1019,19 @@ export async function getPostById(postId: string, currentUserId?: string): Promi
       .maybeSingle(),
   ]);
 
-  if (commentsRes.error) throw new Error(commentsRes.error.message);
   if (profileRes.error) throw new Error(profileRes.error.message);
 
-  const comments = commentsRes.data || [];
-  const commentsByPost = comments.length;
+  let commentsByPost = 0;
+  if (commentsRes.error) {
+    // Legacy fallback (no post_comment_counts view yet, use exact count query without downloading columns)
+    const countRes = await supabase
+      .from('comments')
+      .select('id', { count: 'exact', head: true })
+      .eq('post_id', postId);
+    commentsByPost = countRes.count || 0;
+  } else {
+    commentsByPost = commentsRes.data?.comment_count || 0;
+  }
   const profile = profileRes.data;
 
   const inferredType = getPostTypeForCategory(post.category || '');
@@ -1413,14 +1549,31 @@ export async function fetchHomeStats(): Promise<HomeStats> {
 }
 
 export async function fetchCommunityCategoryCounts(): Promise<Record<string, number>> {
-  const { data, error } = await supabase.from('posts').select('category');
-  if (error || !data) throw new Error(error?.message || 'Failed to fetch category counts');
-
-  const counts: Record<string, number> = { all: data.length };
-  for (const row of data as Array<{ category: string | null }>) {
-    const category = row.category || 'Uncategorized';
-    counts[category] = (counts[category] || 0) + 1;
+  const { data, error } = await supabase.from('post_category_counts').select('category, count');
+  
+  if (error) {
+    // Legacy fallback (no post_category_counts view yet, use in-memory count)
+    const fallbackRes = await supabase.from('posts').select('category');
+    if (fallbackRes.error || !fallbackRes.data) {
+      throw new Error(fallbackRes.error?.message || 'Failed to fetch category counts');
+    }
+    const counts: Record<string, number> = { all: fallbackRes.data.length };
+    for (const row of fallbackRes.data as Array<{ category: string | null }>) {
+      const category = row.category || 'Uncategorized';
+      counts[category] = (counts[category] || 0) + 1;
+    }
+    return counts;
   }
+
+  const counts: Record<string, number> = { all: 0 };
+  let total = 0;
+  (data || []).forEach((row: { category: string | null; count: number }) => {
+    const category = row.category || 'Uncategorized';
+    const c = Number(row.count || 0);
+    counts[category] = c;
+    total += c;
+  });
+  counts['all'] = total;
   return counts;
 }
 
@@ -1428,7 +1581,7 @@ export interface BackendNotification {
   id: string;
   recipient_id: string;
   actor_id: string;
-  type: 'like' | 'pray' | 'comment';
+  type: 'like' | 'pray' | 'comment' | 'discussion';
   post_id: string;
   comment_id: string | null;
   message: string;

@@ -34,10 +34,14 @@ type HubNavigationProp = NativeStackNavigationProp<RootStackParamList>;
 
 const HUB_SCROLL_BOTTOM_INSET = 260;
 const NOTIFICATION_KEY = '@gkp_notifications_enabled';
-const APP_VERSION =
-  Constants.expoConfig?.version ||
-  (Constants.manifest as any)?.version ||
-  '1.0.1';
+const APP_VERSION = (() => {
+  const version =
+    Constants.expoConfig?.version || (Constants.manifest as { version?: string } | null)?.version || '?';
+  const iosBuild = Constants.expoConfig?.ios?.buildNumber;
+  const nativeBuild = Constants.nativeBuildVersion;
+  const build = iosBuild || nativeBuild;
+  return build ? `${version} (build ${build})` : version;
+})();
 
 interface SettingItemProps {
   icon: keyof typeof Ionicons.glyphMap;
@@ -265,24 +269,30 @@ export function HubScreen() {
   };
 
   const handleVisitWebsite = () => {
-    openExternalLink(
-      'https://godkingdomprinciplesradio.com',
-      'Could not open browser. Please visit godkingdomprinciplesradio.com manually.'
-    );
+    Haptics.selectionAsync();
+    navigation.navigate('GameWebView', {
+      url: 'https://godkingdomprinciplesradio.com',
+      title: 'GKP Website',
+      returnTab: 'Home',
+    });
   };
 
   const handleHelpCenter = () => {
-    openExternalLink(
-      'https://godkingdomprinciplesradio.com/connect',
-      'Could not open browser. Please visit godkingdomprinciplesradio.com/connect manually.'
-    );
+    Haptics.selectionAsync();
+    navigation.navigate('GameWebView', {
+      url: 'https://godkingdomprinciplesradio.com/connect',
+      title: 'Help Center',
+      returnTab: 'Home',
+    });
   };
 
   const handlePrivacyPolicy = () => {
-    openExternalLink(
-      'https://godkingdomprinciplesradio.com/privacy',
-      'Could not open browser. Please visit our website manually.'
-    );
+    Haptics.selectionAsync();
+    navigation.navigate('GameWebView', {
+      url: 'https://godkingdomprinciplesradio.com/privacy',
+      title: 'Privacy Policy',
+      returnTab: 'Home',
+    });
   };
 
   const handleTermsOfService = () => {
@@ -422,22 +432,22 @@ export function HubScreen() {
         )}
 
         <View style={styles.section}>
-          <SectionHeader title="Preferences" theme={theme} />
+          <SectionHeader title="Settings" theme={theme} />
           <View style={[styles.card, { backgroundColor: theme.colors.surface }]}>
             <SettingItem
-              icon="heart-outline"
-              label="Activity"
+              icon="notifications-outline"
+              label="Notifications"
               subtitle={
                 user
-                  ? 'Likes, prayers, and replies on your posts'
-                  : 'Sign in to see likes, prayers, and replies'
+                  ? 'Likes, prayers, replies, and community activity'
+                  : 'Sign in to see your notification history'
               }
               onPress={() => navigation.navigate('Notifications')}
               theme={theme}
             />
             <View style={[styles.divider, { backgroundColor: theme.colors.border }]} />
             <SettingItem
-              icon="notifications-outline"
+              icon="phone-portrait-outline"
               label="Push Notifications"
               subtitle={notificationsEnabled ? 'Enabled' : 'Disabled'}
               showChevron={false}
@@ -479,6 +489,17 @@ export function HubScreen() {
               label="Media Library"
               subtitle="Podcasts, videos, and on-demand teaching"
               onPress={() => navigation.navigate('Media')}
+              theme={theme}
+            />
+            <View style={[styles.divider, { backgroundColor: theme.colors.border }]} />
+            <SettingItem
+              icon="calendar-outline"
+              label="Daily Schedule"
+              subtitle="GKP Radio program guide and showtimes"
+              onPress={() => {
+                Haptics.selectionAsync();
+                navigation.navigate('DailySchedule');
+              }}
               theme={theme}
             />
           </View>
@@ -614,6 +635,9 @@ export function HubScreen() {
                 <Text style={[styles.versionText, { color: theme.colors.primary }]}>{APP_VERSION}</Text>
               </View>
             </View>
+            <Text style={[styles.buildMarker, { color: theme.colors.textMuted }]}>
+              Client update package · Mar 2026
+            </Text>
           </View>
         </View>
 
@@ -849,6 +873,13 @@ const styles = StyleSheet.create({
   versionText: {
     fontSize: 12,
     fontWeight: '600',
+  },
+  buildMarker: {
+    fontSize: 11,
+    textAlign: 'center',
+    marginTop: 8,
+    marginBottom: 4,
+    paddingHorizontal: 12,
   },
   logoutButton: {
     flexDirection: 'row',

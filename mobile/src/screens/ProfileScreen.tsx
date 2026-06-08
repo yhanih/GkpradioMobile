@@ -763,7 +763,7 @@ export function ProfileScreen() {
             >
               <View style={styles.settingLeft}>
                 <Ionicons name="notifications-outline" size={24} color={theme.colors.textMuted} />
-                <Text style={[styles.settingText, { color: theme.colors.text }]}>Activity</Text>
+                <Text style={[styles.settingText, { color: theme.colors.text }]}>Notifications</Text>
               </View>
               <Ionicons name="chevron-forward" size={20} color={theme.colors.border} />
             </Pressable>

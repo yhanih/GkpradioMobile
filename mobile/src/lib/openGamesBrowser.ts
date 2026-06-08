@@ -1,14 +1,39 @@
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import * as WebBrowser from 'expo-web-browser';
 import { Linking } from 'react-native';
 
 import { buildGamesUrl, type GkpGameId } from './games';
+import { navigateRoot } from './notificationNavigation';
+import type { RootStackParamList } from '../types/navigation';
 
-/** Opens the GKP Bible Games hub or a specific game in an in-app browser. */
+type GamesNavigation = NativeStackNavigationProp<RootStackParamList>;
+
+/** Opens a game in the in-app WebView (Return to Radio toolbar). */
 export async function openGamesBrowser(
   gameId?: GkpGameId,
   playerName?: string,
+  options?: {
+    navigation?: any;
+    title?: string;
+  },
 ): Promise<void> {
   const url = buildGamesUrl(gameId, playerName);
+  const title = options?.title ?? (gameId ? undefined : 'GKP Bible Games');
+
+  const params = { url, title };
+
+  if (options?.navigation) {
+    try {
+      options.navigation.navigate('GameWebView', params);
+      return;
+    } catch {
+      // Fall through to root navigator.
+    }
+  }
+
+  if (navigateRoot('GameWebView', params)) {
+    return;
+  }
 
   try {
     await WebBrowser.openBrowserAsync(url, {

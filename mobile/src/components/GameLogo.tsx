@@ -12,18 +12,21 @@ interface GameLogoProps {
 }
 
 export function GameLogo({ uri, size, style, borderColor, fallbackColor }: GameLogoProps) {
-  const [svgXml, setSvgXml] = useState<string | null>(null);
-  const [loadingSvg, setLoadingSvg] = useState(false);
   const isSvg = uri.toLowerCase().includes('.svg');
+  const [svgXml, setSvgXml] = useState<string | null>(null);
+  const [loadingSvg, setLoadingSvg] = useState(isSvg);
+  const [prevUri, setPrevUri] = useState(uri);
+
+  if (uri !== prevUri) {
+    setPrevUri(uri);
+    setSvgXml(null);
+    setLoadingSvg(isSvg);
+  }
 
   useEffect(() => {
-    if (!isSvg) {
-      setSvgXml(null);
-      return;
-    }
+    if (!isSvg) return;
 
     let cancelled = false;
-    setLoadingSvg(true);
 
     fetch(uri)
       .then((response) => (response.ok ? response.text() : Promise.reject(new Error('logo fetch failed'))))

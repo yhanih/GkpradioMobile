@@ -43,6 +43,27 @@ elif "gkp_mute_game_audio" not in text:
 else:
     print("index.html: player_name and mute bridge already present")
 
+# Word Search chunk shipped without react-router import (useNavigate is undefined at runtime).
+ROUTER_IMPORT = 'import{u as wsNav}from"./router-BpWWBKyu.js";'
+word_search_files = list((ROOT / "assets").glob("WordSearch*.js"))
+for ws_file in word_search_files:
+    ws_data = ws_file.read_text()
+    if "useNavigate()" in ws_data and ROUTER_IMPORT not in ws_data:
+        ws_data = ws_data.replace(
+            'import{r as y,j as i}from"./vendor-CPhIXR9D.js";',
+            'import{r as y,j as i}from"./vendor-CPhIXR9D.js";' + ROUTER_IMPORT,
+            1,
+        )
+        ws_data = ws_data.replace("const P=useNavigate()", "const[,P]=wsNav()", 1)
+        ws_file.write_text(ws_data)
+        print(f"fixed router import in {ws_file.name}")
+    elif "wsNav" in ws_data:
+        print(f"word search router already fixed in {ws_file.name}")
+    elif not word_search_files:
+        print("MISSING WordSearch bundle")
+    else:
+        print(f"word search pattern not found in {ws_file.name}")
+
 replacements = {
     "RighteousQuest": ("[D,Be]=H.useState(\"\")", f"[D,Be]=H{LAZY}"),
     "WordSearch": ("[I,re]=y.useState(\"\")", f"[I,re]=y{LAZY}"),

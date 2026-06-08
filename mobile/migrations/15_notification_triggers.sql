@@ -91,29 +91,33 @@ BEGIN
 
   -- Send push if the owner has a token
   IF v_owner_token IS NOT NULL THEN
-    v_fn_url := public.get_edge_function_url('send-notification');
-    v_service_key := coalesce(
-      current_setting('app.settings.service_role_key', true),
-      current_setting('supabase.service_role_key', true)
-    );
+    BEGIN
+      v_fn_url := public.get_edge_function_url('send-notification');
+      v_service_key := coalesce(
+        current_setting('app.settings.service_role_key', true),
+        current_setting('supabase.service_role_key', true)
+      );
 
-    PERFORM extensions.http_post(
-      url     := v_fn_url,
-      body    := jsonb_build_object(
-                   'to',    v_owner_token,
-                   'title', v_title,
-                   'body',  v_body,
-                   'sound', 'default',
-                   'data',  jsonb_build_object(
-                              'post_id', NEW.post_id::text,
-                              'type',    NEW.reaction_type
-                            )
-                 )::text,
-      headers := jsonb_build_object(
-                   'Content-Type',  'application/json',
-                   'Authorization', 'Bearer ' || v_service_key
-                 )::jsonb
-    );
+      PERFORM extensions.http_post(
+        url     := v_fn_url,
+        body    := jsonb_build_object(
+                     'to',    v_owner_token,
+                     'title', v_title,
+                     'body',  v_body,
+                     'sound', 'default',
+                     'data',  jsonb_build_object(
+                                'post_id', NEW.post_id::text,
+                                'type',    NEW.reaction_type
+                              )
+                   )::text,
+        headers := jsonb_build_object(
+                     'Content-Type',  'application/json',
+                     'Authorization', 'Bearer ' || v_service_key
+                   )::jsonb
+      );
+    EXCEPTION WHEN OTHERS THEN
+      RAISE WARNING 'Push notification failed: %', SQLERRM;
+    END;
   END IF;
 
   RETURN NEW;
@@ -186,30 +190,34 @@ BEGIN
 
   -- Send push if the owner has a token
   IF v_owner_token IS NOT NULL THEN
-    v_fn_url := public.get_edge_function_url('send-notification');
-    v_service_key := coalesce(
-      current_setting('app.settings.service_role_key', true),
-      current_setting('supabase.service_role_key', true)
-    );
+    BEGIN
+      v_fn_url := public.get_edge_function_url('send-notification');
+      v_service_key := coalesce(
+        current_setting('app.settings.service_role_key', true),
+        current_setting('supabase.service_role_key', true)
+      );
 
-    PERFORM extensions.http_post(
-      url     := v_fn_url,
-      body    := jsonb_build_object(
-                   'to',    v_owner_token,
-                   'title', v_title,
-                   'body',  v_body,
-                   'sound', 'default',
-                   'data',  jsonb_build_object(
-                              'post_id',    NEW.post_id::text,
-                              'comment_id', NEW.id::text,
-                              'type',       'comment'
-                            )
-                 )::text,
-      headers := jsonb_build_object(
-                   'Content-Type',  'application/json',
-                   'Authorization', 'Bearer ' || v_service_key
-                 )::jsonb
-    );
+      PERFORM extensions.http_post(
+        url     := v_fn_url,
+        body    := jsonb_build_object(
+                     'to',    v_owner_token,
+                     'title', v_title,
+                     'body',  v_body,
+                     'sound', 'default',
+                     'data',  jsonb_build_object(
+                                'post_id',    NEW.post_id::text,
+                                'comment_id', NEW.id::text,
+                                'type',       'comment'
+                              )
+                   )::text,
+        headers := jsonb_build_object(
+                     'Content-Type',  'application/json',
+                     'Authorization', 'Bearer ' || v_service_key
+                   )::jsonb
+      );
+    EXCEPTION WHEN OTHERS THEN
+      RAISE WARNING 'Push notification failed: %', SQLERRM;
+    END;
   END IF;
 
   RETURN NEW;

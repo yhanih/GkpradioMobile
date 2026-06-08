@@ -2,6 +2,12 @@
 
 God Kingdom Principles Radio mobile application built with React Native and Expo.
 
+## 🏢 Organizations & Project Ownership
+
+This project involves two distinct organizations:
+- **GKP Radio** (God Kingdom Principles Radio): The main client, ministry, and public brand. All consumer-facing branding, streaming servers (Azuracast), mobile app UI, package names/bundle identifiers (`com.gkpradio.mobile`), and public domains (`godkingdomprinciplesradio.com`) belong to GKP Radio.
+- **BuildRight Client** (`buildright-studio-llc` / BuildRight Studio): The development, studio, and administrative owner. Used for Expo/EAS configuration (e.g., `owner: 'buildright-studio-llc'` in `app.config.js`), repository/deployment ownership, and project administration on behalf of GKP Radio.
+
 ## 🚀 Quick Start
 
 ### Prerequisites

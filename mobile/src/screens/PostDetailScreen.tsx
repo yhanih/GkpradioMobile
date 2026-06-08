@@ -103,6 +103,7 @@ export function PostDetailScreen() {
   const styles = useMemo(() => createPostDetailStyles(theme), [theme]);
   const likeScale = useRef(new Animated.Value(1)).current;
   const bookmarkScale = useRef(new Animated.Value(1)).current;
+  const commentInputRef = useRef<TextInput>(null);
 
   const [thread, setThread] = useState<ThreadWithUser | null>(null);
   const [comments, setComments] = useState<CommentWithUser[]>([]);
@@ -184,6 +185,15 @@ export function PostDetailScreen() {
   }, [loadData]);
 
   useEffect(() => {
+    if (route.params?.focusReply) {
+      const timer = setTimeout(() => {
+        commentInputRef.current?.focus();
+      }, 500);
+      return () => clearTimeout(timer);
+    }
+  }, [route.params?.focusReply]);
+
+  useEffect(() => {
     const queueCommentsRefresh = () => {
       if (realtimeDebounceRef.current) {
         clearTimeout(realtimeDebounceRef.current);
@@ -194,7 +204,7 @@ export function PostDetailScreen() {
     };
 
     const channel = supabase
-      .channel(`post-comments-${route.params.threadId}`)
+      .channel(`post-comments-${route.params.threadId}-${Math.random().toString(36).substring(2, 9)}`)
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'comments', filter: `post_id=eq.${route.params.threadId}` },
@@ -790,6 +800,9 @@ export function PostDetailScreen() {
                 <Ionicons name="chatbubble-outline" size={18} color={theme.colors.textMuted} />,
                 String(commentCount),
                 false,
+                () => {
+                  commentInputRef.current?.focus();
+                }
               )}
               {renderEngagementChip(
                 'bookmark',
@@ -887,6 +900,7 @@ export function PostDetailScreen() {
             <View style={styles.commentDockInner}>
               <View style={styles.commentInputShell}>
                 <TextInput
+                  ref={commentInputRef}
                   style={styles.commentInput}
                   placeholder="Share your thoughts..."
                   placeholderTextColor={theme.colors.textMuted}

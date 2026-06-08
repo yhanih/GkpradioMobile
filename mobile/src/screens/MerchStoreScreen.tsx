@@ -21,7 +21,7 @@ import { useCart } from '../contexts/CartContext';
 import { RootStackParamList } from '../types/navigation';
 import { AnimatedPressable } from '../components/AnimatedPressable';
 import { fetchStoreProducts, getStoreCategoryFilters } from '../lib/merch';
-import { openMerchStoreBrowser } from '../lib/openMerchStoreBrowser';
+import { openMerchStoreBrowser, getMerchStoreWebUrl } from '../lib/openMerchStoreBrowser';
 import type { Product } from '../types/product';
 
 export type { Product };
@@ -44,7 +44,11 @@ export function MerchStoreScreen() {
     Haptics.selectionAsync();
     setOpeningWebStore(true);
     try {
-      await openMerchStoreBrowser();
+      navigation.navigate('GameWebView', {
+        url: `${getMerchStoreWebUrl()}?source=mobile`,
+        title: 'Ministry Store',
+        returnTab: 'Home',
+      });
     } catch (err) {
       const message =
         err instanceof Error ? err.message : 'Could not open the ministry store website.';
@@ -457,7 +461,7 @@ const styles = StyleSheet.create({
     height: '100%',
   },
   outOfStockBadge: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     backgroundColor: 'rgba(0,0,0,0.5)',
     justifyContent: 'center',
     alignItems: 'center',

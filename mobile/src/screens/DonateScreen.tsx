@@ -26,6 +26,7 @@ import {
   DONATION_DEFAULT_AMOUNT,
   isPresetDonationAmount,
   parseDonationAmount,
+  buildDonationUrl,
 } from '../lib/donation';
 import { openDonationBrowser } from '../lib/openDonationBrowser';
 
@@ -107,12 +108,17 @@ export function DonateScreen() {
     setOpeningBrowser(true);
 
     try {
-      await openDonationBrowser(amount);
+      const donationUrl = buildDonationUrl(amount);
+      navigation.navigate('GameWebView', {
+        url: donationUrl,
+        title: 'Support GKP Radio',
+        returnTab: 'Home',
+      });
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch {
       Alert.alert(
         'Could not open giving page',
-        `We could not open the browser with your $${amount} gift. Please try again.`,
+        `We could not open the giving portal with your $${amount} gift. Please try again.`,
       );
     } finally {
       setOpeningBrowser(false);

@@ -1,10 +1,12 @@
 import Constants from 'expo-constants';
+import { supabase } from './supabase';
+
 
 const DEFAULT_GAMES_WEB_URL = 'https://godkingdomprinciplesradio.com/games';
 const DEFAULT_GAMES_API_URL = 'https://godkingdomprinciplesradio.com/api/games';
 const GAMES_SITE_ORIGIN = 'https://godkingdomprinciplesradio.com';
 
-export type GkpGameId = 'righteous-quest' | 'word-search' | 'crossword';
+export type GkpGameId = string;
 
 export interface GkpGameMeta {
   id: GkpGameId;
@@ -132,3 +134,31 @@ export async function fetchGameLeaderboard(
     return [];
   }
 }
+
+export async function fetchGames(): Promise<GkpGameMeta[]> {
+  try {
+    const { data, error } = await supabase
+      .from('games')
+      .select('*')
+      .order('created_at', { ascending: true });
+
+    if (error) {
+      console.warn('[games] Error fetching games from Supabase, falling back to local list:', error);
+      return GKP_GAMES;
+    }
+
+    if (data && data.length > 0) {
+      return data.map((game: any) => ({
+        id: game.id,
+        name: game.name,
+        description: game.description,
+        color: game.color,
+        logoUrl: game.logo_url || '',
+      }));
+    }
+  } catch (err) {
+    console.warn('[games] Exception fetching games, using fallback:', err);
+  }
+  return GKP_GAMES;
+}
+

@@ -62,7 +62,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   shimmerTrack: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
   },
   gradient: {
     flex: 1,

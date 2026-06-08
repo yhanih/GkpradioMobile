@@ -52,3 +52,15 @@ export function flushPendingNotificationNavigation(): void {
 export function clearPendingNotificationNavigation(): void {
   pendingPostId = null;
 }
+
+/** Navigate on the root stack (works from tab screens). */
+export function navigateRoot<Route extends keyof RootStackParamList>(
+  name: Route,
+  params?: RootStackParamList[Route],
+): boolean {
+  if (!navigationRef?.isReady()) {
+    return false;
+  }
+  navigationRef.navigate({ name, params } as never);
+  return true;
+}

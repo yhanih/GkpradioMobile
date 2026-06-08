@@ -19,6 +19,7 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useAuth } from '../../contexts/AuthContext';
 import { useTheme, type Theme } from '../../contexts/ThemeContext';
 import { RootStackParamList } from '../../types/navigation';
+import { SIGNUP_VERIFY_EMAIL_MESSAGE } from '../../constants/authMessages';
 
 type Nav = NativeStackNavigationProp<RootStackParamList, 'ConfirmEmail'>;
 type Route = RouteProp<RootStackParamList, 'ConfirmEmail'>;
@@ -66,12 +67,13 @@ export function ConfirmEmailScreen() {
       Alert.alert('Verification failed', typeof error === 'string' ? error : error.message || 'Invalid or expired code.');
       return;
     }
-    Alert.alert('Welcome!', 'Your email is verified. You are signed in.', [
-      {
-        text: 'OK',
-        onPress: () => navigation.navigate('MainTabs'),
-      },
-    ]);
+    // Reset the entire navigation stack so the modal is fully dismissed
+    // and MainTabs becomes the root — prevents the "app closes" appearance
+    // that happens when navigating.navigate() is called from inside a modal.
+    navigation.reset({
+      index: 0,
+      routes: [{ name: 'MainTabs' }],
+    });
   }, [code, email, navigation, verifyEmailOtp]);
 
   const onResend = useCallback(async () => {
@@ -110,10 +112,20 @@ export function ConfirmEmailScreen() {
               <Ionicons name="close" size={22} color="#fff" />
             </Pressable>
             <Text style={styles.title}>Confirm your email</Text>
-            <Text style={styles.subtitle}>Use the code we emailed you (or open the link in that email).</Text>
+            <Text style={styles.subtitle}>{SIGNUP_VERIFY_EMAIL_MESSAGE}</Text>
+            <Text style={styles.subtitleSecondary}>
+              Use the 6-digit code we emailed you, or open the confirmation link on this device.
+            </Text>
           </LinearGradient>
 
           <View style={styles.body}>
+            <View style={[styles.verifyBanner, { backgroundColor: theme.colors.primaryLight }]}>
+              <Ionicons name="mail-unread-outline" size={22} color={theme.colors.primary} />
+              <Text style={[styles.verifyBannerText, { color: theme.colors.text }]}>
+                {SIGNUP_VERIFY_EMAIL_MESSAGE}
+              </Text>
+            </View>
+
             <Text style={styles.hint}>
               Enter the email you registered with and the 6-digit code. If your email only has a button link, tap that
               link on this phone instead.
@@ -193,8 +205,37 @@ function createStyles(theme: Theme) {
     },
     closeButton: { alignSelf: 'flex-end', padding: 8, marginBottom: 8 },
     title: { fontSize: 22, fontWeight: '700', color: '#fff', textAlign: 'center' },
-    subtitle: { marginTop: 12, fontSize: 14, color: 'rgba(255,255,255,0.85)', textAlign: 'center', paddingHorizontal: 12 },
+    subtitle: {
+      marginTop: 12,
+      fontSize: 15,
+      fontWeight: '600',
+      color: '#fff',
+      textAlign: 'center',
+      paddingHorizontal: 8,
+      lineHeight: 22,
+    },
+    subtitleSecondary: {
+      marginTop: 10,
+      fontSize: 13,
+      color: 'rgba(255,255,255,0.85)',
+      textAlign: 'center',
+      paddingHorizontal: 12,
+      lineHeight: 19,
+    },
     body: { flex: 1, paddingHorizontal: 22, paddingTop: 24, paddingBottom: 32 },
+    verifyBanner: {
+      flexDirection: 'row',
+      alignItems: 'flex-start',
+      gap: 12,
+      padding: 14,
+      borderRadius: 12,
+      marginBottom: 20,
+    },
+    verifyBannerText: {
+      flex: 1,
+      fontSize: 14,
+      lineHeight: 20,
+    },
     hint: {
       fontSize: 13,
       lineHeight: 19,

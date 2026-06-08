@@ -12,18 +12,20 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
-import { useNavigation } from '@react-navigation/native';
+import { CompositeNavigationProp, useNavigation, useFocusEffect } from '@react-navigation/native';
+import { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
 import { useTheme } from '../contexts/ThemeContext';
 import { useAuth } from '../contexts/AuthContext';
-import { RootStackParamList } from '../types/navigation';
+import { MainTabParamList, RootStackParamList } from '../types/navigation';
 import { AnimatedPressable } from '../components/AnimatedPressable';
 import { GameLogo } from '../components/GameLogo';
 import {
   GKP_GAMES,
   GKP_GAMES_BRAND_LOGO_URL,
   fetchGameLeaderboard,
+  fetchGames,
   formatGameScore,
   resolveGamePlayerName,
   type GkpGameId,
@@ -32,7 +34,10 @@ import {
 } from '../lib/games';
 import { openGamesBrowser } from '../lib/openGamesBrowser';
 
-type GamesNavProp = NativeStackNavigationProp<RootStackParamList>;
+type GamesNavProp = CompositeNavigationProp<
+  BottomTabNavigationProp<MainTabParamList, 'Games'>,
+  NativeStackNavigationProp<RootStackParamList>
+>;
 
 function GameCard({
   game,
@@ -131,39 +136,66 @@ export function GamesScreen() {
   const { theme, isDark } = useTheme();
   const { user } = useAuth();
   const gamePlayerName = resolveGamePlayerName(user);
-  const [leaderboards, setLeaderboards] = useState<Record<GkpGameId, LeaderboardEntry[]>>({
-    'righteous-quest': [],
-    'word-search': [],
-    crossword: [],
-  });
+  const [games, setGames] = useState<GkpGameMeta[]>(GKP_GAMES);
+  const [leaderboards, setLeaderboards] = useState<Record<string, LeaderboardEntry[]>>({});
   const [loadingLeaderboards, setLoadingLeaderboards] = useState(true);
   const [openingGameId, setOpeningGameId] = useState<GkpGameId | 'all' | null>(null);
 
-  const loadLeaderboards = useCallback(async () => {
+  const loadLeaderboards = useCallback(async (activeGames: GkpGameMeta[]) => {
     setLoadingLeaderboards(true);
     try {
       const results = await Promise.all(
-        GKP_GAMES.map(async (game) => {
+        activeGames.map(async (game) => {
           const entries = await fetchGameLeaderboard(game.id, 5);
           return [game.id, entries] as const;
         }),
       );
       setLeaderboards(Object.fromEntries(results) as Record<GkpGameId, LeaderboardEntry[]>);
+    } catch (err) {
+      console.error('[GamesScreen] Failed to load leaderboards:', err);
     } finally {
       setLoadingLeaderboards(false);
     }
   }, []);
 
-  useEffect(() => {
-    loadLeaderboards();
-  }, [loadLeaderboards]);
+  useFocusEffect(
+    useCallback(() => {
+      let cancelled = false;
+      const loadGamesAndLeaderboards = async () => {
+        let activeGames = games;
+        try {
+          const fetchedGames = await fetchGames();
+          if (fetchedGames && fetchedGames.length > 0 && !cancelled) {
+            setGames(fetchedGames);
+            activeGames = fetchedGames;
+          }
+        } catch (err) {
+          console.warn('[GamesScreen] Failed to load remote games:', err);
+        }
+        if (!cancelled) {
+          await loadLeaderboards(activeGames);
+        }
+      };
+
+      loadGamesAndLeaderboards();
+      return () => {
+        cancelled = true;
+      };
+    }, [loadLeaderboards])
+  );
 
   const handlePlay = async (gameId?: GkpGameId) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     setOpeningGameId(gameId ?? 'all');
     try {
-      await openGamesBrowser(gameId, gamePlayerName);
-      await loadLeaderboards();
+      const gameTitle = gameId
+        ? games.find((g) => g.id === gameId)?.name
+        : 'GKP Bible Games';
+      await openGamesBrowser(gameId, gamePlayerName, {
+        navigation,
+        title: gameTitle,
+      });
+      await loadLeaderboards(games);
     } catch {
       Alert.alert(
         'Could not open games',
@@ -236,11 +268,11 @@ export function GamesScreen() {
           </AnimatedPressable>
         </LinearGradient>
 
-        {GKP_GAMES.map((game) => (
+        {games.map((game) => (
           <GameCard
             key={game.id}
             game={game}
-            leaderboard={leaderboards[game.id]}
+            leaderboard={leaderboards[game.id] || []}
             loadingLeaderboard={loadingLeaderboards}
             opening={openingGameId === game.id}
             onPlay={() => handlePlay(game.id)}
@@ -250,7 +282,7 @@ export function GamesScreen() {
         ))}
 
         <Text style={[styles.footerNote, { color: theme.colors.textMuted }]}>
-          Games open in a secure in-app browser — the same experience as godkingdomprinciplesradio.com/games.
+          Games open inside the app with a Return to Radio button — same experience as godkingdomprinciplesradio.com/games.
         </Text>
       </ScrollView>
     </SafeAreaView>
