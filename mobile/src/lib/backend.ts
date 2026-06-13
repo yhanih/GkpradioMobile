@@ -109,14 +109,14 @@ export class CreatePostError extends Error {
 
 const STREAM_URL_FALLBACK =
   process.env.EXPO_PUBLIC_STREAM_URL ||
-  'http://74.208.102.89:8080/listen/gkp_radio/radio.mp3';
+  'https://stream.godkingdomprinciplesradio.com/live';
 
 const AZURACAST_NOW_PLAYING_URL =
   process.env.EXPO_PUBLIC_AZURACAST_NOW_PLAYING_URL ||
   'https://stream.godkingdomprinciplesradio.com/api/nowplaying/gkp_radio';
 
 const AZURACAST_NOW_PLAYING_FALLBACK_URL =
-  'http://74.208.102.89:8080/api/nowplaying/gkp_radio';
+  'https://stream.godkingdomprinciplesradio.com/api/nowplaying/gkp_radio';
 
 const WORDPRESS_RADIO_STATUS_URL =
   process.env.EXPO_PUBLIC_WORDPRESS_RADIO_STATUS_URL ||

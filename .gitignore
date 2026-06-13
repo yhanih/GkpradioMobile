@@ -33,3 +33,7 @@ mobile/.env.local
 .config/
 .upm/
 replit.nix
+
+# Keys
+*.p8
+*.key

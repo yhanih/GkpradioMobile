@@ -2,6 +2,8 @@ import 'react-native-url-polyfill/auto';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Constants from 'expo-constants';
 import { createClient } from '@supabase/supabase-js';
+import { Platform } from 'react-native';
+import * as SecureStore from 'expo-secure-store';
 
 /** Legacy manifest shape (SDK 49+ types omit `extra` on EmbeddedManifest). */
 type LegacyExpoManifest = { extra?: Record<string, unknown> } | null | undefined;
@@ -42,9 +44,48 @@ if (!supabaseUrl || !supabaseAnonKey) {
   );
 }
 
+const secureStorageAdapter = {
+  getItem: async (key: string): Promise<string | null> => {
+    if (Platform.OS === 'web') {
+      try {
+        return await AsyncStorage.getItem(key);
+      } catch {
+        return null;
+      }
+    }
+    try {
+      return await SecureStore.getItemAsync(key);
+    } catch {
+      return null;
+    }
+  },
+  setItem: async (key: string, value: string): Promise<void> => {
+    if (Platform.OS === 'web') {
+      try {
+        await AsyncStorage.setItem(key, value);
+      } catch {}
+      return;
+    }
+    try {
+      await SecureStore.setItemAsync(key, value);
+    } catch {}
+  },
+  removeItem: async (key: string): Promise<void> => {
+    if (Platform.OS === 'web') {
+      try {
+        await AsyncStorage.removeItem(key);
+      } catch {}
+      return;
+    }
+    try {
+      await SecureStore.deleteItemAsync(key);
+    } catch {}
+  },
+};
+
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
-    storage: AsyncStorage,
+    storage: secureStorageAdapter,
     autoRefreshToken: true,
     persistSession: true,
     detectSessionInUrl: false,
