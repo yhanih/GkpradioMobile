@@ -40,7 +40,7 @@ export function VideoPlayerScreen() {
   
   const [showControls, setShowControls] = useState(true);
   const [isLoading, setIsLoading] = useState(true);
-  const controlsTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const controlsTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   
   const videoSource = video?.video_url || liveEvent?.video_url || '';
   const [playbackError, setPlaybackError] = useState<string | null>(null);

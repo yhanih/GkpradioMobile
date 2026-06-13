@@ -23,6 +23,9 @@ import { EpisodePlayerScreen } from './src/screens/EpisodePlayerScreen';
 import { LikedPostsScreen } from './src/screens/LikedPostsScreen';
 import { NotificationsScreen } from './src/screens/NotificationsScreen';
 import { TermsOfServiceScreen } from './src/screens/TermsOfServiceScreen';
+import { PrivacyPolicyScreen } from './src/screens/PrivacyPolicyScreen';
+import { HelpCenterScreen } from './src/screens/HelpCenterScreen';
+import { PromotionsScreen } from './src/screens/PromotionsScreen';
 import { DailyScheduleScreen } from './src/screens/DailyScheduleScreen';
 import { AudioPlayer } from './src/components/AudioPlayer';
 import { TabletMaxWidth } from './src/components/TabletMaxWidth';
@@ -452,6 +455,21 @@ function RootNavigator() {
       <Stack.Screen
         name="TermsOfService"
         component={TermsOfServiceScreen}
+        options={{ animation: 'slide_from_right' }}
+      />
+      <Stack.Screen
+        name="PrivacyPolicy"
+        component={PrivacyPolicyScreen}
+        options={{ animation: 'slide_from_right' }}
+      />
+      <Stack.Screen
+        name="HelpCenter"
+        component={HelpCenterScreen}
+        options={{ animation: 'slide_from_right' }}
+      />
+      <Stack.Screen
+        name="Promotions"
+        component={PromotionsScreen}
         options={{ animation: 'slide_from_right' }}
       />
       <Stack.Screen

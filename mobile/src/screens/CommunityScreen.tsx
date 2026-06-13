@@ -104,8 +104,8 @@ export function CommunityScreen() {
   const [unreadNotificationCount, setUnreadNotificationCount] = useState(0);
   const fabScale = useRef(new Animated.Value(1)).current;
   const sortByRef = useRef(sortBy);
-  const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const realtimeDebounceRef = useRef<NodeJS.Timeout | null>(null);
+  const searchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const realtimeDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isLoadingMoreRef = useRef(false);
 
   const dedupeThreads = useCallback((items: ThreadWithUser[]) => {

@@ -1,5 +1,7 @@
 import 'react-native-url-polyfill/auto';
 
+declare var global: any;
+
 // Ensure FormData is available globally
 if (typeof global.FormData === 'undefined') {
   global.FormData = require('react-native/Libraries/Network/FormData');

@@ -116,7 +116,7 @@ export function PostDetailScreen() {
     targetId: string;
   } | null>(null);
   const submitCommentLockRef = useRef(false);
-  const realtimeDebounceRef = useRef<NodeJS.Timeout | null>(null);
+  const realtimeDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const dedupeComments = useCallback((items: CommentWithUser[]) => {
     const seen = new Set<string>();

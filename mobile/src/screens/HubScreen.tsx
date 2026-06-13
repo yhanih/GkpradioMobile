@@ -166,13 +166,12 @@ export function HubScreen() {
         const token = await registerForPushNotifications();
         if (token && user) {
           await supabase
-            .from('profiles')
-            .update({ push_token: token })
-            .eq('id', user.id);
+            .from('private_user_settings')
+            .upsert({ id: user.id, push_token: token });
         }
       } else if (user) {
         await supabase
-          .from('profiles')
+          .from('private_user_settings')
           .update({ push_token: null })
           .eq('id', user.id);
       }
@@ -279,20 +278,12 @@ export function HubScreen() {
 
   const handleHelpCenter = () => {
     Haptics.selectionAsync();
-    navigation.navigate('GameWebView', {
-      url: 'https://godkingdomprinciplesradio.com/connect',
-      title: 'Help Center',
-      returnTab: 'Home',
-    });
+    navigation.navigate('HelpCenter');
   };
 
   const handlePrivacyPolicy = () => {
     Haptics.selectionAsync();
-    navigation.navigate('GameWebView', {
-      url: 'https://godkingdomprinciplesradio.com/privacy',
-      title: 'Privacy Policy',
-      returnTab: 'Home',
-    });
+    navigation.navigate('PrivacyPolicy');
   };
 
   const handleTermsOfService = () => {

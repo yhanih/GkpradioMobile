@@ -20,7 +20,7 @@ export async function openGamesBrowser(
   const url = buildGamesUrl(gameId, playerName);
   const title = options?.title ?? (gameId ? undefined : 'GKP Bible Games');
 
-  const params = { url, title };
+  const params = { url, title, hideHeader: true };
 
   if (options?.navigation) {
     try {

@@ -29,6 +29,9 @@ export type RootStackParamList = {
   LikedPosts: undefined;
   Notifications: undefined;
   TermsOfService: undefined;
+  PrivacyPolicy: undefined;
+  HelpCenter: undefined;
+  Promotions: undefined;
   MerchStore: undefined;
   ProductDetail: { product: any };
   Donate: { amount?: number } | undefined;
@@ -38,6 +41,7 @@ export type RootStackParamList = {
     title?: string;
     /** Main tab to open when user taps the primary return action (default Live). */
     returnTab?: 'Live' | 'Home';
+    hideHeader?: boolean;
   };
   Media: undefined;
   DailySchedule: undefined;

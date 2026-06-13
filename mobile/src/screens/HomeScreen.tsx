@@ -37,7 +37,6 @@ import { useTheme, type Theme } from '../contexts/ThemeContext';
 import { MediaRail } from '../components/MediaRail';
 import { SponsorBanner } from '../components/SponsorBanner';
 import { StatsStrip } from '../components/StatsStrip';
-import { openPromotionsBrowser } from '../lib/openPromotionsBrowser';
 import { MinistryFieldsList } from '../components/MinistryFieldsList';
 import { SkeletonList } from '../components/SkeletonLoader';
 import { Category, getPostTypeForCategory } from '../constants/categories';
@@ -302,9 +301,8 @@ export function HomeScreen() {
                 prayersLifted={homeStats.prayersLifted}
                 mediaItems={homeStats.mediaItems}
                 onPressPromotions={() => {
-                  openPromotionsBrowser({ navigation }).catch(() => {
-                    Alert.alert('Could not open', 'Promotions could not be loaded. Please try again.');
-                  });
+                  Haptics.selectionAsync();
+                  navigation.navigate('Promotions');
                 }}
                 onPressDonations={() => navigation.navigate('Donate')}
                 onPressMerch={() => navigation.navigate('MerchStore')}

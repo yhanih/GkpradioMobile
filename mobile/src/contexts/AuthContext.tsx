@@ -106,9 +106,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const token = await registerForPushNotifications();
       if (token) {
         await supabase
-          .from('profiles')
-          .update({ push_token: token })
-          .eq('id', userId);
+          .from('private_user_settings')
+          .upsert({ id: userId, push_token: token });
       }
     } catch (e) {
       console.warn('Failed to save push token:', e);
@@ -118,7 +117,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const clearPushToken = async (userId: string) => {
     try {
       await supabase
-        .from('profiles')
+        .from('private_user_settings')
         .update({ push_token: null })
         .eq('id', userId);
     } catch (e) {

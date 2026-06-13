@@ -10,9 +10,11 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import Constants from 'expo-constants';
 import { useTheme, type Theme } from '../contexts/ThemeContext';
 import { FEEDBACK_EMAIL, HELP_DESK_EMAIL } from '../constants/contact';
+import { RootStackParamList } from '../types/navigation';
 
 const LAST_UPDATED = 'May 13, 2026';
 
@@ -30,8 +32,10 @@ function openUrlDeferred(url: string) {
   }, 0);
 }
 
+type TermsNavigationProp = NativeStackNavigationProp<RootStackParamList>;
+
 export function TermsOfServiceScreen() {
-  const navigation = useNavigation();
+  const navigation = useNavigation<TermsNavigationProp>();
   const { theme } = useTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
   const linkStyle = useMemo(
@@ -208,11 +212,10 @@ export function TermsOfServiceScreen() {
         <Section title="7. Privacy" theme={theme}>
           <Body theme={theme}>
             Your use of the App is also governed by our{' '}
-            <Text style={linkStyle} onPress={() => openUrlDeferred(getPrivacyPolicyUrl())}>
+            <Text style={linkStyle} onPress={() => navigation.navigate('PrivacyPolicy' as any)}>
               Privacy Policy
             </Text>
-            {' '}
-            on our website. By using GKP Radio, you consent to the collection and use of
+            . By using GKP Radio, you consent to the collection and use of
             information as described therein. We do not sell your personal data to third parties.
           </Body>
         </Section>
